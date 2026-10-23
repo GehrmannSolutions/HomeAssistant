@@ -5,7 +5,19 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from ha_safe_mcp.ollama_client import run_chat, mcp_parameters
+from ha_safe_mcp.ollama_client import run_chat, mcp_parameters, select_tool_names
+
+
+def test_small_model_receives_topic_specific_tools():
+    names = {"ha_get_state", "ha_search_entities", "ha_get_dashboard", "ha_save_dashboard",
+             "ha_save_automation", "ha_create_helper", "ha_call_service"}
+    dashboard = select_tool_names("Design ein Dashboard", names, allow_write=True)
+    assert "ha_get_dashboard" in dashboard and "ha_save_dashboard" in dashboard
+    assert "ha_save_automation" not in dashboard and "ha_create_helper" not in dashboard
+    automation = select_tool_names("Erstelle eine Automation", names, allow_write=False)
+    assert "ha_save_automation" not in automation
+    assert "ha_get_state" in automation
+
 
 
 def test_mcp_child_inherits_ha_settings_but_not_github_pat(monkeypatch):
@@ -28,6 +40,9 @@ class FakeSession:
             SimpleNamespace(name="ha_call_service", description="Change state", inputSchema={"type": "object", "properties": {"domain": {"type": "string"}}}),
             SimpleNamespace(name="ha_rest_write", description="POST", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}}),
             SimpleNamespace(name="ha_rest_delete", description="DELETE", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}}),
+            SimpleNamespace(name="ha_save_automation", description="Save automation", inputSchema={"type": "object", "properties": {"config_id": {"type": "string"}}}),
+            SimpleNamespace(name="ha_create_helper", description="Create helper", inputSchema={"type": "object", "properties": {"domain": {"type": "string"}}}),
+            SimpleNamespace(name="ha_save_dashboard", description="Save dashboard", inputSchema={"type": "object", "properties": {"config": {"type": "object"}}}),
         ])
 
     async def call_tool(self, name, arguments):

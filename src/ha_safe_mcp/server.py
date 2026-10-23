@@ -95,8 +95,10 @@ class HAClient:
 def create_server(client: HAClient, *, allow_admin_write: bool = False,
                   allow_delete: bool = False) -> FastMCP:
     from .rest_api import RestGateway
+    from .management import HAAdmin
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
 
     @server.tool()
@@ -143,6 +145,86 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_rest_delete(path: str) -> dict:
         """DELETE a documented state route. Requires HA_ALLOW_WRITE, HA_ALLOW_ADMIN_WRITE and HA_ALLOW_DELETE."""
         return await rest.request("DELETE", path)
+
+    @server.tool()
+    async def ha_validate_automation(config: dict) -> dict:
+        """Ask Home Assistant to validate automation triggers, conditions and actions; no write."""
+        return await admin.automation_validate(config)
+
+    @server.tool()
+    async def ha_get_automation(config_id: str) -> dict:
+        """Read an automation's raw config by its configuration ID."""
+        return await admin.automation_get(config_id)
+
+    @server.tool()
+    async def ha_save_automation(config_id: str, config: dict) -> dict:
+        """Validate, create/update and read back automation config. Requires admin write opt-in."""
+        return await admin.automation_save(config_id, config)
+
+    @server.tool()
+    async def ha_delete_automation(config_id: str) -> dict:
+        """Delete an automation by config ID. Requires admin write and delete opt-ins."""
+        return await admin.automation_delete(config_id)
+
+    @server.tool()
+    async def ha_list_dashboards() -> list[dict]:
+        """List Lovelace dashboards and their URL paths."""
+        return await admin.dashboard_list()
+
+    @server.tool()
+    async def ha_get_dashboard(url_path: str = "") -> dict:
+        """Read the Lovelace config for a storage dashboard; blank path selects default."""
+        return await admin.dashboard_get(url_path or None)
+
+    @server.tool()
+    async def ha_create_dashboard(title: str, url_path: str) -> dict:
+        """Create a storage dashboard and verify it appears in list; admin write required."""
+        return await admin.dashboard_create(title, url_path)
+
+    @server.tool()
+    async def ha_save_dashboard(config: dict, url_path: str = "") -> dict:
+        """Save and read back dashboard views; returns prior config for manual rollback. Admin write required."""
+        return await admin.dashboard_save(config, url_path=url_path or None)
+
+    @server.tool()
+    async def ha_list_helpers(domain: str) -> list[dict]:
+        """List storage helpers; domain: input_boolean, input_number, input_select, input_text, input_datetime."""
+        return await admin.helper_list(domain)
+
+    @server.tool()
+    async def ha_create_helper(domain: str, config: dict) -> dict:
+        """Create a persistent helper entity and verify it appears in list. Admin write required."""
+        return await admin.helper_create(domain, config)
+
+    @server.tool()
+    async def ha_update_helper(domain: str, helper_id: str, config: dict) -> dict:
+        """Update a storage helper by collection ID and read back. Admin write required."""
+        return await admin.helper_update(domain, helper_id, config)
+
+    @server.tool()
+    async def ha_delete_helper(domain: str, helper_id: str) -> None:
+        """Delete a storage helper; requires admin write and delete opt-ins."""
+        return await admin.helper_delete(domain, helper_id)
+
+    @server.tool()
+    async def ha_update_dashboard(dashboard_id: str, changes: dict) -> dict:
+        """Update dashboard title/icon/display metadata by collection ID. Admin write required."""
+        return await admin.dashboard_update(dashboard_id, changes)
+
+    @server.tool()
+    async def ha_delete_dashboard(dashboard_id: str) -> None:
+        """Delete a dashboard by collection ID. Admin write and delete required."""
+        return await admin.dashboard_delete(dashboard_id)
+
+    @server.tool()
+    async def ha_list_entity_registry() -> list[dict]:
+        """List registry entries for integration-managed entities; does not create entities."""
+        return await admin.entity_registry_list()
+
+    @server.tool()
+    async def ha_update_entity_registry(entity_id: str, changes: dict) -> dict:
+        """Edit entity name, area or icon; does not create an entity. Admin write required."""
+        return await admin.entity_registry_update(entity_id, changes)
 
     return server
 

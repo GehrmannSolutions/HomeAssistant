@@ -96,4 +96,4 @@ def test_mcp_tools_are_registered():
     server = create_server(HAClient("http://ha:8123", "secret"))
     import asyncio
     names = {tool.name for tool in asyncio.run(server.list_tools())}
-    assert {"ha_search_entities", "ha_get_state", "ha_list_services", "ha_call_service", "ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete"} <= names
+    assert {"ha_search_entities", "ha_get_state", "ha_list_services", "ha_call_service", "ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete", "ha_validate_automation", "ha_get_automation", "ha_save_automation", "ha_delete_automation", "ha_list_dashboards", "ha_get_dashboard", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard", "ha_delete_dashboard", "ha_list_helpers", "ha_create_helper", "ha_update_helper", "ha_delete_helper", "ha_list_entity_registry", "ha_update_entity_registry"} <= names

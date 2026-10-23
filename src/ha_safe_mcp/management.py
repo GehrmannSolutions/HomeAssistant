@@ -1,0 +1,254 @@
+"""Allowlisted Home Assistant Core WebSocket transport for config management."""
+
+import asyncio
+import json
+import re
+from urllib.parse import urlsplit
+
+import httpx
+
+from websockets.asyncio.client import connect
+from websockets.exceptions import WebSocketException
+
+from .server import HAClient
+
+HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime"})
+READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboards/list",
+                        "config/entity_registry/list"}) | frozenset(f"{domain}/list" for domain in HELPERS)
+WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create",
+                         "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
+                             f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
+DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete",
+                          "config/entity_registry/remove"}) | frozenset(f"{domain}/delete" for domain in HELPERS)
+
+
+class HAWebSocket:
+    def __init__(self, client: HAClient, *, allow_admin_write: bool = False, allow_delete: bool = False):
+        self.client = client
+        self.allow_admin_write = allow_admin_write
+        self.allow_delete = allow_delete
+
+    async def command(self, command_type: str, payload: dict | None = None):
+        if command_type not in READ_TYPES | WRITE_TYPES | DELETE_TYPES:
+            raise ValueError("websocket command not allowed")
+        if command_type in WRITE_TYPES | DELETE_TYPES and (not self.client.allow_write or not self.allow_admin_write):
+            raise ValueError("admin write disabled")
+        if command_type in DELETE_TYPES and not self.allow_delete:
+            raise ValueError("delete disabled")
+        payload = payload or {}
+        if not isinstance(payload, dict) or {"id", "type", "access_token"} & payload.keys():
+            raise ValueError("reserved websocket fields or invalid payload")
+        if len(json.dumps(payload).encode()) > 65536:
+            raise ValueError("websocket payload too large")
+        url = urlsplit(self.client.url)
+        scheme = "wss" if url.scheme == "https" else "ws"
+        ws_url = f"{scheme}://{url.netloc}/api/websocket"
+        try:
+            async with asyncio.timeout(20):
+                async with connect(ws_url, max_size=2_000_000, open_timeout=10) as ws:
+                    hello = json.loads(await ws.recv())
+                    if hello.get("type") != "auth_required":
+                        raise RuntimeError("Unexpected WebSocket authentication phase")
+                    await ws.send(json.dumps({"type": "auth", "access_token": self.client.token}))
+                    auth = json.loads(await ws.recv())
+                    if auth.get("type") != "auth_ok":
+                        raise RuntimeError("Home Assistant WebSocket authentication failed")
+                    await ws.send(json.dumps({"id": 1, "type": command_type, **payload}))
+                    response = json.loads(await ws.recv())
+                    if response.get("type") != "result" or response.get("id") != 1:
+                        raise RuntimeError("Unexpected WebSocket response")
+                    if not response.get("success"):
+                        code = response.get("error", {}).get("code", "unknown")
+                        safe_code = code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,60}", code) else "unknown"
+                        raise RuntimeError(f"Home Assistant WebSocket error: {safe_code}")
+                    return response.get("result")
+        except (OSError, TimeoutError, WebSocketException, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Home Assistant WebSocket request failed ({type(exc).__name__})") from None
+
+
+class HAAdmin:
+    """Typed, admin-gated configuration operations; never accept raw URLs/types."""
+
+    def __init__(self, client: HAClient, ws: HAWebSocket | None = None, *,
+                 allow_admin_write: bool = False, allow_delete: bool = False):
+        self.client = client
+        self.allow_admin_write = allow_admin_write
+        self.allow_delete = allow_delete
+        self.ws = ws or HAWebSocket(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+
+    def _check_write(self):
+        if not self.client.allow_write or not self.allow_admin_write:
+            raise ValueError("admin write disabled")
+
+    def _check_delete(self):
+        self._check_write()
+        if not self.allow_delete:
+            raise ValueError("delete disabled")
+
+    async def automation_validate(self, config: dict):
+        if not isinstance(config, dict):
+            raise ValueError("automation config must be an object")
+        payload = {key: config[key] for key in ("triggers", "conditions", "actions") if key in config}
+        if not payload:
+            raise ValueError("triggers, conditions or actions required")
+        return await self.ws.command("validate_config", payload)
+
+    @staticmethod
+    def _automation_path(config_id: str) -> str:
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", config_id):
+            raise ValueError("invalid automation ID")
+        return f"/api/config/automation/config/{config_id}"
+
+    async def automation_get(self, config_id: str):
+        return await self.client._request("GET", self._automation_path(config_id))
+
+    async def automation_save(self, config_id: str, config: dict):
+        self._check_write()
+        if not isinstance(config, dict) or not isinstance(config.get("alias"), str) or not config.get("alias") or "id" in config:
+            raise ValueError("automation requires alias and must not override id")
+        path = self._automation_path(config_id)
+        validation = await self.automation_validate(config)
+        if any(isinstance(item, dict) and not item.get("valid", False) for item in validation.values()):
+            raise ValueError("Home Assistant rejected automation configuration")
+        result = await self.client._request("POST", path, data=config)
+        if result.get("result") != "ok":
+            raise RuntimeError("Automation save was not confirmed")
+        readback = await self.automation_get(config_id)
+        if readback.get("id") != config_id or readback.get("alias") != config["alias"]:
+            raise RuntimeError("Automation read-back differs from requested configuration")
+        return readback
+
+    async def automation_delete(self, config_id: str):
+        self._check_delete()
+        path = self._automation_path(config_id)
+        result = await self.client._request("DELETE", path)
+        try:
+            await self.automation_get(config_id)
+        except RuntimeError as exc:
+            if str(exc) == "Home Assistant returned HTTP 404":
+                return result
+            raise
+        raise RuntimeError("Automation still present after delete")
+
+    async def dashboard_list(self):
+        return await self.ws.command("lovelace/dashboards/list")
+
+    async def dashboard_get(self, url_path: str | None = None):
+        return await self.ws.command("lovelace/config", {"url_path": url_path} if url_path else {})
+
+    async def dashboard_create(self, title: str, url_path: str):
+        self._check_write()
+        if not title or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", url_path):
+            raise ValueError("dashboard requires title and hyphenated url_path")
+        result = await self.ws.command("lovelace/dashboards/create", {"title": title, "url_path": url_path})
+        dashboards = await self.dashboard_list()
+        if not any(item.get("url_path") == url_path for item in dashboards):
+            raise RuntimeError("Dashboard creation not visible in list")
+        return result
+
+    async def dashboard_save(self, config: dict, *, url_path: str | None = None):
+        self._check_write()
+        if not isinstance(config, dict) or not isinstance(config.get("views"), list):
+            raise ValueError("dashboard config requires views list")
+        if url_path is not None and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", url_path):
+            raise ValueError("invalid dashboard url_path")
+        try:
+            previous = await self.dashboard_get(url_path)
+        except RuntimeError as exc:
+            if str(exc) != "Home Assistant WebSocket error: config_not_found":
+                raise
+            previous = None
+        payload = {"config": config, **({"url_path": url_path} if url_path else {})}
+        await self.ws.command("lovelace/config/save", payload)
+        current = await self.dashboard_get(url_path)
+        if current != config:
+            raise RuntimeError("Dashboard read-back differs from requested configuration")
+        return {"previous": previous, "config": current}
+
+    async def helper_list(self, domain: str):
+        if domain not in HELPERS:
+            raise ValueError("unsupported helper domain")
+        return await self.ws.command(f"{domain}/list")
+
+    async def helper_create(self, domain: str, config: dict):
+        self._check_write()
+        if domain not in HELPERS or not isinstance(config, dict) or not isinstance(config.get("name"), str) or not config["name"]:
+            raise ValueError("unsupported helper domain or missing name")
+        if domain == "input_number" and not all(key in config for key in ("min", "max")):
+            raise ValueError("input_number requires min and max")
+        if domain == "input_select" and (not isinstance(config.get("options"), list) or not config["options"]):
+            raise ValueError("input_select requires options")
+        if domain == "input_datetime" and not (config.get("has_date") or config.get("has_time")):
+            raise ValueError("input_datetime requires has_date or has_time")
+        if {"id", "entity_id", "type"} & config.keys():
+            raise ValueError("helper config contains reserved fields")
+        result = await self.ws.command(f"{domain}/create", config)
+        if not isinstance(result, dict) or not result.get("id"):
+            raise RuntimeError("Helper creation returned no ID")
+        current = await self.helper_list(domain)
+        if not any(item.get("id") == result["id"] for item in current):
+            raise RuntimeError("Helper creation not visible in list")
+        return result
+
+    @staticmethod
+    def _helper_id(domain: str, helper_id: str):
+        if domain not in HELPERS or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", helper_id):
+            raise ValueError("unsupported helper domain or invalid ID")
+
+    async def helper_update(self, domain: str, helper_id: str, config: dict):
+        self._check_write()
+        self._helper_id(domain, helper_id)
+        if not isinstance(config, dict) or not isinstance(config.get("name"), str) or not config["name"]:
+            raise ValueError("helper update requires full config with name")
+        if {"id", "entity_id", "type", f"{domain}_id"} & config.keys():
+            raise ValueError("helper config contains reserved fields")
+        await self.ws.command(f"{domain}/update", {f"{domain}_id": helper_id, **config})
+        current = await self.helper_list(domain)
+        match = next((item for item in current if item.get("id") == helper_id), None)
+        if match is None or match.get("name") != config["name"]:
+            raise RuntimeError("Helper update not confirmed by read-back")
+        return match
+
+    async def helper_delete(self, domain: str, helper_id: str):
+        self._check_delete()
+        self._helper_id(domain, helper_id)
+        await self.ws.command(f"{domain}/delete", {f"{domain}_id": helper_id})
+        if any(item.get("id") == helper_id for item in await self.helper_list(domain)):
+            raise RuntimeError("Helper still present after delete")
+        return None
+
+    async def dashboard_update(self, dashboard_id: str, changes: dict):
+        self._check_write()
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", dashboard_id) or not isinstance(changes, dict):
+            raise ValueError("invalid dashboard ID or changes")
+        if not changes or not changes.keys() <= {"title", "icon", "require_admin", "show_in_sidebar"}:
+            raise ValueError("unsupported dashboard metadata fields")
+        await self.ws.command("lovelace/dashboards/update", {"dashboard_id": dashboard_id, **changes})
+        current = next((item for item in await self.dashboard_list() if item.get("id") == dashboard_id), None)
+        if current is None or any(current.get(key) != val for key, val in changes.items()):
+            raise RuntimeError("Dashboard update not confirmed by read-back")
+        return current
+
+    async def dashboard_delete(self, dashboard_id: str):
+        self._check_delete()
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", dashboard_id):
+            raise ValueError("invalid dashboard ID")
+        await self.ws.command("lovelace/dashboards/delete", {"dashboard_id": dashboard_id})
+        if any(item.get("id") == dashboard_id for item in await self.dashboard_list()):
+            raise RuntimeError("Dashboard still present after delete")
+        return None
+
+    async def entity_registry_list(self):
+        return await self.ws.command("config/entity_registry/list")
+
+    async def entity_registry_update(self, entity_id: str, changes: dict):
+        self._check_write()
+        if not re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z0-9_]+", entity_id) or not isinstance(changes, dict):
+            raise ValueError("invalid entity ID or changes")
+        if not changes or not changes.keys() <= {"name", "area_id", "icon"}:
+            raise ValueError("unsupported entity registry fields")
+        await self.ws.command("config/entity_registry/update", {"entity_id": entity_id, **changes})
+        current = next((item for item in await self.entity_registry_list() if item.get("entity_id") == entity_id), None)
+        if current is None or any(current.get(key) != val for key, val in changes.items()):
+            raise RuntimeError("Entity registry update not confirmed by read-back")
+        return current

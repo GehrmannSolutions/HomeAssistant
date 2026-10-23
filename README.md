@@ -1,56 +1,46 @@
 # ha-safe-mcp
 
-Eigenständiger Home-Assistant-MCP-Server (stdio). Orientiert sich am Funktionsansatz von [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), nutzt direkt die [offizielle Home-Assistant-REST-API](https://developers.home-assistant.io/docs/api/rest/) und übernimmt **nicht** dessen vollständigen Funktionsumfang oder Quellcode.
+Eigenständiger Home-Assistant-MCP-Server (stdio) mit explizitem REST-Katalog und typisierten Verwaltungs-Tools. Nutzt die [offizielle REST-Referenz](https://developers.home-assistant.io/docs/api/rest/) und ausgewählte Konfigurations-APIs aus [Home Assistant Core](https://github.com/home-assistant/core). Kein unbeschränkter HTTP-/WebSocket-Proxy.
 
-## Funktionen
+## Plan / Build / Run
 
-- `ha_search_entities`: aktuelle Entitäten nach ID/Anzeigename und Domain filtern
-- `ha_get_state`: Zustand einer Entität lesen
-- `ha_list_services`: verfügbare Aktionen lesen
-- `ha_call_service`: Dienst für **genau eine Entität** aufrufen, standardmäßig **deaktiviert**
-- `ha_rest_catalog`: die 20 in der offiziellen REST-Dokumentation beschriebenen Methoden/Routen und ihre Sicherheitsklasse anzeigen
-- `ha_rest_query`: dokumentierte GET-Routen plus sichere POST-Routen für Template-Rendering und Konfigurationsprüfung
-- `ha_rest_write`: dokumentierte POST-Mutationen, nach Risikoklasse freigeschaltet
-- `ha_rest_delete`: dokumentierte DELETE-Route, nur mit gesonderter Löschfreigabe
+| Bereich | Planen/Lesen | Schreiben (Admin-Freigabe) | Löschen (weitere Freigabe) |
+|---|---|---|---|
+| Zustände/Dienste | `ha_search_entities`, `ha_get_state`, `ha_list_services` | `ha_call_service` für eine Entität | — |
+| Dokumentierte REST-API | `ha_rest_catalog`, `ha_rest_query` | `ha_rest_write` | `ha_rest_delete` |
+| Automationen | `ha_validate_automation`, `ha_get_automation` | `ha_save_automation` (HA-Validierung + Rücklesung) | `ha_delete_automation` |
+| Dashboards | `ha_list_dashboards`, `ha_get_dashboard` | `ha_create_dashboard`, `ha_save_dashboard` (bisherige Konfiguration im Ergebnis), `ha_update_dashboard` | `ha_delete_dashboard` |
+| Persistente Helper | `ha_list_helpers` | `ha_create_helper`, `ha_update_helper` | `ha_delete_helper` |
+| Entity Registry | `ha_list_entity_registry` | `ha_update_entity_registry` (Name/Bereich/Icon) | — |
 
-**Grenze:** Der REST-Katalog deckt die 20 derzeit in der offiziellen REST-Referenz dokumentierten Methoden/Routen ab, nicht sämtliche undokumentierten Endpunkte des Home-Assistant-Frontends. Konfigurationsverwaltung für Automationen, Dashboards, Registry und Integrationen benötigt weitere WebSocket-/Komponenten-APIs und ist **noch nicht implementiert**. Der MCP-Server ist kein unbeschränkter HTTP-Proxy.
+Der REST-Katalog umfasst **20 Methoden/Routen der offiziellen REST-Referenz**, darunter Konfiguration, Zustände, Events, Dienste, History, Logbook, Fehlerprotokoll, Kamera, Template, Konfigurationsprüfung und Intent. Nur deklarierte Routen, Methoden und Query-Parameter sind zugelassen; unbekannte Pfade/Traversal werden vor Netzwerkzugriff abgelehnt. Kamerabilder werden Base64-kodiert zurückgegeben; Antwortgröße maximal 2 MB. `POST /api/states/{entity_id}` setzt nur einen Zustand und erstellt **keine dauerhaft verwaltete Entität**.
 
-Schreibgrenzen: `HA_ALLOW_WRITE=true` erlaubt Dienste nur in `HA_ALLOWED_DOMAINS` und nur mit konkreter einzelner `entity_id`. `HA_ALLOW_ADMIN_WRITE=true` zusätzlich erlaubt REST-Events, Intents und Zustandsschreibungen; nur zusammen mit `HA_ALLOW_DELETE=true` ist das Löschen eines Zustands erlaubt. Ein mit `POST /api/states/...` erzeugter Zustand ist **keine dauerhaft integrierte Entität**. Die Antwortgröße ist auf 2 MB begrenzt; Kamerabilder werden in Base64 zurückgegeben. Jede Freigabe muss bewusst gesetzt werden.
+Automation-CRUD nutzt `/api/config/automation/config/{id}`; Dashboard- und Helper-CRUD nutzen Home-Assistant-Core-WebSocket-Befehle. Unterstützte Helper: `input_boolean`, `input_number`, `input_select`, `input_text`, `input_datetime`. Die Entity Registry erstellt **keine** Entitäten – dafür die jeweilige Helper-Collection beziehungsweise Integration nutzen. Die Verwaltungsbefehle sind Core-spezifisch und können sich zwischen HA-Versionen ändern; `tests/ha_core_smoke.py` prüft die Kernpfade gegen ein echtes isoliertes Core-Image.
 
-Kein Zugriff auf Dateien, Konfigurations-YAML, Backups, Registries oder Automationsverwaltung. Kein HTTP-MCP-Endpunkt; der Server kommuniziert lokal via stdio mit einem MCP-Client.
+**Nicht implementiert:** Allgemeine Integrations-/Config-Flow-Verwaltung, beliebige Komponenten- und WebSocket-Befehle, YAML-/Dateibearbeitung und Backups. Damit ist dies eine geprüfte Grundlage für Plan/Build/Run, **nicht** eine vollständige Abbildung sämtlicher HA-Funktionen. Änderungen an Automationen stoßen laut Core einen asynchronen Reload an: erfolgreiche Konfigurations-Rücklesung beweist noch nicht, dass die Automation bereits ausgeführt wurde.
 
-## Lokales KI-Modell (Ollama)
+## Sicherheitsfreigaben
 
-Ein kleines lokal installiertes Modell mit Tool-Unterstützung genügt. Hier wurde `qwen2.5-coder:7b` über die lokale Ollama-API getestet; der Adapter verbindet die Modell-Toolaufrufe mit dem MCP-Server über stdio. Das Modell benötigt weder GitHub-PAT noch direkten Zugriff auf Home Assistant.
+`.env.example` beschreibt die Schalter. Standardmäßig sind **alle Writes aus**:
 
-```bash
-# Ollama muss unter http://127.0.0.1:11434 laufen; ggf. Modell installieren:
-ollama pull qwen2.5-coder:7b
-# In .env vorher HA_URL und HA_TOKEN für die echte Instanz eintragen.
-.venv/bin/ha-ollama-chat 'Wie ist der Zustand von light.wohnzimmer?'
-```
+- `HA_ALLOW_WRITE=true`: Dienste für einzelne Entitäten in `HA_ALLOWED_DOMAINS` und gewöhnliche REST-Schreibaktionen freigeben.
+- Zusätzlich `HA_ALLOW_ADMIN_WRITE=true`: Automationen, Dashboards, Helper, Registry-Updates sowie administrative REST-Schreibaktionen. Der HA-Token muss Admin-Rechte haben.
+- Zusätzlich `HA_ALLOW_DELETE=true`: Löschwerkzeuge/-routen freigeben. Die beiden anderen Schalter bleiben erforderlich.
+- **Ollama-Client zusätzlich:** `--allow-write` und manuelles `JA` **pro Tool-Aufruf**. Andere MCP-Clients müssen eigene menschliche Freigaben durchsetzen; Server-Schalter allein stellen keine Nutzerbestätigung dar.
 
-Standardmäßig sieht das Modell **nur Lese- und Prüftools**; die drei Schreibtools bleiben verborgen. Entitätssuche liefert knappe Angaben statt sämtlicher Attribute; die Dienstliste enthält Aktionsnamen und kann per `domain` gefiltert werden. Der Ollama-Client begrenzt die Anzahl der Tool-Runden und kürzt lange Tool-Ergebnisse. Falls ein kleines Modell einen Toolwunsch nur als **exaktes JSON-Objekt** (`name` + `arguments`) ausgibt, setzt der Adapter ihn ausschließlich für freigegebene Tools in einen echten MCP-Aufruf um. Ein Schreibwunsch im Lesemodus wird ausdrücklich als *nicht ausgeführt* gemeldet.
+`ha_call_service` beschränkt Ziel-Domains standardmäßig auf `light,switch,fan,climate,cover,media_player`, erfordert eine konkrete Einzel-Entität und verbietet zusätzliche Targets. Der explizite REST-Katalog hat dagegen eigene Berechtigungsklassen und kein willkürliches URL-Schema. Ein HA-Admin-Token besitzt trotzdem weitreichende Rechte; diese Adapter-Checks ersetzen **keine** Home-Assistant-Autorisierung. Der stdio-Server darf nicht ungeschützt ans Netzwerk. Token und Response-Bodies werden in Fehlern nicht ausgegeben.
 
-Für Steuerung sind **beide** Schalter nötig: `HA_ALLOW_WRITE=true` in `.env` **und** `--allow-write` am Ollama-Client. Zusätzlich wird **jeder einzelne** Steuerungsaufruf mit seinen Parametern angezeigt und erst nach Eingabe von `JA` ausgeführt. Nicht freigegebene Domains bleiben serverseitig gesperrt. Prüfe die angezeigten Parameter immer selbst – auch kleine Modelle können falsche Entitäten auswählen.
-
-```bash
-.venv/bin/ha-ollama-chat --allow-write 'Schalte light.wohnzimmer an'
-```
-
-Der Adapter ist ein Beispielclient für Ollama und nicht Voraussetzung für andere MCP-Clients. Diese können den Server wie unten per stdio starten. Ollama-API: [Tool Calling](https://docs.ollama.com/capabilities/tool-calling).
-
-## Einrichtung
+## Installation und MCP-Client
 
 ```bash
 cd /home/user/projects/ha-mcp-local
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]'
+cp -n .env.example .env
+# HA_URL und HA_TOKEN in .env setzen (Home-Assistant-Long-Lived-Access-Token)
 ```
 
-In `.env` die URL und einen **Home-Assistant Long-Lived Access Token** (`HA_TOKEN`) eintragen; der bereits lokal vorhandene GitHub-PAT in `.github.env` ist davon unabhängig und für den Betrieb **nicht nötig**. Beide Dateien sind git-ignoriert; **nicht committen**. Für reine Lesezugriffe `HA_ALLOW_WRITE=false` beibehalten. Schreibzugriffe nur bewusst mit `HA_ALLOW_WRITE=true` freischalten und `HA_ALLOWED_DOMAINS` einschränken. Wer umfassendere Aktionen benötigt, sollte den Berechtigungsumfang eines gesonderten HA-Benutzers sorgfältig prüfen.
-
-MCP-Client-Konfiguration (Beispiel; `cwd` muss auf das Projekt zeigen, damit `.env` gefunden wird):
+`.env` und `.github.env` sind git-ignoriert. Der GitHub-PAT wird für den MCP-Betrieb **nicht** benötigt und darf nie ans Modell/HA weitergereicht werden. HTTPS-Zertifikate werden normal geprüft.
 
 ```json
 {
@@ -63,25 +53,43 @@ MCP-Client-Konfiguration (Beispiel; `cwd` muss auf das Projekt zeigen, damit `.e
 }
 ```
 
-Falls der Client kein `cwd` unterstützt, `HA_URL`, `HA_TOKEN`, `HA_ALLOW_WRITE` und ggf. `HA_ALLOWED_DOMAINS` als Prozess-Umgebungsvariablen konfigurieren. Token nie als Kommandozeilenargument, in Git oder in einen Debug-Log schreiben. Bei TLS über HTTPS wird das Zertifikat normal geprüft; keine `verify=false`-Option.
+Ohne `cwd` die `HA_...`-Variablen explizit im MCP-Prozess setzen. Token nicht als Kommandozeilenargument oder in Git speichern.
 
-## Docker-Test (ohne echtes Smart Home)
+## Lokales KI-Modell (Ollama)
+
+`qwen2.5-coder:7b` wurde an einem lokalen Test-HA mit echtem MCP-Tool-Aufruf geprüft. Der Ollama-Client wählt **themenbezogen** nur wenige Tools aus, begrenzt Runden und Ergebnislängen und verlangt für jeden Write eine explizite Bestätigung. Die Auswahl per Stichwort ist eine Komfortfunktion, keine semantisch vollständige Planung; für komplizierte Aufgaben Tools gezielt benennen oder einen leistungsfähigeren MCP-Client einsetzen.
 
 ```bash
+ollama pull qwen2.5-coder:7b
+.venv/bin/ha-ollama-chat 'Wie ist der Zustand von light.wohnzimmer?'
+# Nur bei bewusst freigeschaltetem HA_ALLOW_WRITE=true:
+.venv/bin/ha-ollama-chat --allow-write 'Schalte light.wohnzimmer an'
+```
+
+Das Modell sieht weder GitHub-PAT noch HA-Token direkt. Es kann sich trotzdem bei Entitäts- oder Konfigurationsdetails irren: jeden vorgeschlagenen Write prüfen.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest -q
 sudo docker compose -f compose.test.yaml up -d
 sudo docker build -t ha-safe-mcp:local .
 .venv/bin/python tests/docker_smoke.py
 TEST_ALLOW_WRITE=true .venv/bin/python tests/docker_smoke.py
-.venv/bin/python -m pytest -q
 sudo docker compose -f compose.test.yaml down
 ```
 
-Der Container `ha-test-double` simuliert nur drei dokumentierte REST-Endpunkte; **kein echter Home-Assistant-Core-Test**. `tests/docker_smoke.py` verifiziert den echten MCP-Handshake, Tool-Aufrufe und standardmäßig gesperrte sowie explizit freigegebene Schreibzugriffe via Docker-Image. Dieser Test nutzt `sudo -n docker`; bei eigenem Docker-Zugriff entsprechend anpassen.
+Der Docker-Testdouble prüft MCP-Protokoll und REST-Verhalten, ist aber **kein** echter HA Core. Für einen einmaligen Test gegen einen **frischen, isolierten** HA-Core-Container (das Skript erstellt dort einen Admin und verweigert bereits eingerichtete Instanzen):
 
-Für einen produktiven Docker-MCP-Client das Image mit interaktivem stdin starten und **nur** HA-Variablen übergeben (nicht `--env-file .github.env` und nicht den GitHub-PAT). Der HA-Host muss aus dem Container erreichbar sein; `127.0.0.1` referenziert sonst den Container.
+```bash
+sudo docker run -d --name ha-mcp-core-test -p 127.0.0.1:18124:8123 \
+  -v ha-mcp-core-test:/config ghcr.io/home-assistant/home-assistant:stable
+# Erst ausführen, sobald http://127.0.0.1:18124/api/onboarding erreichbar ist:
+.venv/bin/python tests/ha_core_smoke.py
+sudo docker rm -f ha-mcp-core-test
+sudo docker volume rm ha-mcp-core-test
+```
 
-## Sicherheit und Grenzen
+**Nie** `HA_CORE_TEST_URL` auf das echte Smart Home setzen. In diesem Test wurden Helper erstellen/ändern/löschen, Automationen validieren/speichern/löschen und Dashboards erstellen/speichern/ändern/löschen sowie MCP-stdio-Lese- und Schreibaufrufe gegen echtes Core ausgeführt. Registry-Update und alle REST-Spezialrouten sind durch Unit-/Testdouble-Tests, nicht vollständig live, abgedeckt.
 
-`ha_call_service` erlaubt standardmäßig nur `light`, `switch`, `fan`, `climate`, `cover`, `media_player`, sofern Schreiben überhaupt eingeschaltet ist. Es validiert Service-/Entitätsnamen, verlangt passende Entity-Domain und verbietet zusätzliche Zielangaben (`entity_id`, `area_id`, `device_id`) in `service_data`. Das ist **keine vollständige HA-Autorisierungsgrenze**: Die effektiven Rechte des HA-Tokens gelten weiterhin. Exponiere den stdio-Prozess nicht ungeschützt im Netzwerk. Fehlerantworten geben weder Token noch Response-Bodies wieder.
-
-Quellen: [Home Assistant Organisation](https://github.com/home-assistant), [offizielle REST-Dokumentation](https://developers.home-assistant.io/docs/api/rest/), [ha-mcp als Funktionsreferenz](https://github.com/homeassistant-ai/ha-mcp).
+Quellen: [REST API](https://developers.home-assistant.io/docs/api/rest/), [WebSocket API](https://developers.home-assistant.io/docs/api/websocket/), [Core-Quellcode](https://github.com/home-assistant/core), [ha-mcp als Funktionsreferenz](https://github.com/homeassistant-ai/ha-mcp).
