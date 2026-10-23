@@ -61,6 +61,27 @@ async def test_errors_do_not_expose_token():
         assert "secret" not in str(error.value)
 
 
+@pytest.mark.asyncio
+async def test_search_is_compact_for_small_models():
+    with respx.mock(base_url="http://ha:8123") as router:
+        router.get("/api/states").mock(return_value=httpx.Response(200, json=[
+            {"entity_id": "light.desk", "state": "on", "attributes": {"friendly_name": "Desk Lamp", "huge_blob": "x" * 10000}}
+        ]))
+        result = await HAClient("http://ha:8123", "secret").search_entities("desk")
+        assert result == [{"entity_id": "light.desk", "state": "on", "friendly_name": "Desk Lamp"}]
+
+
+@pytest.mark.asyncio
+async def test_list_services_filters_domain_and_omits_large_descriptions():
+    with respx.mock(base_url="http://ha:8123") as router:
+        router.get("/api/services").mock(return_value=httpx.Response(200, json=[
+            {"domain": "light", "services": {"turn_on": {"description": "x" * 10000}}},
+            {"domain": "switch", "services": {"turn_off": {}}},
+        ]))
+        result = await HAClient("http://ha:8123", "secret").list_services("light")
+        assert result == [{"domain": "light", "services": ["turn_on"]}]
+
+
 def test_mcp_tools_are_registered():
     server = create_server(HAClient("http://ha:8123", "secret"))
     import asyncio

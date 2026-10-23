@@ -11,6 +11,27 @@ Eigenständiger, bewusst kleiner **Home-Assistant-MCP-Server** (stdio). Orientie
 
 Kein Zugriff auf Dateien, Konfigurations-YAML, Backups, Registries oder Automationsverwaltung. Kein HTTP-MCP-Endpunkt; der Server kommuniziert lokal via stdio mit einem MCP-Client.
 
+## Lokales KI-Modell (Ollama)
+
+Ein kleines lokal installiertes Modell mit Tool-Unterstützung genügt. Hier wurde `qwen2.5-coder:7b` über die lokale Ollama-API getestet; der Adapter verbindet die Modell-Toolaufrufe mit dem MCP-Server über stdio. Das Modell benötigt weder GitHub-PAT noch direkten Zugriff auf Home Assistant.
+
+```bash
+# Ollama muss unter http://127.0.0.1:11434 laufen; ggf. Modell installieren:
+ollama pull qwen2.5-coder:7b
+# In .env vorher HA_URL und HA_TOKEN für die echte Instanz eintragen.
+.venv/bin/ha-ollama-chat 'Wie ist der Zustand von light.wohnzimmer?'
+```
+
+Standardmäßig sieht das Modell **nur drei Lesetools**. Entitätssuche liefert knappe Angaben statt sämtlicher Attribute; die Dienstliste enthält Aktionsnamen und kann per `domain` gefiltert werden. Der Ollama-Client begrenzt die Anzahl der Tool-Runden und kürzt lange Tool-Ergebnisse. Falls ein kleines Modell einen Toolwunsch nur als **exaktes JSON-Objekt** (`name` + `arguments`) ausgibt, setzt der Adapter ihn ausschließlich für freigegebene Tools in einen echten MCP-Aufruf um. Ein Schreibwunsch im Lesemodus wird ausdrücklich als *nicht ausgeführt* gemeldet.
+
+Für Steuerung sind **beide** Schalter nötig: `HA_ALLOW_WRITE=true` in `.env` **und** `--allow-write` am Ollama-Client. Zusätzlich wird **jeder einzelne** Steuerungsaufruf mit seinen Parametern angezeigt und erst nach Eingabe von `JA` ausgeführt. Nicht freigegebene Domains bleiben serverseitig gesperrt. Prüfe die angezeigten Parameter immer selbst – auch kleine Modelle können falsche Entitäten auswählen.
+
+```bash
+.venv/bin/ha-ollama-chat --allow-write 'Schalte light.wohnzimmer an'
+```
+
+Der Adapter ist ein Beispielclient für Ollama und nicht Voraussetzung für andere MCP-Clients. Diese können den Server wie unten per stdio starten. Ollama-API: [Tool Calling](https://docs.ollama.com/capabilities/tool-calling).
+
 ## Einrichtung
 
 ```bash

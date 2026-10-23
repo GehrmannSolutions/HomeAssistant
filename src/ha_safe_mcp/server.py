@@ -47,18 +47,29 @@ class HAClient:
         if not isinstance(states, list):
             raise RuntimeError("Unexpected Home Assistant response")
         needle = query.casefold()
-        return [state for state in states if isinstance(state, dict)
-                and (not domain or state.get("entity_id", "").startswith(domain + "."))
-                and (needle in state.get("entity_id", "").casefold()
-                     or needle in str(state.get("attributes", {}).get("friendly_name", "")).casefold())][:limit]
+        return [{"entity_id": state["entity_id"], "state": state.get("state", ""),
+                 "friendly_name": str(state.get("attributes", {}).get("friendly_name", ""))}
+                for state in states if isinstance(state, dict) and isinstance(state.get("entity_id"), str)
+                and isinstance(state.get("attributes", {}), dict)
+                and (not domain or state["entity_id"].startswith(domain + "."))
+                and (needle in state["entity_id"].casefold()
+                     or needle in str(state["attributes"].get("friendly_name", "")).casefold())][:limit]
 
     async def get_state(self, entity_id: str) -> dict:
         if not ENTITY.fullmatch(entity_id):
             raise ValueError("invalid entity_id")
         return await self._request("GET", f"/api/states/{entity_id}")
 
-    async def list_services(self) -> list[dict]:
-        return await self._request("GET", "/api/services")
+    async def list_services(self, domain: str = "") -> list[dict]:
+        if domain and not IDENTIFIER.fullmatch(domain):
+            raise ValueError("invalid domain")
+        services = await self._request("GET", "/api/services")
+        if not isinstance(services, list):
+            raise RuntimeError("Unexpected Home Assistant response")
+        return [{"domain": item["domain"], "services": list(item["services"])}
+                for item in services if isinstance(item, dict) and isinstance(item.get("services"), dict)
+                and isinstance(item.get("domain"), str)
+                and (not domain or item["domain"] == domain)]
 
     async def call_service(self, domain: str, service: str, entity_id: str,
                            service_data: dict | None = None) -> list[dict]:
@@ -92,9 +103,9 @@ def create_server(client: HAClient) -> FastMCP:
         return await client.get_state(entity_id)
 
     @server.tool()
-    async def ha_list_services() -> list[dict]:
-        """List available Home Assistant service domains and actions."""
-        return await client.list_services()
+    async def ha_list_services(domain: str = "") -> list[dict]:
+        """List action names for a domain; filter by domain to save context."""
+        return await client.list_services(domain)
 
     @server.tool()
     async def ha_call_service(domain: str, service: str, entity_id: str,
