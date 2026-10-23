@@ -26,6 +26,8 @@ class FakeSession:
         return SimpleNamespace(tools=[
             SimpleNamespace(name="ha_get_state", description="Read state", inputSchema={"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}),
             SimpleNamespace(name="ha_call_service", description="Change state", inputSchema={"type": "object", "properties": {"domain": {"type": "string"}}}),
+            SimpleNamespace(name="ha_rest_write", description="POST", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}}),
+            SimpleNamespace(name="ha_rest_delete", description="DELETE", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}}),
         ])
 
     async def call_tool(self, name, arguments):
@@ -81,6 +83,8 @@ async def test_unknown_json_tool_request_cannot_escape_allowlist():
 @pytest.mark.asyncio
 async def test_write_tool_is_not_exposed_in_read_only_mode():
     def respond(request):
+        tools = {tool["function"]["name"] for tool in json.loads(request.content)["tools"]}
+        assert tools == {"ha_get_state"}
         return httpx.Response(200, json={"message": {"role": "assistant", "content": "Okay"}})
     session = FakeSession()
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:

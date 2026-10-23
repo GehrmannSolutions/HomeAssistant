@@ -1,6 +1,6 @@
 # ha-safe-mcp
 
-Eigenständiger, bewusst kleiner **Home-Assistant-MCP-Server** (stdio). Orientiert sich am Funktionsansatz von [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), nutzt aber direkt die [offizielle Home-Assistant-REST-API](https://developers.home-assistant.io/docs/api/rest/) und übernimmt **nicht** dessen vollständigen Funktionsumfang oder Quellcode.
+Eigenständiger Home-Assistant-MCP-Server (stdio). Orientiert sich am Funktionsansatz von [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), nutzt direkt die [offizielle Home-Assistant-REST-API](https://developers.home-assistant.io/docs/api/rest/) und übernimmt **nicht** dessen vollständigen Funktionsumfang oder Quellcode.
 
 ## Funktionen
 
@@ -8,6 +8,14 @@ Eigenständiger, bewusst kleiner **Home-Assistant-MCP-Server** (stdio). Orientie
 - `ha_get_state`: Zustand einer Entität lesen
 - `ha_list_services`: verfügbare Aktionen lesen
 - `ha_call_service`: Dienst für **genau eine Entität** aufrufen, standardmäßig **deaktiviert**
+- `ha_rest_catalog`: die 20 in der offiziellen REST-Dokumentation beschriebenen Methoden/Routen und ihre Sicherheitsklasse anzeigen
+- `ha_rest_query`: dokumentierte GET-Routen plus sichere POST-Routen für Template-Rendering und Konfigurationsprüfung
+- `ha_rest_write`: dokumentierte POST-Mutationen, nach Risikoklasse freigeschaltet
+- `ha_rest_delete`: dokumentierte DELETE-Route, nur mit gesonderter Löschfreigabe
+
+**Grenze:** Der REST-Katalog deckt die 20 derzeit in der offiziellen REST-Referenz dokumentierten Methoden/Routen ab, nicht sämtliche undokumentierten Endpunkte des Home-Assistant-Frontends. Konfigurationsverwaltung für Automationen, Dashboards, Registry und Integrationen benötigt weitere WebSocket-/Komponenten-APIs und ist **noch nicht implementiert**. Der MCP-Server ist kein unbeschränkter HTTP-Proxy.
+
+Schreibgrenzen: `HA_ALLOW_WRITE=true` erlaubt Dienste nur in `HA_ALLOWED_DOMAINS` und nur mit konkreter einzelner `entity_id`. `HA_ALLOW_ADMIN_WRITE=true` zusätzlich erlaubt REST-Events, Intents und Zustandsschreibungen; nur zusammen mit `HA_ALLOW_DELETE=true` ist das Löschen eines Zustands erlaubt. Ein mit `POST /api/states/...` erzeugter Zustand ist **keine dauerhaft integrierte Entität**. Die Antwortgröße ist auf 2 MB begrenzt; Kamerabilder werden in Base64 zurückgegeben. Jede Freigabe muss bewusst gesetzt werden.
 
 Kein Zugriff auf Dateien, Konfigurations-YAML, Backups, Registries oder Automationsverwaltung. Kein HTTP-MCP-Endpunkt; der Server kommuniziert lokal via stdio mit einem MCP-Client.
 
@@ -22,7 +30,7 @@ ollama pull qwen2.5-coder:7b
 .venv/bin/ha-ollama-chat 'Wie ist der Zustand von light.wohnzimmer?'
 ```
 
-Standardmäßig sieht das Modell **nur drei Lesetools**. Entitätssuche liefert knappe Angaben statt sämtlicher Attribute; die Dienstliste enthält Aktionsnamen und kann per `domain` gefiltert werden. Der Ollama-Client begrenzt die Anzahl der Tool-Runden und kürzt lange Tool-Ergebnisse. Falls ein kleines Modell einen Toolwunsch nur als **exaktes JSON-Objekt** (`name` + `arguments`) ausgibt, setzt der Adapter ihn ausschließlich für freigegebene Tools in einen echten MCP-Aufruf um. Ein Schreibwunsch im Lesemodus wird ausdrücklich als *nicht ausgeführt* gemeldet.
+Standardmäßig sieht das Modell **nur Lese- und Prüftools**; die drei Schreibtools bleiben verborgen. Entitätssuche liefert knappe Angaben statt sämtlicher Attribute; die Dienstliste enthält Aktionsnamen und kann per `domain` gefiltert werden. Der Ollama-Client begrenzt die Anzahl der Tool-Runden und kürzt lange Tool-Ergebnisse. Falls ein kleines Modell einen Toolwunsch nur als **exaktes JSON-Objekt** (`name` + `arguments`) ausgibt, setzt der Adapter ihn ausschließlich für freigegebene Tools in einen echten MCP-Aufruf um. Ein Schreibwunsch im Lesemodus wird ausdrücklich als *nicht ausgeführt* gemeldet.
 
 Für Steuerung sind **beide** Schalter nötig: `HA_ALLOW_WRITE=true` in `.env` **und** `--allow-write` am Ollama-Client. Zusätzlich wird **jeder einzelne** Steuerungsaufruf mit seinen Parametern angezeigt und erst nach Eingabe von `JA` ausgeführt. Nicht freigegebene Domains bleiben serverseitig gesperrt. Prüfe die angezeigten Parameter immer selbst – auch kleine Modelle können falsche Entitäten auswählen.
 

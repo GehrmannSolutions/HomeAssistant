@@ -72,7 +72,7 @@ class HAClient:
                 and (not domain or item["domain"] == domain)]
 
     async def call_service(self, domain: str, service: str, entity_id: str,
-                           service_data: dict | None = None) -> list[dict]:
+                           service_data: dict | None = None, *, return_response: bool = False) -> list[dict] | dict:
         if not self.allow_write:
             raise ValueError("Writes are disabled; set HA_ALLOW_WRITE=true to enable")
         if domain not in self.allowed_domains:
@@ -85,11 +85,18 @@ class HAClient:
             service_data = {}
         if not isinstance(service_data, dict) or "entity_id" in service_data or "area_id" in service_data or "device_id" in service_data:
             raise ValueError("service_data must be an object without alternate targets")
-        return await self._request("POST", f"/api/services/{domain}/{service}",
+        path = f"/api/services/{domain}/{service}"
+        if return_response:
+            path += "?return_response"
+        return await self._request("POST", path,
                                    data={"entity_id": entity_id, **service_data})
 
 
-def create_server(client: HAClient) -> FastMCP:
+def create_server(client: HAClient, *, allow_admin_write: bool = False,
+                  allow_delete: bool = False) -> FastMCP:
+    from .rest_api import RestGateway
+
+    rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
 
     @server.tool()
@@ -113,6 +120,30 @@ def create_server(client: HAClient) -> FastMCP:
         """Call an action for one entity; disabled unless HA_ALLOW_WRITE=true; only configured domains allowed."""
         return await client.call_service(domain, service, entity_id, service_data)
 
+    @server.tool()
+    async def ha_rest_catalog() -> list[dict]:
+        """Discover the documented REST routes and their permission classes."""
+        return rest.catalog()
+
+    @server.tool()
+    async def ha_rest_query(path: str, query: dict | None = None,
+                            method: str = "GET", body: dict | None = None) -> dict:
+        """Call a documented GET route or the safe POST template/config-check routes."""
+        if method != "GET" and (method != "POST" or path not in {"/api/template", "/api/config/core/check_config"}):
+            raise ValueError("query tool only supports GET or safe POST")
+        return await rest.request(method, path, query=query, body=body)
+
+    @server.tool()
+    async def ha_rest_write(path: str, body: dict | None = None,
+                            query: dict | None = None) -> dict:
+        """POST a documented mutation. Requires HA_ALLOW_WRITE; admin routes need HA_ALLOW_ADMIN_WRITE."""
+        return await rest.request("POST", path, body=body, query=query)
+
+    @server.tool()
+    async def ha_rest_delete(path: str) -> dict:
+        """DELETE a documented state route. Requires HA_ALLOW_WRITE, HA_ALLOW_ADMIN_WRITE and HA_ALLOW_DELETE."""
+        return await rest.request("DELETE", path)
+
     return server
 
 
@@ -122,7 +153,9 @@ def main():
     client = HAClient(os.getenv("HA_URL", "http://127.0.0.1:8123"), os.getenv("HA_TOKEN", ""),
                       allow_write=os.getenv("HA_ALLOW_WRITE", "false").lower() == "true",
                       allowed_domains=domains)
-    create_server(client).run(transport="stdio")
+    create_server(client,
+                  allow_admin_write=os.getenv("HA_ALLOW_ADMIN_WRITE", "false").lower() == "true",
+                  allow_delete=os.getenv("HA_ALLOW_DELETE", "false").lower() == "true").run(transport="stdio")
 
 
 if __name__ == "__main__":

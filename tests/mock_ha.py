@@ -24,6 +24,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._auth():
             return
+        if self.path == "/api/config":
+            return self._respond(200, {"version": "test-double"})
         if self.path == "/api/states":
             return self._respond(200, STATES)
         if self.path.startswith("/api/states/"):

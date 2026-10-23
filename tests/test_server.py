@@ -82,8 +82,18 @@ async def test_list_services_filters_domain_and_omits_large_descriptions():
         assert result == [{"domain": "light", "services": ["turn_on"]}]
 
 
+@pytest.mark.asyncio
+async def test_service_can_request_documented_response_data():
+    with respx.mock(base_url="http://ha:8123") as router:
+        router.post("/api/services/weather/get_forecasts?return_response").mock(return_value=httpx.Response(200, json={"changed_states": [], "service_response": {"forecast": []}}))
+        client = HAClient("http://ha:8123", "secret", allow_write=True,
+                          allowed_domains=frozenset({"weather"}))
+        result = await client.call_service("weather", "get_forecasts", "weather.home", {"type": "daily"}, return_response=True)
+        assert "service_response" in result
+
+
 def test_mcp_tools_are_registered():
     server = create_server(HAClient("http://ha:8123", "secret"))
     import asyncio
     names = {tool.name for tool in asyncio.run(server.list_tools())}
-    assert {"ha_search_entities", "ha_get_state", "ha_list_services", "ha_call_service"} <= names
+    assert {"ha_search_entities", "ha_get_state", "ha_list_services", "ha_call_service", "ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete"} <= names

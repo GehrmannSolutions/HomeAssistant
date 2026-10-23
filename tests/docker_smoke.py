@@ -24,6 +24,10 @@ async def main():
             assert not state.isError and json.loads(state.content[0].text)["state"] == "off", state
             services = await session.call_tool("ha_list_services")
             assert not services.isError and json.loads(services.content[0].text)["domain"] == "light", services
+            catalog = await session.call_tool("ha_rest_catalog")
+            assert not catalog.isError and any('"/api/config"' in block.text for block in catalog.content), catalog
+            config = await session.call_tool("ha_rest_query", {"path": "/api/config"})
+            assert not config.isError and json.loads(config.content[0].text)["data"]["version"] == "test-double", config
             denied = await session.call_tool("ha_call_service", {"domain": "light", "service": "turn_on", "entity_id": "light.desk"})
             if os.getenv("TEST_ALLOW_WRITE") == "true":
                 assert not denied.isError and json.loads(denied.content[0].text)["state"] == "on", denied
