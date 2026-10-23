@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ha-safe-mcp"
+version = "0.1.0"
+description = "Minimal safety-first Home Assistant MCP server"
+requires-python = ">=3.11"
+dependencies = ["mcp>=1.9,<2", "httpx>=0.27,<1", "python-dotenv>=1,<2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "respx>=0.22,<1"]
+
+[project.scripts]
+ha-safe-mcp = "ha_safe_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
