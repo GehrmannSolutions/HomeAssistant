@@ -2,6 +2,12 @@
 
 Eigenständiger Home-Assistant-MCP-Server (stdio) mit explizitem REST-Katalog und typisierten Verwaltungs-Tools. Nutzt die [offizielle REST-Referenz](https://developers.home-assistant.io/docs/api/rest/) und ausgewählte Konfigurations-APIs aus [Home Assistant Core](https://github.com/home-assistant/core). Kein unbeschränkter HTTP-/WebSocket-Proxy.
 
+## Dokumentation
+
+- **[Userguide](docs/USERGUIDE.md)** – Einrichtung, Token, MCP-/Ollama-Bedienung, sichere Beispiele und Fehlersuche.
+- **[Technische Dokumentation](docs/TECHNISCHE_DOKUMENTATION.md)** – Architektur, API- und Tool-Referenz, Berechtigungen, Tests und Erweiterung.
+- Diese README bleibt der kompakte Einstieg; die beiden Dokumente sind die ausführlichen Nachschlagewerke.
+
 ## Plan / Build / Run
 
 | Bereich | Planen/Lesen | Schreiben (Admin-Freigabe) | Löschen (weitere Freigabe) |
