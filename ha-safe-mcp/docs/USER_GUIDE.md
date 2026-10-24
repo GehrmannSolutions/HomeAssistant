@@ -38,6 +38,36 @@ Configure a client that supports local stdio servers to launch the installed `ha
 
 The stdio server loads **only** `.env` in its current working directory (`Path.cwd() / ".env"); it does not search parent directories. If the client does not support `cwd`, arrange for the required `HA_...` settings to reach its process securely instead; do not publish a client config containing a token. Existing process environment variables take precedence over values loaded from that `.env`. Restart the client after a settings change. First call `ha_rest_catalog` with `{}` (local catalog), then `ha_rest_query` with `{"path":"/api/"}` to actually check HA access. `ha_search_entities` with `{"limit":10}` can be empty even when a new HA instance is healthy. Your MCP client may show all tools even in read-only mode; the server checks permissions **at call time**. A generic MCP client does not inherit this UI's approval cards: configure its own human approval policy for writes.
 
+### Connect a remote client over HTTP (Claude Code, Codex, ChatGPT, Claude)
+
+The web UI also serves the MCP endpoint `/mcp` (Streamable HTTP), e.g. `http://localhost:8765/mcp` or, behind a
+reverse proxy, `https://<your-host>/mcp`.
+
+1. Open **MCP-Clients** in the UI, enter a name, pick a level (**Nur lesen**, **Steuern**, **Konfiguration ändern**,
+   **Löschen**) and optionally a domain list, then **Client anlegen**. The token (`hsm_…`) is shown **once**; the UI
+   prints ready-made commands:
+   - Claude Code: `claude mcp add --transport http ha-safe-mcp <endpoint> --header "Authorization: Bearer <token>"`
+   - Codex: `export HA_SAFE_MCP_TOKEN='<token>'` and
+     `codex mcp add ha-safe-mcp --url <endpoint> --bearer-token-env-var HA_SAFE_MCP_TOKEN`
+   - other clients: the endpoint URL plus the header `Authorization: Bearer <token>`.
+2. The client's level is **capped by the instance switches** in **Einstellungen** (shown as "Wirksam"). The domain
+   list narrows the instance's allowed domains further. Tools above the client's level are not even listed for it.
+3. Change a client's level in the table at any time; **Entfernen** revokes its token immediately.
+
+Notes:
+
+- The endpoint is off until at least one client exists. Requests without a valid token get HTTP 401.
+- Foreign clients do not show this UI's approval cards and ignore the "ohne Freigabe" switches; whether they ask
+  before acting is up to the client (tools carry `readOnlyHint`/`destructiveHint` so clients can ask before writes).
+  Give each client only the level it needs.
+- Every client gets its own MCP server process with its capped rights; its tool calls appear in **Protokoll** with
+  the client's random ID and its configuration changes in **Änderungen**, like chat actions.
+- Device names and states go to the provider of the AI client you connect.
+- **Behind Cloudflare Access** (or another login proxy): the proxy's browser login cannot be completed by MCP
+  clients. Add a bypass for the path `/mcp` only (Cloudflare: a self-hosted application for `<host>/mcp` with a
+  *Bypass* policy); the UI itself stays behind the login, `/mcp` is protected by the tokens.
+- Web connectors of ChatGPT and Claude usually need OAuth instead of a static token; that is planned next.
+
 ### Ask a local Ollama model from the command line
 
 Install and start Ollama separately and download a **tool-capable** model. The CLI defaults to `qwen2.5-coder:7b` and the loopback Ollama service; override with `--model` and `--ollama-url` if needed. From the project directory, after setting up `.env`:

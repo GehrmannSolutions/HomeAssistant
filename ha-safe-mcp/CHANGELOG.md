@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.12.0 – 2026-10-24
+
+- **Remote MCP endpoint** `/mcp` (Streamable HTTP) in the web UI process for Claude Code, Codex and other MCP
+  clients: per-client bearer tokens (shown once, stored as SHA-256), level read/control/admin/delete plus optional
+  domains, capped by the instance switches; each client runs its own stdio server with those rights, tools above
+  its level are hidden. UI tab **MCP-Clients** with ready-made `claude mcp add` / `codex mcp add` commands.
+  `/mcp` needs no Access JWT (add a proxy bypass for that path only); the UI stays behind Access.
+- Tools carry `readOnlyHint`/`destructiveHint`; audit records of remote calls carry the client's random ID.
+- Tab bar scrolls on narrow windows.
+
 ## 0.11.0 – 2026-10-24
 
 - **Change journal and undo**: automations, scripts, scenes, dashboards (metadata and views), helpers, areas,

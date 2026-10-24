@@ -89,6 +89,8 @@ function showView(name) {
   for (const section of $$(".view")) section.hidden = section.id !== `view-${name}`;
   for (const tab of $$(".tab")) tab.classList.toggle("active", tab.dataset.view === name);
   $(".tabs").hidden = !configured;
+  const activeTab = $(`.tab[data-view="${name}"]`);
+  if (activeTab && configured) activeTab.scrollIntoView({ block: "nearest", inline: "nearest" });
   $("#bubble").hidden = !configured || name === "chat";
   if (name !== "setup" && location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
   if (name === "chat") { chat.markSeen(); chat.focus("main"); }
@@ -98,6 +100,7 @@ function showView(name) {
   if (name === "files") fileManager.load();
   if (name === "backups") backupPage.load();
   if (name === "changes") changePage.load();
+  if (name === "clients") clientPage.load();
   if (name === "audit") auditLog.load();
 }
 
@@ -1056,6 +1059,95 @@ const changePage = {
   },
 };
 
+/* ---------------------------------------------------------------- remote MCP clients */
+
+const CLIENT_LEVELS = { read: "Nur lesen", control: "Steuern", admin: "Konfiguration ändern", delete: "Löschen" };
+
+const clientPage = {
+  init() {
+    $("#view-clients [data-action='clients-reload']").addEventListener("click", () => this.load());
+    $("#client-form").addEventListener("submit", (event) => { event.preventDefault(); this.create(event.currentTarget); });
+  },
+
+  async load() {
+    setResult($("#client-result"), "Lade …");
+    try {
+      const data = await api("/api/clients");
+      this.endpoint = data.endpoint;
+      $("#client-endpoint").textContent = data.endpoint;
+      $("#client-instance-level").textContent = `zurzeit höchstens ${CLIENT_LEVELS[data.instance_level] || data.instance_level}`;
+      this.render(data.clients || []);
+      setResult($("#client-result"), "");
+    } catch (error) {
+      this.render([]);
+      setResult($("#client-result"), error.message, "err");
+    }
+  },
+
+  render(items) {
+    const rows = items.map((item) => {
+      const select = el("select", { "aria-label": `Stufe für ${item.name}` },
+        ...Object.entries(CLIENT_LEVELS).map(([value, label]) => el("option", { value, ...(value === item.level ? { selected: "" } : {}) }, label)));
+      select.addEventListener("change", () => this.update(item, select.value));
+      return el("tr", {},
+        el("td", {}, item.name),
+        el("td", {}, select),
+        el("td", {}, CLIENT_LEVELS[item.effective_level] || item.effective_level),
+        el("td", {}, (item.domains || []).length ? item.domains.join(", ") : "alle erlaubten"),
+        el("td", {}, item.last_used ? new Date(item.last_used).toLocaleString("de-DE") : "noch nie"),
+        el("td", { class: "row-actions" },
+          el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Entfernen")));
+    });
+    $("#client-rows").replaceChildren(...rows);
+    $("#client-empty").hidden = items.length > 0;
+    $("#client-table").hidden = items.length === 0;
+  },
+
+  async create(form) {
+    const data = new FormData(form);
+    const domains = String(data.get("domains") || "").split(",").map((d) => d.trim()).filter(Boolean);
+    try {
+      const result = await api("/api/clients", { method: "POST", body: { name: data.get("name"), level: data.get("level"), domains } });
+      form.reset();
+      const name = result.client.name;
+      const slug = "ha-safe-mcp";
+      $("#client-token-name").textContent = name;
+      $("#client-token-value").textContent = result.token;
+      $("#client-snippet-claude").textContent =
+        `claude mcp add --transport http ${slug} ${result.endpoint} --header "Authorization: Bearer ${result.token}"`;
+      $("#client-snippet-codex").textContent =
+        `export HA_SAFE_MCP_TOKEN='${result.token}'\ncodex mcp add ${slug} --url ${result.endpoint} --bearer-token-env-var HA_SAFE_MCP_TOKEN`;
+      $("#client-token").hidden = false;
+      await this.load();
+      setResult($("#client-result"), `Client »${name}« angelegt. Token jetzt kopieren, er wird nicht wieder angezeigt.`, "ok");
+    } catch (error) {
+      setResult($("#client-result"), error.message, "err");
+    }
+  },
+
+  async update(item, level) {
+    try {
+      await api(`/api/clients/${encodeURIComponent(item.id)}`, { method: "POST", body: { level } });
+      await this.load();
+      setResult($("#client-result"), `»${item.name}«: Stufe ${CLIENT_LEVELS[level]}.`, "ok");
+    } catch (error) {
+      setResult($("#client-result"), error.message, "err");
+    }
+  },
+
+  async remove(item) {
+    if (!window.confirm(`Client »${item.name}« entfernen? Sein Token funktioniert danach nicht mehr.`)) return;
+    try {
+      await api(`/api/clients/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+      $("#client-token").hidden = true;
+      await this.load();
+      setResult($("#client-result"), `Client »${item.name}« entfernt.`, "ok");
+    } catch (error) {
+      setResult($("#client-result"), error.message, "err");
+    }
+  },
+};
+
 function formatBackupSize(bytes) {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -1126,6 +1218,7 @@ async function boot() {
   fileManager.init();
   backupPage.init();
   changePage.init();
+  clientPage.init();
   auditLog.init();
   chat.init();
   try {
@@ -1139,7 +1232,7 @@ async function boot() {
     showView("setup");
   } else {
     const wanted = location.hash.slice(1);
-    showView(["home", "chat", "credentials", "backups", "changes", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
+    showView(["home", "chat", "credentials", "backups", "changes", "clients", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
   }
 }
 

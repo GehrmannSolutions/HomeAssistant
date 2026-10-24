@@ -73,7 +73,8 @@ READ_ONLY_HINT = (" In diesem Chat sind nur lesende Tools freigegeben. Pläne, A
 WRITE_BLOCKED = ("Schreibaufruf nicht freigegeben; keine Aktion ausgeführt. Zum Ausführen das Häkchen "
                  "'Aktionen erlauben' setzen und die Anfrage erneut senden.")
 HA_ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_ALLOW_DELETE", "HA_ALLOWED_DOMAINS",
-               "HA_CREDENTIALS_DIR", "HA_AUDIT", "HA_AUDIT_DIR", "HA_CHANGES_DIR")
+               "HA_CREDENTIALS_DIR", "HA_AUDIT", "HA_AUDIT_DIR", "HA_CHANGES_DIR",
+               "HA_AUDIT_CLIENT")
 HISTORY_TURNS = 12
 HISTORY_CHARS = 4000
 PREVIEW_CHARS = 300

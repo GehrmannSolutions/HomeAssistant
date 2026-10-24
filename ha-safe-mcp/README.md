@@ -21,6 +21,7 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 - Read states, discover entities and services; discover entities in a room; call allowed services on one or up to 20 entities of the same domain.
 - A **fixed, documented REST route catalog** plus typed tools for automations, dashboards, helpers, registry metadata, areas/floors/devices, scenes/scripts, integration config flows and settings, and Home Assistant backups.
 - Separate gates for control, admin changes, and deletion; CLI/UI per-call confirmation by default. Other MCP clients must implement their own human approval.
+- Remote MCP endpoint `/mcp` (Streamable HTTP) for Claude Code, Codex and other clients: one bearer token and permission level per client, capped by the instance switches.
 - Change journal with undo: every configuration change keeps its previous state locally (30 days) and can be undone (and redone) from the chat or the UI's **Änderungen** tab.
 - UI credential store for integration secrets (referenced by alias), saved plans/code blocks (not executed), metadata-only request log, backup download.
 - No backup restore, arbitrary HA YAML editing, generic network discovery, arbitrary WebSocket commands, or unbounded API proxy.

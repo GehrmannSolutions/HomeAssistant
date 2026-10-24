@@ -61,8 +61,10 @@ def route_template(route: str) -> str:
 
 class AuditLog:
     def __init__(self, directory: Path | None = None, *, retention_days: int = RETENTION_DAYS,
-                 now: Callable[[], datetime] | None = None):
+                 now: Callable[[], datetime] | None = None, client: str | None = None):
         self.directory = Path(directory) if directory else default_directory()
+        # random ID of a remote MCP client (never its name), so the log shows which client acted
+        self.client = client if client and re.fullmatch(r"[a-z0-9]{8}", client) else None
         self.retention_days = retention_days
         self._now = now or (lambda: datetime.now(timezone.utc))
 
@@ -108,6 +110,8 @@ class AuditLog:
             entry["route"] = route_template(route)
         if isinstance(status, int):
             entry["status"] = status
+        if self.client:
+            entry["client"] = self.client
         entry["ok"] = bool(ok)
         entry["ms"] = int(round(max(0.0, float(ms))))
         if error:
@@ -153,4 +157,4 @@ def audit_from_env() -> AuditLog | None:
     if os.getenv("HA_AUDIT", "true").lower() == "false":
         return None
     directory = os.getenv("HA_AUDIT_DIR")
-    return AuditLog(Path(directory)) if directory else AuditLog()
+    return AuditLog(Path(directory) if directory else None, client=os.getenv("HA_AUDIT_CLIENT"))

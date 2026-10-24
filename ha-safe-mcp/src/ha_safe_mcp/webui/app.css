@@ -44,10 +44,10 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 0 4px; border-ra
   padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 1.05rem; }
-.tabs { display: flex; gap: 4px; margin-left: 12px; }
+.tabs { display: flex; gap: 4px; margin-left: 12px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .tab {
   border: 0; background: transparent; color: var(--muted); padding: 8px 14px;
-  border-radius: 999px; font: inherit; cursor: pointer;
+  border-radius: 999px; font: inherit; cursor: pointer; white-space: nowrap; flex: none;
 }
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
@@ -223,3 +223,12 @@ button.primary.small { padding: 6px 12px; font-size: 0.9rem; }
 .switches.levels { display: grid; grid-template-columns: max-content max-content; gap: .4rem 1.5rem; align-items: center; }
 .switch.auto span { font-size: .9em; }
 .approval.auto { border-color: var(--warn, #c8a200); }
+
+.token-box { margin-top: 1rem; padding: .75rem 1rem; border: 1px solid var(--accent, #3b82f6); border-radius: 8px; }
+.token-box pre { white-space: pre-wrap; word-break: break-all; user-select: all; }
+.inline-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin-top: 1rem; }
+.inline-form label { display: flex; flex-direction: column; gap: .25rem; }
+
+@media (max-width: 1100px) {
+  .tab { padding: 8px 10px; }
+}

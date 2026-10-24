@@ -183,7 +183,12 @@ def _audited_tool(server: FastMCP, client: HAClient):
                                                 ms=(time.monotonic() - started) * 1000, error=error)
                         except Exception:  # noqa: BLE001
                             pass
-            return server.tool()(wrapper)
+            from mcp.types import ToolAnnotations
+            from .ollama_client import write_level
+            level = write_level(fn.__name__)
+            hints = ToolAnnotations(readOnlyHint=level is None, destructiveHint=level == "delete",
+                                    openWorldHint=False)
+            return server.tool(annotations=hints)(wrapper)
         return wrap
     return decorator
 

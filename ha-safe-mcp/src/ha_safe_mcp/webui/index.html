@@ -21,6 +21,7 @@
       <button type="button" class="tab" data-view="credentials">Zugangsdaten</button>
       <button type="button" class="tab" data-view="backups">Backups</button>
       <button type="button" class="tab" data-view="changes">Änderungen</button>
+      <button type="button" class="tab" data-view="clients">MCP-Clients</button>
       <button type="button" class="tab" data-view="files">Dateien</button>
       <button type="button" class="tab" data-view="audit">Protokoll</button>
       <button type="button" class="tab" data-view="settings">Einstellungen</button>
@@ -217,6 +218,49 @@
         </table>
         <p class="muted" id="change-empty" hidden>Noch keine Änderungen erfasst.</p>
         <div class="result" id="change-result" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- Remote MCP clients (Claude Code, Codex, ChatGPT, Claude): bearer tokens and permission profiles -->
+    <section id="view-clients" class="view" hidden>
+      <div class="card">
+        <div class="viewer-head">
+          <h2>MCP-Clients</h2>
+          <div><button type="button" class="ghost small" data-action="clients-reload">Aktualisieren</button></div>
+        </div>
+        <p class="muted">Externe KI-Clients greifen über den MCP-Endpunkt <code id="client-endpoint">…</code> zu, jeder mit
+          eigenem Token und eigener Stufe. Die Stufe wird durch die Schalter unter „Einstellungen“ gedeckelt
+          (<span id="client-instance-level">…</span>). Fremde Clients zeigen keine Freigabe-Karten dieser
+          Oberfläche; ob sie vor Aktionen nachfragen, entscheidet der Client. Vergib deshalb nur die Stufe, die der
+          Client wirklich braucht. Gerätenamen und Zustände gehen dabei an den jeweiligen Anbieter.</p>
+        <table class="cred-table" id="client-table">
+          <thead><tr><th>Name</th><th>Stufe</th><th>Wirksam</th><th>Domains</th><th>Zuletzt genutzt</th><th></th></tr></thead>
+          <tbody id="client-rows"></tbody>
+        </table>
+        <p class="muted" id="client-empty" hidden>Noch kein Client. Solange keiner eingerichtet ist, ist der Endpunkt aus.</p>
+        <form id="client-form" class="inline-form">
+          <label>Name <input name="name" required maxlength="80" placeholder="z. B. Claude Code Laptop"></label>
+          <label>Stufe
+            <select name="level">
+              <option value="read">Nur lesen</option>
+              <option value="control">Steuern</option>
+              <option value="admin">Konfiguration ändern</option>
+              <option value="delete">Löschen</option>
+            </select>
+          </label>
+          <label>Domains (optional, kommagetrennt) <input name="domains" placeholder="light, switch"></label>
+          <button type="submit" class="primary small">Client anlegen</button>
+        </form>
+        <div class="token-box" id="client-token" hidden>
+          <p><strong>Token für »<span id="client-token-name"></span>«</strong>, wird nur jetzt angezeigt:</p>
+          <pre id="client-token-value"></pre>
+          <p class="muted">Claude Code:</p>
+          <pre id="client-snippet-claude"></pre>
+          <p class="muted">Codex (Token als Umgebungsvariable):</p>
+          <pre id="client-snippet-codex"></pre>
+          <p class="muted">Andere Clients: URL wie oben, Header <code>Authorization: Bearer &lt;Token&gt;</code>.</p>
+        </div>
+        <div class="result" id="client-result" role="status" aria-live="polite"></div>
       </div>
     </section>
 

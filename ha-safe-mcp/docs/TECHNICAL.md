@@ -36,6 +36,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`scenes.py`](../src/ha_safe_mcp/scenes.py) | Scene/script config HTTP, prechecks, read-back and service invocation |
 | [`registry.py`](../src/ha_safe_mcp/registry.py) | Area/floor/device WS operations and area-entity view |
 | [`backups.py`](../src/ha_safe_mcp/backups.py) | HA backup WS operations and allowlisted streaming download |
+| [`remote.py`](../src/ha_safe_mcp/remote.py) | Remote MCP endpoint: client token store, permission caps, per-client stdio children, gateway server |
 | [`changes.py`](../src/ha_safe_mcp/changes.py) | Change journal: capture previous state, journaled writes, undo through the same gated operations |
 | [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop, CLI confirmation, web run/approval lifecycle |
 | [`web.py`](../src/ha_safe_mcp/web.py), [`webui/`](../src/ha_safe_mcp/webui/index.html), [`access_auth.py`](../src/ha_safe_mcp/access_auth.py) | HTTP UI, bundled static frontend, optional Access JWT validation |
@@ -81,6 +82,24 @@ Limits of the protections:
   state. Not journaled: service calls, integration add/remove, options/reconfigure flows, backups, generic REST
   writes. The journal holds configuration content, not secrets; it is not a backup of HA.
 - [`FileStore`](../src/ha_safe_mcp/files.py) saves web-chat-generated plans and fenced code blocks as text under XDG data storage in `plan`/`script` subdirectories. Names/extensions and sizes are restricted, directory/file modes are `0700`/`0600`, and symlinks in the store are rejected. Stored scripts are **not executed** or sent to HA. The file manager is a web feature, not a generic MCP filesystem tool. Browser chat history lives in frontend storage; do not put credentials into it.
+
+## Remote MCP endpoint
+
+`create_app` returns `McpRouter`: requests to `/mcp` and `/mcp/...` go to the MCP gateway, everything else to the UI
+behind `LocalOnlyGuard`. The router does its own Host and loopback-peer check, answers 404 while no client exists,
+and requires `Authorization: Bearer hsm_...`; it does **not** require the Access JWT, so a proxy bypass for `/mcp`
+is enough. [`ClientStore`](../src/ha_safe_mcp/remote.py) keeps clients in the XDG config directory
+(`clients/clients.json`, `0700`/`0600`) with the SHA-256 of the token (256-bit random, shown once).
+
+The gateway is a low-level MCP `Server` served by the SDK's `StreamableHTTPSessionManager` in stateless JSON mode.
+For each call it reads the authenticated client from the request scope, computes the effective environment
+(`effective_env`: instance settings capped by the client level read < control < admin < delete, domains
+intersected, `HA_AUDIT_CLIENT` set) and forwards to that client's own stdio child of the normal server
+(`ChildPool`; restarted when the effective environment changes, stopped after 15 minutes idle). So every server-side
+gate, read-back, credential-reference rule, audit record and change-journal entry applies unchanged. The gateway
+lists only tools the client level may use (`tool_level`; unclassified tools are never exposed), refuses others, and
+sets `readOnlyHint`/`destructiveHint`; the stdio server sets the same annotations. Undo is visible from level admin;
+the child's delete gate decides when an undo would remove something.
 
 ## Web exposure model
 

@@ -35,6 +35,7 @@ from .credentials import CredentialError, CredentialStore
 from .audit import AuditLog
 from .changes import ChangeJournal, CHANGE_ID
 from .files import FileError, FileStore
+from .remote import ChildPool, ClientStore, build_gateway, effective_level
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
 
 UI_HEADER = "x-ha-mcp-ui"
@@ -128,6 +129,47 @@ class LocalOnlyGuard:
             if request.headers.get(UI_HEADER) != "1" or (origin is not None and origin != expected):
                 return await _error("Anfrage nicht erlaubt", 403)(scope, receive, send)
         return await self.app(scope, receive, send)
+
+
+class McpRouter:
+    """Sends /mcp (and /mcp/...) to the remote MCP gateway with its own bearer-token check; everything else goes
+    to the UI behind LocalOnlyGuard (Access JWT, UI header). The /mcp path needs an Access bypass at Cloudflare."""
+
+    def __init__(self, ui, mcp_app, clients: ClientStore, *, allowed_hosts: set[str], allow_remote: bool):
+        self.ui, self.mcp_app, self.clients = ui, mcp_app, clients
+        self.allowed_hosts = {host.lower() for host in allowed_hosts}
+        self.allow_remote = allow_remote
+
+    def __getattr__(self, name):
+        # attributes of the UI guard (e.g. access_verifier) stay reachable for callers and tests
+        return getattr(self.ui, name)
+
+    @staticmethod
+    def is_mcp(path: str) -> bool:
+        return path == "/mcp" or path.startswith("/mcp/")
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not self.is_mcp(scope.get("path", "")):
+            return await self.ui(scope, receive, send)
+        request = Request(scope)
+        host = _host_name(request.headers.get("host"))
+        if host is None or (host.lower() not in self.allowed_hosts and not (self.allow_remote and host)):
+            return await _error("Ungültiger Host", 400)(scope, receive, send)
+        peer = scope.get("client")
+        if not self.allow_remote and not (peer and _is_loopback(peer[0])):
+            return await _error("Nur lokal erreichbar", 403)(scope, receive, send)
+        if not await asyncio.to_thread(self.clients.any):
+            return await _error("Kein MCP-Client eingerichtet", 404)(scope, receive, send)
+        header = request.headers.get("authorization", "")
+        token = header[7:].strip() if header[:7].lower() == "bearer " else ""
+        client = await asyncio.to_thread(self.clients.authenticate, token) if token else None
+        if client is None:
+            response = JSONResponse({"error": "invalid_token", "error_description": "Bearer token required"},
+                                    status_code=401, headers={"WWW-Authenticate": 'Bearer realm="ha-safe-mcp", '
+                                                                                  'error="invalid_token"'})
+            return await response(scope, receive, send)
+        scope = {**scope, "state": {**scope.get("state", {}), "mcp_client": client}}
+        return await self.mcp_app(scope, receive, send)
 
 
 async def _json_body(request: Request) -> dict:
@@ -272,7 +314,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                public_origin: str | None = None, access_verifier=None,
                credentials: CredentialStore | None = None, files: FileStore | None = None,
                audit: AuditLog | None = None, backups_factory=None, journal: ChangeJournal | None = None,
-               changes_factory=None):
+               changes_factory=None, clients: ClientStore | None = None, mcp_pool=None):
     checks = checks or LiveChecks()
     credentials = credentials or CredentialStore()
     files = files or FileStore()
@@ -285,6 +327,21 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     changes_factory = changes_factory or (
         lambda settings: live_changes(settings, credentials.directory, audit, journal))
     lock = asyncio.Lock()
+    clients = clients or ClientStore()
+    mcp_pool = mcp_pool or ChildPool()
+
+    def child_dirs() -> dict:
+        return {"HA_CREDENTIALS_DIR": str(credentials.directory), "HA_AUDIT_DIR": str(audit.directory),
+                "HA_CHANGES_DIR": str(journal.directory)}
+    gateway = build_gateway(mcp_pool, store.load, child_dirs)
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    mcp_sessions: dict = {}  # one session manager per app run (the SDK allows run() only once per instance)
+
+    async def mcp_app(scope, receive, send):
+        manager = mcp_sessions.get("manager")
+        if manager is None:
+            return await _error("MCP-Endpunkt läuft nicht", 503)(scope, receive, send)
+        return await manager.handle_request(scope, receive, send)
 
     async def index(request: Request):
         return _security_headers(Response(_static_text("index.html"), media_type="text/html; charset=utf-8"))
@@ -540,6 +597,44 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         except RuntimeError as exc:
             return _error(str(exc), 502)
 
+    def endpoint(request: Request) -> str:
+        base = public_origin or f"{request.url.scheme}://{request.headers.get('host')}"
+        return f"{base}/mcp"
+
+    def client_view(item: dict, settings: Settings) -> dict:
+        return {**item, "effective_level": effective_level(settings, item)}
+
+    async def clients_list(request: Request):
+        settings = store.load()
+        return _ok({"endpoint": endpoint(request), "instance_level": effective_level(settings, {"level": "delete"}),
+                    "clients": [client_view(c, settings) for c in clients.list()]})
+
+    async def clients_create(request: Request):
+        try:
+            data = await _json_body(request)
+            client, token = clients.create(data.get("name"), data.get("level"), data.get("domains") or [])
+        except (SetupError, ValueError) as exc:
+            return _error(str(exc))
+        return _ok({"client": client_view(client, store.load()), "token": token, "endpoint": endpoint(request)})
+
+    async def clients_update(request: Request):
+        try:
+            data = await _json_body(request)
+            client = clients.update(request.path_params["client_id"], level=data.get("level"),
+                                    domains=data.get("domains"))
+        except (SetupError, ValueError) as exc:
+            return _error(str(exc))
+        mcp_pool.drop(client["id"])
+        return _ok({"client": client_view(client, store.load())})
+
+    async def clients_delete(request: Request):
+        try:
+            clients.delete(request.path_params["client_id"])
+        except ValueError as exc:
+            return _error(str(exc), 404)
+        mcp_pool.drop(request.path_params["client_id"])
+        return _ok({"ok": True})
+
     routes = [
         Route("/", index), Route("/static/{name}", static),
         Route("/api/status", status),
@@ -564,19 +659,35 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/backups/{backup_id}/download", backups_download),
         Route("/api/changes", changes_list),
         Route("/api/changes/{change_id}/undo", changes_undo, methods=["POST"]),
+        Route("/api/clients", clients_list),
+        Route("/api/clients", clients_create, methods=["POST"]),
+        Route("/api/clients/{client_id}", clients_update, methods=["POST"]),
+        Route("/api/clients/{client_id}", clients_delete, methods=["DELETE"]),
     ]
 
     @asynccontextmanager
     async def lifespan(app):
-        yield
+        import anyio
+        async with anyio.create_task_group() as task_group:
+            mcp_pool.task_group = task_group
+            manager = mcp_sessions["manager"] = StreamableHTTPSessionManager(app=gateway, stateless=True,
+                                                                              json_response=True)
+            try:
+                async with manager.run():
+                    yield
+            finally:
+                mcp_sessions.pop("manager", None)
+                await mcp_pool.aclose()
         if runs.active is not None:
             runs.cancel(runs.active.id)
 
     app = Starlette(routes=routes, lifespan=lifespan)
     if bool(public_origin) != bool(access_verifier):
         raise ValueError("Public origin requires Access verification and vice versa")
-    return LocalOnlyGuard(app, allowed_hosts=allowed_hosts or LOOPBACK_NAMES, allow_remote=allow_remote,
-                          public_origin=public_origin, access_verifier=access_verifier)
+    ui = LocalOnlyGuard(app, allowed_hosts=allowed_hosts or LOOPBACK_NAMES, allow_remote=allow_remote,
+                        public_origin=public_origin, access_verifier=access_verifier)
+    return McpRouter(ui, mcp_app, clients, allowed_hosts=allowed_hosts or LOOPBACK_NAMES,
+                     allow_remote=allow_remote)
 
 
 def main():
