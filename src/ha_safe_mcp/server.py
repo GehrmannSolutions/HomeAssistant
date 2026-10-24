@@ -23,6 +23,13 @@ FlowId = Annotated[str, Field(
     pattern=r"^(?:[0-9a-f]{32}|[0-9A-HJKMNP-TV-Z]{26})$",
     description="flow_id copied exactly from the previous ha_start_integration_setup/ha_integration_setup_step "
                 "result or from ha_list_discovered")]
+AreaId = Annotated[str, Field(
+    pattern=r"^[a-z0-9_]{1,64}$", description="area_id from ha_list_areas (e.g. 'wohnzimmer'); not the area name")]
+FloorId = Annotated[str, Field(
+    pattern=r"^[a-z0-9_]{1,64}$", description="floor_id from ha_list_floors (e.g. 'erdgeschoss'); not the name")]
+DeviceId = Annotated[str, Field(
+    pattern=r"^[0-9a-f]{32}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+    description="device_id from ha_list_devices (32 hex characters); not the device name")]
 BackupId = Annotated[str, Field(
     pattern=r"^[0-9a-z]{6,64}$",
     description="backup_id from ha_list_backups (e.g. 'a1b2c3d4'); not the backup name")]
@@ -169,11 +176,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .management import HAAdmin
     from .integrations import HAIntegrations
     from .backups import HABackups
+    from .registry import HARegistry
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     integrations = HAIntegrations(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                                   credentials=credentials or credential_store_from_env())
+    registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
@@ -355,6 +364,59 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_integration(entry_id: EntryId) -> dict:
         """Remove a configured integration and its devices by entry_id. Admin write and delete required."""
         return await integrations.delete_entry(entry_id)
+
+    @tool()
+    async def ha_list_areas() -> list[dict]:
+        """List areas (rooms) with area_id, name, floor_id, icon and aliases."""
+        return await registry.list_areas()
+
+    @tool()
+    async def ha_list_floors() -> list[dict]:
+        """List floors with floor_id, name and level."""
+        return await registry.list_floors()
+
+    @tool()
+    async def ha_list_devices(area_id: str = "", query: str = "", limit: int = 200) -> list[dict]:
+        """List devices with device_id, name, manufacturer, model and area_id. Filter by area_id, or
+        area_id='none' for devices without an area; query matches name/manufacturer/model."""
+        return await registry.list_devices(area_id, query, limit)
+
+    @tool()
+    async def ha_create_area(name: str, floor_id: str | None = None, icon: str | None = None) -> dict:
+        """Create an area (room), e.g. name 'Flur', icon 'mdi:door'; returns its area_id. Admin write required."""
+        return await registry.create_area(name, floor_id, icon)
+
+    @tool()
+    async def ha_update_area(area_id: AreaId, changes: dict) -> dict:
+        """Change an area's name, floor_id, icon or aliases and read back. Admin write required."""
+        return await registry.update_area(area_id, changes)
+
+    @tool()
+    async def ha_delete_area(area_id: AreaId) -> dict:
+        """Delete an area; its devices and entities stay and lose the area. Admin write and delete required."""
+        return await registry.delete_area(area_id)
+
+    @tool()
+    async def ha_create_floor(name: str, level: int | None = None, icon: str | None = None) -> dict:
+        """Create a floor, e.g. name 'Erdgeschoss', level 0. Admin write required."""
+        return await registry.create_floor(name, level, icon)
+
+    @tool()
+    async def ha_update_floor(floor_id: FloorId, changes: dict) -> dict:
+        """Change a floor's name, level, icon or aliases and read back. Admin write required."""
+        return await registry.update_floor(floor_id, changes)
+
+    @tool()
+    async def ha_delete_floor(floor_id: FloorId) -> dict:
+        """Delete a floor; its areas stay without floor. Admin write and delete required."""
+        return await registry.delete_floor(floor_id)
+
+    @tool()
+    async def ha_update_device(device_id: DeviceId, changes: dict) -> dict:
+        """Assign a device to an area or rename/disable it: changes may contain area_id (or null),
+        name_by_user (or null to reset), disabled_by ('user' or null), labels. Admin write required.
+        Removing devices is not offered (delete the integration instead)."""
+        return await registry.update_device(device_id, changes)
 
     @tool()
     async def ha_list_backups() -> dict:

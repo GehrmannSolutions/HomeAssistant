@@ -16,12 +16,18 @@ from .server import HAClient
 HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime"})
 READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboards/list",
                         "config/entity_registry/list", "auth/current_user",
-                        "config_entries/flow/progress", "backup/info", "backup/agents/info"}) | frozenset(
+                        "config_entries/flow/progress", "backup/info", "backup/agents/info",
+                        "config/area_registry/list", "config/floor_registry/list",
+                        "config/device_registry/list"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
+                         "config/area_registry/create", "config/area_registry/update",
+                         "config/floor_registry/create", "config/floor_registry/update",
+                         "config/device_registry/update",
                          "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
 DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
+                          "config/area_registry/delete", "config/floor_registry/delete",
                           "config/entity_registry/remove"}) | frozenset(f"{domain}/delete" for domain in HELPERS)
 
 
@@ -49,7 +55,7 @@ class HAWebSocket:
         started, error = time.monotonic(), None
         try:
             async with asyncio.timeout(20):
-                async with connect(ws_url, max_size=2_000_000, open_timeout=10) as ws:
+                async with connect(ws_url, max_size=16_000_000, open_timeout=10) as ws:
                     hello = json.loads(await ws.recv())
                     if hello.get("type") != "auth_required":
                         raise RuntimeError("Unexpected WebSocket authentication phase")

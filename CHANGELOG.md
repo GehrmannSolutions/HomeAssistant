@@ -3,6 +3,14 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.7.0 – 2026-10-24
+
+- **Bereiche, Etagen, Geräte**: `ha_list_areas`, `ha_list_floors`, `ha_list_devices` (ohne Seriennummern, MACs,
+  Kennungen), `ha_create_area`, `ha_update_area`, `ha_delete_area`, `ha_create_floor`, `ha_update_floor`,
+  `ha_delete_floor`, `ha_update_device` (Bereich, eigener Name, deaktivieren, Labels). Rücklesung jeder Änderung,
+  referenzierte IDs werden geprüft. Geräte entfernen bewusst nicht enthalten.
+- WebSocket-Nachrichten bis 16 MB (große Gerätelisten).
+
 ## 0.6.0 – 2026-10-24
 
 - **Backups**: `ha_list_backups`, `ha_create_backup` (lokal, wartet auf Fertigstellung, Passwort nur als

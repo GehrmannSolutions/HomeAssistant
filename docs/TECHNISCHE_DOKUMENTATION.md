@@ -44,6 +44,7 @@ flowchart LR
 | [`src/ha_safe_mcp/web.py`](../src/ha_safe_mcp/web.py) | Weboberfläche: Starlette-App, Loopback-/Host-/CSRF-Schutz, Setup-Prüfungen, Chat-Endpunkte, `ha-mcp-ui`-Einstiegspunkt |
 | [`src/ha_safe_mcp/access_auth.py`](../src/ha_safe_mcp/access_auth.py) | Verifikation der Cloudflare-Access-JWT-Assertion (RS256, JWKS, Issuer, Audience, Ablaufdatum) |
 | [`src/ha_safe_mcp/config_store.py`](../src/ha_safe_mcp/config_store.py) | Validierung und atomares Schreiben der `.env` (Rechte 0600), Token-Wiederverwendung nur für dieselbe URL |
+| [`src/ha_safe_mcp/registry.py`](../src/ha_safe_mcp/registry.py) | Bereiche, Etagen, Geräte: Listen ohne Geräte-Kennungen, geprüfte Metadaten-Änderungen mit Rücklesung |
 | [`src/ha_safe_mcp/backups.py`](../src/ha_safe_mcp/backups.py) | Backups über die HA-Backup-Integration: Liste, Erstellen mit Warten, Löschen, gestreamter Download; kein Restore |
 | [`src/ha_safe_mcp/audit.py`](../src/ha_safe_mcp/audit.py) | DSGVO-orientiertes Audit-Log MCP ↔ HA: Metadaten-Allowlist, Routen-Muster, 30-Tage-Löschung, `clear()` |
 | [`src/ha_safe_mcp/files.py`](../src/ha_safe_mcp/files.py) | Dateiablage für vom Modell erzeugte Pläne/Skripte: Namens-Allowlist, kein Symlink-Folgen, 0700/0600, Limits |
@@ -97,7 +98,22 @@ Signaturen sind die tatsächlichen `@server.tool()`-Funktionsdefinitionen aus `c
 | `ha_reload_integration(entry_id: EntryId) -> dict` | `POST /api/config/config_entries/entry/<entry_id>/reload`; admin |
 | `ha_delete_integration(entry_id: EntryId) -> dict` | `DELETE /api/config/config_entries/entry/<entry_id>`; delete |
 
-### 3.0 Backups
+### 3.1 Bereiche, Etagen und Geräte
+
+| Tool | Klasse | HA-Befehl | Verhalten |
+|---|---|---|---|
+| `ha_list_areas()` | lesen | `config/area_registry/list` | `area_id, name, floor_id, icon, aliases, labels` |
+| `ha_list_floors()` | lesen | `config/floor_registry/list` | `floor_id, name, level, icon, aliases` |
+| `ha_list_devices(area_id="", query="", limit=200)` | lesen | `config/device_registry/list` | `device_id, name, name_by_user, manufacturer, model, area_id, disabled_by, entry_type, labels`; **ohne** `serial_number`, `connections` (MAC), `identifiers`, `configuration_url`. `area_id="none"` = ohne Bereich; `query` durchsucht Name/Hersteller/Modell |
+| `ha_create_area(name, floor_id=None, icon=None)` | Admin-Write | `config/area_registry/create` | Name 1–100 Zeichen, eindeutig (ohne Groß/Klein); `icon` `mdi:…`; `floor_id` muss existieren; Rücklesung |
+| `ha_update_area(area_id, changes)` | Admin-Write | `config/area_registry/update` | nur `name, floor_id, icon, aliases`; Rücklesung aller Felder |
+| `ha_delete_area(area_id)` | Admin-Write + Delete | `config/area_registry/delete` | Rücklesung, dass er fehlt |
+| `ha_create_floor(name, level=None, icon=None)` / `ha_update_floor(floor_id, changes)` / `ha_delete_floor(floor_id)` | wie Bereiche | `config/floor_registry/*` | `level` −10…100; Update nur `name, level, icon, aliases` |
+| `ha_update_device(device_id, changes)` | Admin-Write | `config/device_registry/update` | `device_id` 32 Hex oder ULID; nur `area_id` (existiert oder `null`), `name_by_user`, `disabled_by` (`"user"`/`null`), `labels`; Rücklesung |
+
+IDs (`area_id`, `floor_id`) `^[a-z0-9_]{1,64}$`. Nicht angeboten: `config/device_registry/remove`, `remove_config_entry`, `reorder`, Bilder (`picture`), Temperatur-/Feuchte-Sensoren der Bereiche. Quelle: `components/config/area_registry.py`, `floor_registry.py`, `device_registry.py` (Core 2026.10); dort alle Mutationen `require_admin`. Die WebSocket-Allowlist in `management.py` wurde um genau diese Befehle erweitert; die maximale WS-Nachricht ist 16 MB, weil Gerätelisten großer Installationen (333 Geräte) mehrere MB erreichen können.
+
+### 3.2 Backups
 
 | Tool | Klasse | HA-Schnittstelle | Verhalten |
 |---|---|---|---|
@@ -107,7 +123,7 @@ Signaturen sind die tatsächlichen `@server.tool()`-Funktionsdefinitionen aus `c
 
 Download (nur Weboberfläche, `HABackups.download`): erlaubt nur IDs, die `backup/info` gerade listet; `GET /api/backup/download/{id}?agent_id=backup.local` (bzw. erster gültiger Agent) wird gestreamt, ohne Zwischenspeicher, 1800 s Timeout, Protokolleintrag als Muster. **Nicht enthalten:** `backup/restore`, `backup/config/update` (Zeitpläne), `backup/upload`, `can_decrypt_on_download`. Quelle: `homeassistant/components/backup/websocket.py`, `http.py` (Core 2026.10); alle Befehle sind dort `require_admin`.
 
-### 3.1 Integrationen und Zugangsdatenablage
+### 3.3 Integrationen und Zugangsdatenablage
 
 Quelle der Routen: `homeassistant/components/config/config_entries.py` und `homeassistant/helpers/data_entry_flow.py` im offiziellen Core-Repository; Flow-Start, -Schritt und Entry-Löschen verlangen in HA selbst einen Admin-Benutzer. `FlowId` akzeptiert die 32-stellige Hex-Form älterer Releases und die 26-stellige ULID aktueller Releases (im Dev-HA beobachtet); `EntryId` 20–40 alphanumerische Zeichen. Beides wird vor jeder Anfrage geprüft, Pfad-Traversal ist dadurch ausgeschlossen.
 

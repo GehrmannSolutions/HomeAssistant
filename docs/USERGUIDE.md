@@ -266,6 +266,31 @@ Nach dem Anlegen die Antwort-ID und `ha_list_helpers` auswerten; **`helper_id` i
 
 Für Updates eine **vollständige Konfiguration mit `name`** liefern und vorhandene wichtige Felder aus der Liste übernehmen. `id`, `entity_id`, `type` gehören **nicht** in `config`. `input_number` benötigt `min`/`max`, `input_select` nichtleere `options`, `input_datetime` `has_date` und/oder `has_time`. Löschen nur nach Sicherung und Freigabe: `ha_delete_helper` mit `{"domain":"input_boolean","helper_id":"beispiel_testschalter"}`. [Verwaltung](../src/ha_safe_mcp/management.py) · [HA-Helper](https://www.home-assistant.io/integrations/input_boolean/).
 
+### 8.5a Bereiche, Etagen und Geräte ordnen
+
+Typischer Ablauf, z. B. im Chat mit „Aktionen erlauben“: *„Lege einen Bereich Flur an und ordne das Gerät Forecast diesem Bereich zu.“* Das Modell ruft nacheinander:
+
+```json
+{"tool": "ha_create_area", "arguments": {"name": "Flur", "icon": "mdi:door"}}
+```
+
+```json
+{"tool": "ha_list_devices", "arguments": {"query": "Forecast"}}
+```
+
+```json
+{"tool": "ha_update_device", "arguments": {"device_id": "<device_id aus der Liste>", "changes": {"area_id": "flur"}}}
+```
+
+Jeder Schreibaufruf erscheint als eigene Freigabe-Karte. Hinweise:
+
+- `device_id` ist eine 32-stellige Kennung aus `ha_list_devices`, nie der Gerätename. Ein unbekannter `area_id` wird abgelehnt, statt still einen leeren Bereich zu setzen.
+- `ha_list_devices` mit `area_id: "none"` zeigt alle Geräte **ohne** Bereich – gut für das Aufräumen.
+- `changes` beim Gerät: `area_id` (oder `null` zum Entfernen), `name_by_user` (eigener Name, `null` = Herstellername), `disabled_by` (`"user"` = deaktivieren, `null` = aktivieren), `labels`.
+- Etagen: `ha_create_floor` (`name`, `level` z. B. 0 für Erdgeschoss), dann Bereich mit `ha_update_area` und `{"floor_id": "<floor_id>"}` zuordnen.
+- Löschen (`ha_delete_area`, `ha_delete_floor`) braucht „Löschen erlauben“. Geräte und Entitäten bleiben erhalten und verlieren nur die Zuordnung.
+- Geräte entfernen geht hier nicht; dafür die Integration löschen oder die HA-Oberfläche nutzen.
+
 ### 8.6 Entity Registry: nur Metadaten, keine Erzeugung
 
 `ha_list_entity_registry` mit `{}` lesen. Nur eine **tatsächlich gelistete** `entity_id` wählen; bei Admin-Write-Freigabe etwa:
