@@ -11,6 +11,7 @@ import asyncio
 import ipaddress
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from importlib import resources
 from pathlib import Path
@@ -25,6 +26,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .chat_runs import RunBusy, RunManager
+from .access_auth import AccessTokenVerifier
 from .config_store import Settings, SettingsStore, SetupError, merge_settings, normalize_url, resolve_token
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
 
@@ -85,10 +87,13 @@ def _ok(payload: dict) -> JSONResponse:
 class LocalOnlyGuard:
     """ASGI middleware: loopback peers, allowed Host names, and CSRF protection for mutations."""
 
-    def __init__(self, app, *, allowed_hosts: set[str], allow_remote: bool):
+    def __init__(self, app, *, allowed_hosts: set[str], allow_remote: bool,
+                 public_origin: str | None = None, access_verifier=None):
         self.app = app
         self.allowed_hosts = {host.lower() for host in allowed_hosts}
         self.allow_remote = allow_remote
+        self.public_origin = public_origin
+        self.access_verifier = access_verifier
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -100,9 +105,13 @@ class LocalOnlyGuard:
         peer = scope.get("client")
         if not self.allow_remote and not (peer and _is_loopback(peer[0])):
             return await _error("Nur lokal erreichbar", 403)(scope, receive, send)
+        if self.access_verifier is not None:
+            assertion = request.headers.get("cf-access-jwt-assertion", "")
+            if not assertion or not await asyncio.to_thread(self.access_verifier, assertion):
+                return await _error("Cloudflare Access Anmeldung erforderlich", 403)(scope, receive, send)
         if request.method not in {"GET", "HEAD"}:
             origin = request.headers.get("origin")
-            expected = f"{scope.get('scheme', 'http')}://{request.headers.get('host')}"
+            expected = self.public_origin or f"{scope.get('scheme', 'http')}://{request.headers.get('host')}"
             if request.headers.get(UI_HEADER) != "1" or (origin is not None and origin != expected):
                 return await _error("Anfrage nicht erlaubt", 403)(scope, receive, send)
         return await self.app(scope, receive, send)
@@ -187,7 +196,8 @@ def _static_text(name: str) -> str:
 
 
 def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = None,
-               allowed_hosts: set[str] | None = None, allow_remote: bool = False):
+               allowed_hosts: set[str] | None = None, allow_remote: bool = False,
+               public_origin: str | None = None, access_verifier=None):
     checks = checks or LiveChecks()
     runs = runs or RunManager(mcp_chat_runner)
     lock = asyncio.Lock()
@@ -309,7 +319,10 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             runs.cancel(runs.active.id)
 
     app = Starlette(routes=routes, lifespan=lifespan)
-    return LocalOnlyGuard(app, allowed_hosts=allowed_hosts or LOOPBACK_NAMES, allow_remote=allow_remote)
+    if bool(public_origin) != bool(access_verifier):
+        raise ValueError("Public origin requires Access verification and vice versa")
+    return LocalOnlyGuard(app, allowed_hosts=allowed_hosts or LOOPBACK_NAMES, allow_remote=allow_remote,
+                          public_origin=public_origin, access_verifier=access_verifier)
 
 
 def main():
@@ -319,16 +332,37 @@ def main():
     parser.add_argument("--env-file", default=None, help="settings file (default: .env in the project)")
     parser.add_argument("--allow-remote", action="store_true",
                         help="bind beyond loopback; only behind your own authentication")
+    parser.add_argument("--public-host", default=None,
+                        help="HTTPS hostname behind Cloudflare Access; stays bound to loopback")
     args = parser.parse_args()
     guard_bind_host(args.host, allow_remote=args.allow_remote)
+    if args.public_host and (args.allow_remote or not _is_loopback(args.host)):
+        raise SystemExit("Cloudflare Access origin must be bound to loopback without --allow-remote")
+    if args.public_host and not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", args.public_host):
+        raise SystemExit("Invalid public hostname")
+    if args.public_host:
+        aud = os.environ.get("CF_ACCESS_AUD", "")
+        team = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "")
+        if not aud or not team:
+            raise SystemExit("CF_ACCESS_AUD and CF_ACCESS_TEAM_DOMAIN are required")
+        try:
+            verifier = AccessTokenVerifier(team, aud)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
+    else:
+        verifier = None
     project = Path(__file__).resolve().parents[2]
     env_file = Path(args.env_file) if args.env_file else (project / ".env" if (project / "pyproject.toml").exists()
                                                           else Path.cwd() / ".env")
     import uvicorn
 
-    hosts = LOOPBACK_NAMES | ({args.host} if args.allow_remote else set())
-    app = create_app(SettingsStore(env_file), allowed_hosts=hosts, allow_remote=args.allow_remote)
-    print(f"ha-safe-mcp UI: http://{'localhost' if _is_loopback(args.host) else args.host}:{args.port}/")
+    hosts = ({args.public_host} if args.public_host else LOOPBACK_NAMES | ({args.host} if args.allow_remote else set()))
+    app = create_app(SettingsStore(env_file), allowed_hosts=hosts, allow_remote=args.allow_remote,
+                     public_origin=f"https://{args.public_host}" if args.public_host else None,
+                     access_verifier=verifier)
+    display_url = (f"https://{args.public_host}/" if args.public_host else
+                   f"http://{'localhost' if _is_loopback(args.host) else args.host}:{args.port}/")
+    print(f"ha-safe-mcp UI: {display_url}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning", proxy_headers=False,
                 server_header=False, date_header=False)
 

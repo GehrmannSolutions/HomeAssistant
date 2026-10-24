@@ -11,7 +11,7 @@ Begriffe: **read** bedeutet keine vom Adapter beabsichtigte persistente Änderun
 ```mermaid
 flowchart LR
     U[Benutzer] --> C[MCP-Client oder ha-ollama-chat]
-    U -->|Browser, nur 127.0.0.1| W[ha-mcp-ui: web.py]
+    U -->|HTTPS, Cloudflare Access und Tunnel; Origin auf 127.0.0.1| W[ha-mcp-ui: web.py]
     W -->|liest/schreibt 0600| E[.env]
     W -->|startet pro Chat-Anfrage| C
     C <-->|MCP stdio: JSON-RPC| S[FastMCP: server.py]
@@ -42,6 +42,7 @@ flowchart LR
 | [`src/ha_safe_mcp/management.py`](../src/ha_safe_mcp/management.py) | WS-Transport, feste Kommando-Typen, typisierte Automation-/Dashboard-/Helper-/Registry-Operationen und Rücklesungen |
 | [`src/ha_safe_mcp/ollama_client.py`](../src/ha_safe_mcp/ollama_client.py) | CLI, Tool-Routing, begrenzte Ollama-Schleife, Freigabe pro Write |
 | [`src/ha_safe_mcp/web.py`](../src/ha_safe_mcp/web.py) | Weboberfläche: Starlette-App, Loopback-/Host-/CSRF-Schutz, Setup-Prüfungen, Chat-Endpunkte, `ha-mcp-ui`-Einstiegspunkt |
+| [`src/ha_safe_mcp/access_auth.py`](../src/ha_safe_mcp/access_auth.py) | Verifikation der Cloudflare-Access-JWT-Assertion (RS256, JWKS, Issuer, Audience, Ablaufdatum) |
 | [`src/ha_safe_mcp/config_store.py`](../src/ha_safe_mcp/config_store.py) | Validierung und atomares Schreiben der `.env` (Rechte 0600), Token-Wiederverwendung nur für dieselbe URL |
 | [`src/ha_safe_mcp/chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Hintergrund-Chatläufe, geordnete Ereignisse, einmalige Freigaben mit Timeout, Abbruch, maskierte Fehlermeldungen |
 | [`src/ha_safe_mcp/webui/`](../src/ha_safe_mcp/webui/index.html) | statisches Frontend (HTML/CSS/JS ohne Framework, ohne Inline-Skripte) |
@@ -200,15 +201,16 @@ HTTP-Statusfehler werden ohne Response-Body als `RuntimeError("Home Assistant re
 
 ### 8.1 Weboberfläche `ha-mcp-ui`
 
-**Start:** `ha-mcp-ui [--host 127.0.0.1] [--port 8765] [--env-file PFAD] [--allow-remote]`. Ohne `--env-file` wird die `.env` im Projekt verwendet. `guard_bind_host` beendet den Start bei einer Nicht-Loopback-Adresse ohne `--allow-remote`. Uvicorn läuft ohne Proxy-Header-Auswertung und ohne `Server`-Header.
+**Start:** `ha-mcp-ui [--host 127.0.0.1] [--port 8765] [--env-file PFAD] [--allow-remote] [--public-host HOSTNAME]`. Ohne `--env-file` wird die `.env` im Projekt verwendet. `guard_bind_host` beendet den Start bei einer Nicht-Loopback-Adresse ohne `--allow-remote`. `--public-host` verlangt Loopback-Bindung **ohne** `--allow-remote`, `CF_ACCESS_AUD` und `CF_ACCESS_TEAM_DOMAIN` (HTTPS-Team-Domain); die HTTP-Host-Allowlist beschränkt sich dann auf den öffentlichen Hostnamen. Uvicorn läuft ohne Proxy-Header-Auswertung und ohne `Server`-Header. Der hier eingesetzte systemd-Benutzerdienst nutzt eine separate 0600-EnvironmentFile unter `~/.config/ha-safe-mcp/access.env` und leitet ausschließlich über den Cloudflare-Tunnel auf `127.0.0.1:8765` weiter, ohne ufw-Portöffnung.
 
 **Schutzschicht `LocalOnlyGuard` (ASGI, vor jeder Route):**
 
 | Prüfung | Antwort bei Verstoß | Zweck |
 |---|---|---|
-| `Host`-Header ist `localhost`, `127.0.0.1` oder `::1` (mit `--allow-remote` zusätzlich der gebundene Host) | 400 | DNS-Rebinding |
+| `Host`-Header ist lokal `localhost`, `127.0.0.1` oder `::1`; im Public-Modus **nur** der konfigurierte öffentliche Hostname | 400 | DNS-Rebinding |
 | Gegenstelle ist Loopback (entfällt mit `--allow-remote`) | 403 | kein Zugriff aus dem LAN |
-| Bei jeder Methode außer GET/HEAD: Header `X-HA-MCP-UI: 1`, und ein vorhandener `Origin` ist exakt `<scheme>://<host>` | 403 | CSRF: einfache Cross-Site-Formulare können keinen eigenen Header setzen, fremde Fetches scheitern am Origin bzw. am CORS-Preflight |
+| Im Public-Modus: signierte `Cf-Access-Jwt-Assertion` mit RS256, verifiziert anhand der Team-JWKS; `iss`, `aud`, `iat`, `exp` werden geprüft | 403 | kein Zugriff ohne gültige Cloudflare-Access-App-Anmeldung, auch nicht über eine lokale Origin-Verbindung; ungültige/offline JWKS scheitern geschlossen |
+| Bei jeder Methode außer GET/HEAD: Header `X-HA-MCP-UI: 1`, und ein vorhandener `Origin` ist lokal exakt `<scheme>://<host>`, im Public-Modus exakt `https://<public-host>` | 403 | CSRF: einfache Cross-Site-Formulare können keinen eigenen Header setzen, fremde Fetches scheitern am Origin bzw. am CORS-Preflight |
 
 Alle Antworten tragen `Content-Security-Policy` (`default-src 'self'`, keine Inline-Skripte, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` und `Cache-Control: no-store`. Request-Bodys sind auf 64 KiB begrenzt, Chatnachrichten auf 4000 Zeichen.
 
@@ -231,7 +233,7 @@ Alle Antworten tragen `Content-Security-Policy` (`default-src 'self'`, keine Inl
 
 **Frontend:** `webui/index.html`, `app.css`, `app.js` ohne Framework und ohne externe Ressourcen. Dynamischer Text geht ausschließlich über `textContent`; Modellantworten kennen nur Codeblöcke, Inline-Code und Fettschrift. Chat-Seite und Bubble rendern denselben Zustand; Verlauf und laufende `run_id` liegen in `localStorage` (Schlüssel `ha-mcp-chat-v1`, ohne Token). Nach einem Neuladen setzt der Browser das Long-Polling eines laufenden Laufs fort; offene Freigaben aus früheren Seitenaufrufen werden als „nicht mehr offen“ angezeigt.
 
-**Grenzen:** keine eigene Benutzeranmeldung (Vertrauensgrenze ist der lokale Rechner), keine Persistenz von Läufen über einen Neustart, keine parallelen Läufe, kein Streaming von Modell-Tokens (Ollama läuft mit `stream: false`), kein Audit-Log der Freigaben außerhalb der laufenden Prozesse.
+**Grenzen:** Im Public-Modus wird ein gültiges Cloudflare-Access-Anwendungstoken verlangt; das ist kein generischer OIDC-Authorization-Code-Client und Cloudflare-Policy/Origin-Tunnel müssen separat verwaltet werden. Die AUD wurde initial aus der Access-Login-Weiterleitung abgeleitet und muss im Cloudflare-Dashboard gegen den Application Audience Tag geprüft werden; ein echtes Login wurde noch nicht end-to-end nachgewiesen. Die lokale Direkt-CLI ohne `--public-host` bleibt loopback-only und ohne Anmeldung. Keine Persistenz von Läufen über einen Neustart, keine parallelen Läufe, kein Streaming von Modell-Tokens (Ollama läuft mit `stream: false`), kein Audit-Log der Freigaben außerhalb der laufenden Prozesse.
 
 ## 9. Laufzeit, Docker und Testschichten
 
