@@ -19,7 +19,8 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_list_entity_registry", "ha_list_integrations", "ha_list_integration_types",
                         "ha_list_discovered", "ha_list_credentials", "ha_list_backups",
                         "ha_list_areas", "ha_list_floors", "ha_list_devices", "ha_list_scenes", "ha_get_scene",
-                        "ha_list_scripts", "ha_get_script", "ha_list_area_entities"})
+                        "ha_list_scripts", "ha_get_script", "ha_list_area_entities", "ha_list_changes",
+                        "ha_get_change"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -30,11 +31,15 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_update_device", "ha_save_scene", "ha_delete_scene", "ha_activate_scene",
                          "ha_save_script", "ha_delete_script", "ha_run_script", "ha_start_integration_options",
                          "ha_integration_options_step", "ha_abort_integration_options",
-                         "ha_start_integration_reconfigure", "ha_update_integration", "ha_set_integration_disabled"})
+                         "ha_start_integration_reconfigure", "ha_update_integration", "ha_set_integration_disabled",
+                         "ha_undo_change"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
                           "ha_delete_integration", "ha_delete_backup", "ha_delete_area", "ha_delete_floor",
-                          "ha_delete_scene", "ha_delete_script"})
+                          "ha_delete_scene", "ha_delete_script",
+                          # an undo may remove what a change created, so it never runs without a card unless
+                          # deletes may run without one
+                          "ha_undo_change"})
 
 
 def write_level(name: str) -> str | None:
@@ -68,7 +73,7 @@ READ_ONLY_HINT = (" In diesem Chat sind nur lesende Tools freigegeben. Pläne, A
 WRITE_BLOCKED = ("Schreibaufruf nicht freigegeben; keine Aktion ausgeführt. Zum Ausführen das Häkchen "
                  "'Aktionen erlauben' setzen und die Anfrage erneut senden.")
 HA_ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_ALLOW_DELETE", "HA_ALLOWED_DOMAINS",
-               "HA_CREDENTIALS_DIR", "HA_AUDIT", "HA_AUDIT_DIR")
+               "HA_CREDENTIALS_DIR", "HA_AUDIT", "HA_AUDIT_DIR", "HA_CHANGES_DIR")
 HISTORY_TURNS = 12
 HISTORY_CHARS = 4000
 PREVIEW_CHARS = 300
@@ -94,6 +99,8 @@ TOOL_TOPICS = (
     (r"szene|scene|stimmung|skript|script|ablauf|routine",
      {"ha_list_scenes", "ha_get_scene", "ha_save_scene", "ha_delete_scene", "ha_activate_scene", "ha_list_scripts",
       "ha_get_script", "ha_save_script", "ha_delete_script", "ha_run_script", "ha_validate_automation"}),
+    (r"r[üu]ckg[äa]ngig|undo|[äa]nderung|zur[üu]ck(?:setz|nehm|hol|spiel)|vorher(?:ige)?|wiederherstell|redo",
+     {"ha_list_changes", "ha_get_change", "ha_undo_change"}),
     (r"backup|sicherung|wiederherstell|restore", {"ha_list_backups", "ha_create_backup", "ha_delete_backup",
                                                    "ha_list_credentials"}),
     (r"\brest\b|\bapi\b|histor|logbuch|template|ereignis|\bevent\b", {"ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete"}),

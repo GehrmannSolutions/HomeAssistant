@@ -33,6 +33,7 @@ from .config_store import (READ_ONLY_REFUSAL, Settings, SettingsStore, SetupErro
                            resolve_token)
 from .credentials import CredentialError, CredentialStore
 from .audit import AuditLog
+from .changes import ChangeJournal, CHANGE_ID
 from .files import FileError, FileStore
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
 
@@ -214,13 +215,15 @@ def store_generated_files(files: FileStore, prompt: str, answer: str) -> list[di
 
 async def mcp_chat_runner(settings: Settings, prompt: str, history: list[dict], allow_write: bool,
                           approve, on_event, *, credentials_dir: Path | None = None,
-                          audit_dir: Path | None = None) -> str:
+                          audit_dir: Path | None = None, changes_dir: Path | None = None) -> str:
     """One chat turn: start the MCP stdio server with exactly the saved settings and run the tool loop."""
     env = settings.mcp_env()
     if credentials_dir is not None:
         env["HA_CREDENTIALS_DIR"] = str(credentials_dir)
     if audit_dir is not None:
         env["HA_AUDIT_DIR"] = str(audit_dir)
+    if changes_dir is not None:
+        env["HA_CHANGES_DIR"] = str(changes_dir)
     async with stdio_client(mcp_parameters_for(env)) as (reader, writer):
         async with ClientSession(reader, writer) as session:
             await session.initialize()
@@ -243,6 +246,23 @@ def live_backups(settings: Settings, credentials_dir: Path, audit: AuditLog):
                      credentials=CredentialStore(credentials_dir))
 
 
+def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, journal: ChangeJournal):
+    """Undo for the web UI: the same gated, journaled code the MCP tools use, with the saved switches."""
+    from .changes import Changes
+    from .integrations import HAIntegrations
+    from .management import HAAdmin
+    from .registry import HARegistry
+    from .scenes import HAScenes
+    from .server import HAClient
+    client = HAClient(settings.ha_url, settings.ha_token, allow_write=settings.allow_write, audit=audit)
+    flags = {"allow_admin_write": settings.allow_admin_write, "allow_delete": settings.allow_delete}
+    admin = HAAdmin(client, **flags)
+    return Changes(journal, admin=admin, scenes=HAScenes(client, admin.ws, **flags),
+                   registry=HARegistry(client, admin.ws, **flags),
+                   integrations=HAIntegrations(client, admin.ws, credentials=CredentialStore(credentials_dir),
+                                               **flags))
+
+
 def _static_text(name: str) -> str:
     return resources.files("ha_safe_mcp").joinpath("webui", name).read_text(encoding="utf-8")
 
@@ -251,15 +271,19 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                allowed_hosts: set[str] | None = None, allow_remote: bool = False,
                public_origin: str | None = None, access_verifier=None,
                credentials: CredentialStore | None = None, files: FileStore | None = None,
-               audit: AuditLog | None = None, backups_factory=None):
+               audit: AuditLog | None = None, backups_factory=None, journal: ChangeJournal | None = None,
+               changes_factory=None):
     checks = checks or LiveChecks()
     credentials = credentials or CredentialStore()
     files = files or FileStore()
     audit = audit or AuditLog()
     runs = runs or RunManager(partial(mcp_chat_runner, credentials_dir=credentials.directory,
-                                      audit_dir=audit.directory))
+                                      audit_dir=audit.directory, changes_dir=(journal or ChangeJournal()).directory))
     runs.on_answer = partial(store_generated_files, files)
     backups_factory = backups_factory or (lambda settings: live_backups(settings, credentials.directory, audit))
+    journal = journal or ChangeJournal()
+    changes_factory = changes_factory or (
+        lambda settings: live_changes(settings, credentials.directory, audit, journal))
     lock = asyncio.Lock()
 
     async def index(request: Request):
@@ -489,6 +513,33 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                                      headers={"Content-Disposition": f'attachment; filename="{filename}"'})
         return _security_headers(response)
 
+    async def changes_list(request: Request):
+        return _ok({"retention_days": journal.retention_days, "entries": journal.entries(limit=200)})
+
+    async def changes_undo(request: Request):
+        settings = store.load()
+        if not settings.configured:
+            return _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+        if not (settings.allow_write and settings.allow_admin_write):
+            return _error("Rückgängig machen braucht in den Einstellungen 'Konfiguration ändern'", 403)
+        change_id = request.path_params["change_id"]
+        if not CHANGE_ID.fullmatch(change_id):
+            return _error("Ungültige Änderungs-ID", 400)
+        try:
+            data = await _json_body(request)
+            return _ok(await changes_factory(settings).undo(change_id, force=data.get("force") is True))
+        except SetupError as exc:
+            return _error(str(exc))
+        except ValueError as exc:
+            message = str(exc)
+            if message == "delete disabled":
+                return _error("Dieses Rückgängigmachen entfernt etwas und braucht 'Löschen erlauben'", 403)
+            if message.startswith("newer changes"):
+                return _error(message, 409)
+            return _error(message, 400)
+        except RuntimeError as exc:
+            return _error(str(exc), 502)
+
     routes = [
         Route("/", index), Route("/static/{name}", static),
         Route("/api/status", status),
@@ -511,6 +562,8 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/backups", backups_create, methods=["POST"]),
         Route("/api/backups/{backup_id}", backups_delete, methods=["DELETE"]),
         Route("/api/backups/{backup_id}/download", backups_download),
+        Route("/api/changes", changes_list),
+        Route("/api/changes/{change_id}/undo", changes_undo, methods=["POST"]),
     ]
 
     @asynccontextmanager

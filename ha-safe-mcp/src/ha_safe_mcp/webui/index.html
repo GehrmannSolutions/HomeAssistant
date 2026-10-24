@@ -20,6 +20,7 @@
       <button type="button" class="tab" data-view="chat">Chat</button>
       <button type="button" class="tab" data-view="credentials">Zugangsdaten</button>
       <button type="button" class="tab" data-view="backups">Backups</button>
+      <button type="button" class="tab" data-view="changes">Änderungen</button>
       <button type="button" class="tab" data-view="files">Dateien</button>
       <button type="button" class="tab" data-view="audit">Protokoll</button>
       <button type="button" class="tab" data-view="settings">Einstellungen</button>
@@ -192,6 +193,30 @@
         </table>
         <p class="muted" id="backup-empty" hidden>Noch keine Backups.</p>
         <div class="result" id="backup-result" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- Change journal: previous state of every configuration change, undo per change -->
+    <section id="view-changes" class="view" hidden>
+      <div class="card">
+        <div class="viewer-head">
+          <h2>Änderungen</h2>
+          <div>
+            <button type="button" class="ghost small" data-action="changes-reload">Aktualisieren</button>
+          </div>
+        </div>
+        <p class="muted">Vor jeder Konfigurationsänderung über den MCP (Automationen, Skripte, Szenen, Dashboards,
+          Helfer, Bereiche, Etagen, Geräte, Entitäten, Integrations-Einstellungen) wird der vorherige Stand lokal
+          gespeichert und 30 Tage aufbewahrt. „Rückgängig“ schreibt ihn zurück; das Rückgängigmachen erscheint selbst
+          wieder in der Liste und lässt sich ebenso zurücknehmen. Braucht „Konfiguration ändern“; wenn dabei etwas
+          entfernt wird, zusätzlich „Löschen erlauben“. Nicht erfasst: Schalten von Geräten, Integrationen
+          hinzufügen/entfernen, Options-Dialoge und Backups.</p>
+        <table class="cred-table" id="change-table">
+          <thead><tr><th>Zeit</th><th>Was</th><th>Ziel</th><th>Vorher</th><th>Status</th><th></th></tr></thead>
+          <tbody id="change-rows"></tbody>
+        </table>
+        <p class="muted" id="change-empty" hidden>Noch keine Änderungen erfasst.</p>
+        <div class="result" id="change-result" role="status" aria-live="polite"></div>
       </div>
     </section>
 

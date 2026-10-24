@@ -262,6 +262,9 @@ class HAIntegrations:
             raise RuntimeError("Unexpected Home Assistant response")
         return {key: entry.get(key) for key in LIST_FIELDS if key in entry}
 
+    async def entry_view(self, entry_id: str) -> dict:
+        return await self._entry_view(self._entry_id(entry_id))
+
     async def update_entry(self, entry_id: str, changes: dict) -> dict:
         entry_id = self._entry_id(entry_id)
         self._check_write()

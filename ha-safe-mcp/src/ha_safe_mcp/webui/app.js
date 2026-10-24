@@ -97,6 +97,7 @@ function showView(name) {
   if (name === "credentials") credentials.load();
   if (name === "files") fileManager.load();
   if (name === "backups") backupPage.load();
+  if (name === "changes") changePage.load();
   if (name === "audit") auditLog.load();
 }
 
@@ -989,6 +990,72 @@ const backupPage = {
   },
 };
 
+/* ---------------------------------------------------------------- change journal */
+
+const CHANGE_KINDS = {
+  automation: "Automation", script: "Skript", scene: "Szene", dashboard: "Dashboard",
+  dashboard_config: "Dashboard-Ansichten", helper: "Helfer", entity: "Entität", area: "Bereich", floor: "Etage",
+  device: "Gerät", integration: "Integration",
+};
+
+const changePage = {
+  init() {
+    $("#view-changes [data-action='changes-reload']").addEventListener("click", () => this.load());
+  },
+
+  async load() {
+    setResult($("#change-result"), "Lade …");
+    try {
+      const data = await api("/api/changes");
+      this.render(data.entries || []);
+      setResult($("#change-result"), "");
+    } catch (error) {
+      this.render([]);
+      setResult($("#change-result"), error.message, "err");
+    }
+  },
+
+  render(items) {
+    const settings = (app.status && app.status.settings) || {};
+    const canUndo = Boolean(settings.allow_write && settings.allow_admin_write);
+    const rows = items.map((item) => el("tr", {},
+      el("td", {}, item.ts ? new Date(item.ts).toLocaleString("de-DE") : "–"),
+      el("td", {}, CHANGE_KINDS[item.kind] || item.kind, " · ", el("code", {}, item.tool || "")),
+      el("td", {}, el("code", {}, item.target || "–")),
+      el("td", {}, item.existed_before ? "vorhanden" : "neu angelegt"),
+      el("td", {}, item.undone_by ? "rückgängig gemacht" : (item.undoes ? "Rücknahme" : "aktiv")),
+      el("td", { class: "row-actions" },
+        !item.undone_by && canUndo
+          ? el("button", { type: "button", class: "ghost small", onclick: (event) => this.undo(item, event.currentTarget) }, "Rückgängig")
+          : null)));
+    $("#change-rows").replaceChildren(...rows);
+    $("#change-empty").hidden = items.length > 0;
+    $("#change-table").hidden = items.length === 0;
+  },
+
+  async undo(item, button) {
+    const label = `${CHANGE_KINDS[item.kind] || item.kind} »${item.target}«`;
+    if (!window.confirm(`${label}: Änderung vom ${new Date(item.ts).toLocaleString("de-DE")} rückgängig machen?`)) return;
+    busy(button, true, "…");
+    try {
+      try {
+        await api(`/api/changes/${encodeURIComponent(item.id)}/undo`, { method: "POST", body: {} });
+      } catch (error) {
+        if (!String(error.message).startsWith("newer changes")) throw error;
+        if (!window.confirm(`${label} wurde danach noch einmal geändert. Trotzdem auf den Stand vor dieser Änderung `
+                            + "zurücksetzen? Die späteren Änderungen gehen dabei verloren (sie bleiben in der Liste).")) return;
+        await api(`/api/changes/${encodeURIComponent(item.id)}/undo`, { method: "POST", body: { force: true } });
+      }
+      await this.load();
+      setResult($("#change-result"), `${label}: vorheriger Stand wiederhergestellt.`, "ok");
+    } catch (error) {
+      setResult($("#change-result"), error.message, "err");
+    } finally {
+      busy(button, false);
+    }
+  },
+};
+
 function formatBackupSize(bytes) {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -1058,6 +1125,7 @@ async function boot() {
   credentials.init();
   fileManager.init();
   backupPage.init();
+  changePage.init();
   auditLog.init();
   chat.init();
   try {
@@ -1071,7 +1139,7 @@ async function boot() {
     showView("setup");
   } else {
     const wanted = location.hash.slice(1);
-    showView(["home", "chat", "credentials", "backups", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
+    showView(["home", "chat", "credentials", "backups", "changes", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
   }
 }
 

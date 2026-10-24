@@ -189,13 +189,14 @@ def _audited_tool(server: FastMCP, client: HAClient):
 
 
 def create_server(client: HAClient, *, allow_admin_write: bool = False,
-                  allow_delete: bool = False, credentials=None) -> FastMCP:
+                  allow_delete: bool = False, credentials=None, journal=None) -> FastMCP:
     from .rest_api import RestGateway
     from .management import HAAdmin
     from .integrations import HAIntegrations
     from .backups import HABackups
     from .registry import HARegistry
     from .scenes import HAScenes
+    from .changes import Changes, journal_from_env
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -205,6 +206,19 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
+    changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
+                      integrations=integrations)
+
+    async def journaled(tool_name: str, kind: str, target, writer, **options):
+        result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
+        return changes.with_change(result, change_id)
+
+    async def dashboard_url(dashboard_id: str) -> str:
+        found = next((d for d in await admin.dashboard_list() if d.get("id") == dashboard_id), None)
+        if found is None:
+            raise ValueError("unknown dashboard_id: pick one from ha_list_dashboards")
+        return found["url_path"]
+
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
 
     tool = _audited_tool(server, client)
@@ -269,12 +283,14 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_save_automation(config_id: str, config: dict) -> dict:
         """Validate, create/update and read back automation config. Requires admin write opt-in."""
-        return await admin.automation_save(config_id, config)
+        return await journaled("ha_save_automation", "automation", config_id,
+                               lambda: admin.automation_save(config_id, config))
 
     @tool()
     async def ha_delete_automation(config_id: str) -> dict:
         """Delete an automation by config ID. Requires admin write and delete opt-ins."""
-        return await admin.automation_delete(config_id)
+        return await journaled("ha_delete_automation", "automation", config_id,
+                               lambda: admin.automation_delete(config_id))
 
     @tool()
     async def ha_list_dashboards() -> list[dict]:
@@ -289,12 +305,14 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_create_dashboard(title: str, url_path: str) -> dict:
         """Create a storage dashboard and verify it appears in list; admin write required."""
-        return await admin.dashboard_create(title, url_path)
+        return await journaled("ha_create_dashboard", "dashboard", url_path,
+                               lambda: admin.dashboard_create(title, url_path))
 
     @tool()
     async def ha_save_dashboard(config: dict, url_path: str = "") -> dict:
         """Save and read back dashboard views; returns prior config for manual rollback. Admin write required."""
-        return await admin.dashboard_save(config, url_path=url_path or None)
+        return await journaled("ha_save_dashboard", "dashboard_config", url_path,
+                               lambda: admin.dashboard_save(config, url_path=url_path or None))
 
     @tool()
     async def ha_list_helpers(domain: str) -> list[dict]:
@@ -304,27 +322,34 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_create_helper(domain: str, config: dict) -> dict:
         """Create a persistent helper entity and verify it appears in list. Admin write required."""
-        return await admin.helper_create(domain, config)
+        return await journaled("ha_create_helper", "helper", None, lambda: admin.helper_create(domain, config),
+                               target_from=lambda result: f"{domain}/{result['id']}")
 
     @tool()
     async def ha_update_helper(domain: str, helper_id: HelperId, config: dict) -> dict:
         """Update a storage helper by collection ID and read back. Admin write required."""
-        return await admin.helper_update(domain, helper_id, config)
+        admin._helper_id(domain, helper_id)
+        return await journaled("ha_update_helper", "helper", f"{domain}/{helper_id}",
+                               lambda: admin.helper_update(domain, helper_id, config))
 
     @tool()
-    async def ha_delete_helper(domain: str, helper_id: HelperId) -> None:
+    async def ha_delete_helper(domain: str, helper_id: HelperId) -> dict:
         """Delete a storage helper by collection ID; requires admin write and delete opt-ins."""
-        return await admin.helper_delete(domain, helper_id)
+        admin._helper_id(domain, helper_id)
+        return await journaled("ha_delete_helper", "helper", f"{domain}/{helper_id}",
+                               lambda: admin.helper_delete(domain, helper_id))
 
     @tool()
     async def ha_update_dashboard(dashboard_id: str, changes: dict) -> dict:
         """Update dashboard title/icon/display metadata by collection ID. Admin write required."""
-        return await admin.dashboard_update(dashboard_id, changes)
+        return await journaled("ha_update_dashboard", "dashboard", await dashboard_url(dashboard_id),
+                               lambda: admin.dashboard_update(dashboard_id, changes))
 
     @tool()
-    async def ha_delete_dashboard(dashboard_id: str) -> None:
+    async def ha_delete_dashboard(dashboard_id: str) -> dict:
         """Delete a dashboard by collection ID. Admin write and delete required."""
-        return await admin.dashboard_delete(dashboard_id)
+        return await journaled("ha_delete_dashboard", "dashboard", await dashboard_url(dashboard_id),
+                               lambda: admin.dashboard_delete(dashboard_id))
 
     @tool()
     async def ha_list_entity_registry() -> list[dict]:
@@ -334,7 +359,9 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_update_entity_registry(entity_id: str, changes: dict) -> dict:
         """Edit entity name, area or icon; does not create an entity. Admin write required."""
-        return await admin.entity_registry_update(entity_id, changes)
+        fields = list(changes) if isinstance(changes, dict) else None
+        return await journaled("ha_update_entity_registry", "entity", entity_id,
+                               lambda: admin.entity_registry_update(entity_id, changes), fields=fields)
 
     @tool()
     async def ha_list_integrations(domain: str = "") -> list[dict]:
@@ -404,13 +431,16 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_update_integration(entry_id: EntryId, changes: dict) -> dict:
         """Rename an integration entry or change its system options: changes may contain title,
         pref_disable_polling, pref_disable_new_entities. Admin write required."""
-        return await integrations.update_entry(entry_id, changes)
+        fields = list(changes) if isinstance(changes, dict) else None
+        return await journaled("ha_update_integration", "integration", entry_id,
+                               lambda: integrations.update_entry(entry_id, changes), fields=fields)
 
     @tool()
     async def ha_set_integration_disabled(entry_id: EntryId, disabled: bool) -> dict:
         """Disable (true) or re-enable (false) an integration entry; its entities become unavailable while
         disabled. Admin write required."""
-        return await integrations.set_entry_disabled(entry_id, disabled)
+        return await journaled("ha_set_integration_disabled", "integration", entry_id,
+                               lambda: integrations.set_entry_disabled(entry_id, disabled), fields=["disabled_by"])
 
     @tool()
     async def ha_reload_integration(entry_id: EntryId) -> dict:
@@ -437,12 +467,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         """Create or replace a scene: config {"name": "Abendlicht", "entities": {"light.flur": {"state": "on",
         "brightness": 120}}}. Use real entity_ids from ha_search_entities. Returns previous config for rollback.
         Admin write required."""
-        return await scenes.save_scene(scene_id, config)
+        return await journaled("ha_save_scene", "scene", scene_id, lambda: scenes.save_scene(scene_id, config))
 
     @tool()
     async def ha_delete_scene(scene_id: SceneId) -> dict:
         """Delete a UI scene by scene_id. Admin write and delete required."""
-        return await scenes.delete_scene(scene_id)
+        return await journaled("ha_delete_scene", "scene", scene_id, lambda: scenes.delete_scene(scene_id))
 
     @tool()
     async def ha_activate_scene(entity_id: str) -> list:
@@ -465,12 +495,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         """Create or replace a script: config {"alias": "Gute Nacht", "sequence": [{"action": "light.turn_off",
         "target": {"entity_id": "light.flur"}}], "mode": "single"}. HA validates the sequence first. Returns
         previous config for rollback. Admin write required."""
-        return await scenes.save_script(script_id, config)
+        return await journaled("ha_save_script", "script", script_id, lambda: scenes.save_script(script_id, config))
 
     @tool()
     async def ha_delete_script(script_id: ScriptId) -> dict:
         """Delete a UI script by script_id. Admin write and delete required."""
-        return await scenes.delete_script(script_id)
+        return await journaled("ha_delete_script", "script", script_id, lambda: scenes.delete_script(script_id))
 
     @tool()
     async def ha_run_script(entity_id: str) -> list:
@@ -504,39 +534,43 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_create_area(name: str, floor_id: str | None = None, icon: str | None = None) -> dict:
         """Create an area (room), e.g. name 'Flur', icon 'mdi:door'; returns its area_id. Admin write required."""
-        return await registry.create_area(name, floor_id, icon)
+        return await journaled("ha_create_area", "area", None, lambda: registry.create_area(name, floor_id, icon),
+                               target_from=lambda result: result["area_id"])
 
     @tool()
     async def ha_update_area(area_id: AreaId, changes: dict) -> dict:
         """Change an area's name, floor_id, icon or aliases and read back. Admin write required."""
-        return await registry.update_area(area_id, changes)
+        return await journaled("ha_update_area", "area", area_id, lambda: registry.update_area(area_id, changes))
 
     @tool()
     async def ha_delete_area(area_id: AreaId) -> dict:
         """Delete an area; its devices and entities stay and lose the area. Admin write and delete required."""
-        return await registry.delete_area(area_id)
+        return await journaled("ha_delete_area", "area", area_id, lambda: registry.delete_area(area_id))
 
     @tool()
     async def ha_create_floor(name: str, level: int | None = None, icon: str | None = None) -> dict:
         """Create a floor, e.g. name 'Erdgeschoss', level 0. Admin write required."""
-        return await registry.create_floor(name, level, icon)
+        return await journaled("ha_create_floor", "floor", None, lambda: registry.create_floor(name, level, icon),
+                               target_from=lambda result: result["floor_id"])
 
     @tool()
     async def ha_update_floor(floor_id: FloorId, changes: dict) -> dict:
         """Change a floor's name, level, icon or aliases and read back. Admin write required."""
-        return await registry.update_floor(floor_id, changes)
+        return await journaled("ha_update_floor", "floor", floor_id, lambda: registry.update_floor(floor_id, changes))
 
     @tool()
     async def ha_delete_floor(floor_id: FloorId) -> dict:
         """Delete a floor; its areas stay without floor. Admin write and delete required."""
-        return await registry.delete_floor(floor_id)
+        return await journaled("ha_delete_floor", "floor", floor_id, lambda: registry.delete_floor(floor_id))
 
     @tool()
     async def ha_update_device(device_id: DeviceId, changes: dict) -> dict:
         """Assign a device to an area or rename/disable it: changes may contain area_id (or null),
         name_by_user (or null to reset), disabled_by ('user' or null), labels. Admin write required.
         Removing devices is not offered (delete the integration instead)."""
-        return await registry.update_device(device_id, changes)
+        fields = list(changes) if isinstance(changes, dict) else None
+        return await journaled("ha_update_device", "device", device_id,
+                               lambda: registry.update_device(device_id, changes), fields=fields)
 
     @tool()
     async def ha_list_backups() -> dict:
@@ -554,6 +588,26 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_backup(backup_id: BackupId) -> dict:
         """Delete one backup by backup_id from ha_list_backups. Admin write and delete required."""
         return await backups.delete_backup(backup_id)
+
+    @tool()
+    async def ha_list_changes(kind: str = "", target: str = "", limit: int = 20) -> list[dict]:
+        """List recent configuration changes made through this MCP (newest first, kept 30 days) with change_id,
+        tool, kind (automation, script, scene, dashboard, dashboard_config, helper, entity, area, floor, device,
+        integration), target and whether it was undone. Use the change_id with ha_undo_change."""
+        return changes.journal.entries(kind=kind, target=target, limit=limit)
+
+    @tool()
+    async def ha_get_change(change_id: str) -> dict:
+        """Show one journaled change including the stored previous state ('before'; null = did not exist)."""
+        return changes.journal.get(change_id)
+
+    @tool()
+    async def ha_undo_change(change_id: str, force: bool = False) -> dict:
+        """Undo one configuration change from ha_list_changes: writes the stored previous state back (removes a
+        created item, recreates a deleted one). The undo is journaled too and can itself be undone. If newer changes
+        to the same item exist it refuses; undo newest first, force=true only when the user wants to overwrite them.
+        Needs the same permissions as the original change (admin write; delete when the undo removes something)."""
+        return await changes.undo(change_id, force=force)
 
     return server
 

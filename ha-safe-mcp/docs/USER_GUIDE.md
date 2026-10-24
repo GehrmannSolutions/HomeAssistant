@@ -106,6 +106,28 @@ Pass this to `ha_save_scene` with admin write; it validates target entities, sto
 2. If a form needs a password/token/PIN, use the UI's **Zugangsdaten** tab to save it under a local alias such as `example_device_login`; `ha_list_credentials` shows alias and field names, **not values**. Never place a secret in a chat, approval payload, tool argument, issue, or example command. Secret form fields accept a reference like `{"$credential":"example_device_login","field":"password"}` instead of plaintext. The local server resolves it immediately before sending it to HA. In an illustrative form step, `{"flow_id":"<flow_id from previous result>","data":{"password":{"$credential":"example_device_login","field":"password"}}}` is valid **only if** the returned schema actually has a `password` field; other forms differ.
 3. `ha_start_integration_setup` uses a handler returned by the types list and returns a form and `flow_id`; submit only fields from its `data_schema` using `ha_integration_setup_step`. Abort an unfinished flow with `ha_abort_integration_setup`. These are admin writes, including abort. For an existing entry, `ha_start_integration_options` / `ha_integration_options_step` use an `entry_id` with `supports_options`; omit unchanged fields with shown `current` values. For `supports_reconfigure`, use `ha_start_integration_reconfigure` followed by setup steps. `ha_update_integration` can rename or change polling/new-entity preferences; `ha_set_integration_disabled` toggles availability, and `ha_reload_integration` reloads. Confirm with `ha_list_integrations`. `ha_delete_integration` is a consequential delete: it can remove its devices and entities.
 
+### Undo a configuration change
+
+Every configuration change made through this MCP keeps the previous state locally: automations, scripts, scenes,
+dashboards (metadata and views), helpers, areas, floors, device and entity registry fields, and integration
+title/system options/disabled state. Each such tool result carries a `change_id`.
+
+- `ha_list_changes` `{}` lists recent changes (newest first, kept 30 days); `ha_get_change` shows the stored previous
+  state (`before`; `null` means the item did not exist).
+- `ha_undo_change` `{"change_id":"<id>"}` writes the previous state back: it removes a created item, recreates a
+  deleted one (areas, floors and helpers get a new ID) and resets changed fields. The undo is itself journaled, so
+  undoing the undo re-applies the change.
+- If the same item was changed again later, undo refuses and names the newer changes. Undo newest first, or pass
+  `"force":true` only when you really want to discard the later changes.
+- In the UI, the **Änderungen** tab lists the same journal with a **Rückgängig** button per entry. In the chat, ask
+  e.g. "Mach die letzte Änderung rückgängig".
+- Undo needs **Konfiguration ändern**; when it removes something it also needs **Löschen erlauben**. In the UI chat,
+  an undo is treated like a delete for "ohne Freigabe": it always shows an approval card unless deletes may run
+  without one.
+- Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
+  backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
+  be reset this way.
+
 ### Back up before changing configuration
 
 Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Zugangsdaten**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—delete backups; a download streams from HA and is not retained by MCP. **Restore is not provided here**: use HA's own **Settings → System → Backups** workflow. `ha_delete_backup` uses a listed `backup_id` and is not a restore/rollback mechanism.
@@ -135,6 +157,7 @@ The REST gateway is an allowlisted subset, **not** an arbitrary HTTP or WebSocke
 | HA settings and token | `.env` in the `ha-safe-mcp` project directory, or the UI's `--env-file` | UI writes mode 0600; keep the file out of version control. |
 | Integration/backup credential aliases, encrypted values **and local encryption key** | `~/.config/ha-safe-mcp/credentials/` (or `XDG_CONFIG_HOME` equivalent) | Directory 0700, files 0600; values not returned to UI/model. The key sits next to the data: encryption is not protection against someone with access to your user account. Back up key and encrypted data **together** if you need to recover them. |
 | Generated plans and fenced code blocks from UI chat | `~/.local/share/ha-safe-mcp/files/` (or `XDG_DATA_HOME` equivalent) | Local text files; **never automatically executed or sent to HA**. Review before using. Up to 256 KB per file and 500 files; delete via **Dateien**. |
+| Change journal (previous state of configuration changes) | `~/.local/state/ha-safe-mcp/changes/` (or `XDG_STATE_HOME` equivalent; `HA_CHANGES_DIR` for a separately started server) | One JSON file per change, directory 0700, files 0600, 30 days and at most 1000 entries. Contains configuration (names, entity IDs, automation content), never tokens or credential values. |
 | Audit metadata | `~/.local/state/ha-safe-mcp/audit/` (or `XDG_STATE_HOME` equivalent) | UTC time, tool, route template, status, duration/error class; no prompts, target entity IDs, payloads or tokens. 30-day retention with pruning on read/write; clear via **Protokoll**. Set `HA_AUDIT=false` for a separately started MCP server to disable its audit. |
 | UI conversation | Browser `localStorage` | Shared by main chat and bubble; **Neu** clears it. Recent user/assistant text goes to the selected local Ollama model as context; don't type secrets or sensitive data into chat. |
 

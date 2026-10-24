@@ -3,8 +3,14 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
-## Unreleased
+## 0.11.0 – 2026-10-24
 
+- **Change journal and undo**: automations, scripts, scenes, dashboards (metadata and views), helpers, areas,
+  floors, device/entity registry fields and integration settings keep their previous state locally before every
+  change (30 days, `HA_CHANGES_DIR`). New tools `ha_list_changes`, `ha_get_change`, `ha_undo_change`; journaled
+  tool results carry a `change_id`. Undo runs through the same permission gates, is journaled itself (redo), and
+  refuses to overwrite newer changes unless `force=true`. UI tab **Änderungen** with a per-entry undo button. In the
+  UI chat an undo counts as a delete for "ohne Freigabe".
 - Moved the installable project, tests and Docker files into `ha-safe-mcp/`; added English community install,
   user and technical documentation, a generated tool reference and an MIT license at repository root.
 - The stdio server now loads `.env` **only from its current working directory**, not from a parent directory;
