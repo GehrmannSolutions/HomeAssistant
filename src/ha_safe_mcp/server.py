@@ -30,6 +30,12 @@ FloorId = Annotated[str, Field(
 DeviceId = Annotated[str, Field(
     pattern=r"^[0-9a-f]{32}$|^[0-9A-HJKMNP-TV-Z]{26}$",
     description="device_id from ha_list_devices (32 hex characters); not the device name")]
+SceneId = Annotated[str, Field(
+    pattern=r"^[A-Za-z0-9_-]{1,64}$",
+    description="scene_id: from ha_list_scenes (field scene_id) or a new id like 'abendlicht'; not the entity_id")]
+ScriptId = Annotated[str, Field(
+    pattern=r"^[a-z0-9_]{1,64}$",
+    description="script_id: the part after 'script.' (e.g. 'gute_nacht'), lowercase, digits and _")]
 BackupId = Annotated[str, Field(
     pattern=r"^[0-9a-z]{6,64}$",
     description="backup_id from ha_list_backups (e.g. 'a1b2c3d4'); not the backup name")]
@@ -177,11 +183,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .integrations import HAIntegrations
     from .backups import HABackups
     from .registry import HARegistry
+    from .scenes import HAScenes
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     integrations = HAIntegrations(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                                   credentials=credentials or credential_store_from_env())
+    scenes = HAScenes(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
@@ -364,6 +372,62 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_integration(entry_id: EntryId) -> dict:
         """Remove a configured integration and its devices by entry_id. Admin write and delete required."""
         return await integrations.delete_entry(entry_id)
+
+    @tool()
+    async def ha_list_scenes() -> list[dict]:
+        """List scenes with entity_id, name, scene_id (editable when set) and the entities they control."""
+        return await scenes.list_scenes()
+
+    @tool()
+    async def ha_get_scene(scene_id: SceneId) -> dict:
+        """Read a UI scene's stored config (name, entities with target states)."""
+        return await scenes.get_scene(scene_id)
+
+    @tool()
+    async def ha_save_scene(scene_id: SceneId, config: dict) -> dict:
+        """Create or replace a scene: config {"name": "Abendlicht", "entities": {"light.flur": {"state": "on",
+        "brightness": 120}}}. Use real entity_ids from ha_search_entities. Returns previous config for rollback.
+        Admin write required."""
+        return await scenes.save_scene(scene_id, config)
+
+    @tool()
+    async def ha_delete_scene(scene_id: SceneId) -> dict:
+        """Delete a UI scene by scene_id. Admin write and delete required."""
+        return await scenes.delete_scene(scene_id)
+
+    @tool()
+    async def ha_activate_scene(entity_id: str) -> list:
+        """Activate a scene (scene.turn_on), e.g. entity_id 'scene.abendlicht'. Needs write and 'scene' in the
+        allowed domains."""
+        return await scenes.activate_scene(entity_id)
+
+    @tool()
+    async def ha_list_scripts() -> list[dict]:
+        """List scripts with entity_id, name, script_id, running state and last run."""
+        return await scenes.list_scripts()
+
+    @tool()
+    async def ha_get_script(script_id: ScriptId) -> dict:
+        """Read a UI script's stored config (alias, sequence, mode, ...)."""
+        return await scenes.get_script(script_id)
+
+    @tool()
+    async def ha_save_script(script_id: ScriptId, config: dict) -> dict:
+        """Create or replace a script: config {"alias": "Gute Nacht", "sequence": [{"action": "light.turn_off",
+        "target": {"entity_id": "light.flur"}}], "mode": "single"}. HA validates the sequence first. Returns
+        previous config for rollback. Admin write required."""
+        return await scenes.save_script(script_id, config)
+
+    @tool()
+    async def ha_delete_script(script_id: ScriptId) -> dict:
+        """Delete a UI script by script_id. Admin write and delete required."""
+        return await scenes.delete_script(script_id)
+
+    @tool()
+    async def ha_run_script(entity_id: str) -> list:
+        """Start a script (script.turn_on), e.g. 'script.gute_nacht'. Needs write and 'script' in the allowed
+        domains."""
+        return await scenes.run_script(entity_id)
 
     @tool()
     async def ha_list_areas() -> list[dict]:

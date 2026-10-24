@@ -3,6 +3,14 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.8.0 – 2026-10-24
+
+- **Szenen und Skripte**: `ha_list_scenes`, `ha_get_scene`, `ha_save_scene`, `ha_delete_scene`,
+  `ha_activate_scene`, `ha_list_scripts`, `ha_get_script`, `ha_save_script`, `ha_delete_script`, `ha_run_script`.
+  Speichern nur mit existierenden Entitäten bzw. bekannten Diensten, HA-Validierung, Rücklesung und vorherige
+  Fassung; Aktivieren/Starten nur mit `scene`/`script` in den erlaubten Domains.
+- Ollama-Toolauswahl: eine genannte `input_boolean.…`-Entität bietet keine Helfer-Verwaltung mehr an.
+
 ## 0.7.0 – 2026-10-24
 
 - **Bereiche, Etagen, Geräte**: `ha_list_areas`, `ha_list_floors`, `ha_list_devices` (ohne Seriennummern, MACs,

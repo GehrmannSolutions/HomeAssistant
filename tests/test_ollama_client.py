@@ -449,3 +449,14 @@ def test_xml_parameter_values_follow_the_tool_schema():
     [request] = _xml_tool_requests(text, {"t": schema})
     assert request == {"name": "t", "arguments": {"name": "123", "limit": 5, "on": True, "config": {"a": 1},
                                                   "password": {"$credential": "x", "field": "password"}}}
+
+
+def test_an_entity_id_in_the_prompt_does_not_offer_helper_management():
+    """'Szene ..., in der input_boolean.flurlicht_test an ist' made qwen3 propose ha_create_helper."""
+    from ha_safe_mcp.ollama_client import select_tool_names
+    available = {"ha_search_entities", "ha_get_state", "ha_create_helper", "ha_list_helpers", "ha_save_scene"}
+    scene = select_tool_names("Lege eine Szene an, in der input_boolean.flurlicht_test an ist", available,
+                              allow_write=True)
+    assert "ha_save_scene" in scene and "ha_create_helper" not in scene
+    helper = select_tool_names("Lege einen input_boolean Helfer an", available, allow_write=True)
+    assert "ha_create_helper" in helper

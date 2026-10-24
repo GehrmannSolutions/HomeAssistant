@@ -291,6 +291,26 @@ Jeder Schreibaufruf erscheint als eigene Freigabe-Karte. Hinweise:
 - Löschen (`ha_delete_area`, `ha_delete_floor`) braucht „Löschen erlauben“. Geräte und Entitäten bleiben erhalten und verlieren nur die Zuordnung.
 - Geräte entfernen geht hier nicht; dafür die Integration löschen oder die HA-Oberfläche nutzen.
 
+### 8.5b Szenen und Skripte
+
+Szene anlegen (Chat mit „Aktionen erlauben“: *„Lege eine Szene Abendstimmung an, in der light.flur auf 40 % gedimmt ist“*):
+
+```json
+{"tool": "ha_save_scene", "arguments": {"scene_id": "abendstimmung", "config": {"name": "Abendstimmung", "entities": {"light.flur": {"state": "on", "brightness": 100}}}}}
+```
+
+Skript anlegen:
+
+```json
+{"tool": "ha_save_script", "arguments": {"script_id": "gute_nacht", "config": {"alias": "Gute Nacht", "sequence": [{"action": "light.turn_off", "target": {"entity_id": "light.flur"}}], "mode": "single"}}}
+```
+
+- `scene_id` und `script_id` sind kurze IDs (Kleinbuchstaben, Ziffern, `_`). Die Entität heißt danach `scene.<…>` bzw. `script.<script_id>`; bei Szenen bildet HA die Entitäts-ID aus dem **Namen**.
+- Der MCP lehnt Szenen mit unbekannten Entitäten und Skripte mit unbekannten Diensten ab, bevor etwas gespeichert wird. Platzhalter wie `light.your_light` landen also nicht in HA.
+- Das Ergebnis enthält `previous` (alte Fassung oder `null`). Zum Zurücksetzen `previous` erneut mit `ha_save_scene`/`ha_save_script` speichern.
+- **Aktivieren** (`ha_activate_scene`) und **Starten** (`ha_run_script`) schalten echte Geräte. Dafür in den Einstellungen bei „Erlaubte Domains“ `scene` bzw. `script` ergänzen. Achtung: ein Skript darf intern beliebige Dienste aufrufen, auch außerhalb der erlaubten Domains – deshalb `script` nur freigeben, wenn die Skripte bekannt sind.
+- Nur Szenen und Skripte aus der Oberfläche (`scenes.yaml`/`scripts.yaml`) sind bearbeitbar; YAML-Pakete nicht (`ha_list_scenes` zeigt `editable: false`).
+
 ### 8.6 Entity Registry: nur Metadaten, keine Erzeugung
 
 `ha_list_entity_registry` mit `{}` lesen. Nur eine **tatsächlich gelistete** `entity_id` wählen; bei Admin-Write-Freigabe etwa:
