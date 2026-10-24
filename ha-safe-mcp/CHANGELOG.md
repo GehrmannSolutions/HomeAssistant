@@ -3,6 +3,14 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.17.0 – 2026-10-25
+
+- **`ha_find_usages`**: where is an entity or service used? Searches UI automations, scripts, scenes, groups and
+  dashboards (storage and YAML) and returns the path inside each config; YAML automations without `id` are listed
+  as skipped.
+- **`ha_get_overview`**: version, time zone, entity counts per domain (unavailable/unknown/on), registry sizes,
+  automations/scripts/scenes/dashboards, failing and disabled integrations.
+
 ## 0.16.0 – 2026-10-25
 
 - **Tool search for small local models** (UI chat and CLI): besides the keyword preselection the model always gets

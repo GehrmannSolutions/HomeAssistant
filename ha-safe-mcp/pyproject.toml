@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-safe-mcp"
-version = "0.16.0"
+version = "0.17.0"
 description = "Safety-first Home Assistant MCP server with local web UI, credential store, file manager and audit log"
 license = "MIT"
 license-files = ["LICENSE"]

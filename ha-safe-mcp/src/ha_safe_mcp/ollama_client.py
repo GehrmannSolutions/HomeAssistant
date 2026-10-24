@@ -23,7 +23,8 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_list_scripts", "ha_get_script", "ha_list_area_entities", "ha_list_changes",
                         "ha_get_change", "ha_list_traces", "ha_get_trace", "ha_get_error_log", "ha_get_logbook",
                         "ha_get_history", "ha_get_statistics", "ha_list_statistic_ids", "ha_list_repairs",
-                        "ha_get_system_health", "ha_render_template", "ha_test_condition"})
+                        "ha_get_system_health", "ha_render_template", "ha_test_condition", "ha_find_usages",
+                        "ha_get_overview"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -124,6 +125,10 @@ TOOL_TOPICS = (
     (r"reparatur|repair|systemzustand|system ?health|gesundheit|datenbank|version",
      {"ha_list_repairs", "ha_get_system_health"}),
     (r"template|jinja|bedingung|condition", {"ha_render_template", "ha_test_condition"}),
+    (r"wo (?:wird|ist|kommt)|verwendet|benutzt|genutzt|vorkommt|referenz|abh[äa]ngig|umbenenn",
+     {"ha_find_usages"}),
+    (r"[üu]berblick|[üu]bersicht|zusammenfassung|wie viele|anzahl|status (?:meines|des) (?:systems|hauses)|"
+     r"bestandsaufnahme|inventar", {"ha_get_overview"}),
     (r"backup|sicherung|wiederherstell|restore", {"ha_list_backups", "ha_create_backup", "ha_delete_backup",
                                                    "ha_list_credentials"}),
     (r"\brest\b|\bapi\b|histor|logbuch|template|ereignis|\bevent\b", {"ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete"}),

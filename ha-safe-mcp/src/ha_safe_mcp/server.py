@@ -208,6 +208,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .scenes import HAScenes
     from .changes import Changes, journal_from_env
     from .diagnostics import HADiagnostics
+    from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -218,6 +219,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
+    overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
                       integrations=integrations)
 
@@ -600,6 +602,20 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_backup(backup_id: BackupId) -> dict:
         """Delete one backup by backup_id from ha_list_backups. Admin write and delete required."""
         return await backups.delete_backup(backup_id)
+
+    @tool()
+    async def ha_find_usages(needle: str, kinds: list[str] | None = None, limit: int = 100) -> dict:
+        """Where is something used? Searches UI automations, scripts, scenes, groups and dashboards for a text,
+        usually an entity_id (e.g. 'light.hallway') or a service ('notify.mobile'). Returns each match with the
+        path inside its config. kinds: any of automation, script, scene, group, dashboard (default all).
+        Use before renaming or removing an entity."""
+        return await overview.find_usages(needle, kinds, limit)
+
+    @tool()
+    async def ha_get_overview() -> dict:
+        """Compact overview of this Home Assistant: version, time zone, entity counts per domain (unavailable,
+        on), areas/floors/devices, automations/scripts/scenes/dashboards, failing and disabled integrations."""
+        return await overview.overview()
 
     @tool()
     async def ha_list_traces(domain: str = "automation", item: str = "", limit: int = 20) -> list[dict]:

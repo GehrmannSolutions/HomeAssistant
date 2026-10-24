@@ -247,6 +247,12 @@ All of these are read-only (some need an HA admin user, like the HA UI pages the
   `ha_list_repairs`, `ha_get_system_health`.
 - **Try before saving:** `ha_render_template` renders a Jinja template against the live state;
   `ha_test_condition` evaluates an automation condition right now.
+- **Where is it used?** `ha_find_usages` `{"needle":"light.example"}` searches UI automations, scripts, scenes,
+  groups and dashboards (also YAML dashboards) and returns the path inside each config, e.g.
+  `actions[0].target.entity_id[0]`. Use it before renaming or removing an entity. YAML automations without an `id`
+  cannot be read through the API and are listed as skipped.
+- **Overview:** `ha_get_overview` gives version, time zone, entity counts per domain (unavailable, on),
+  registry sizes, automations/scripts/scenes/dashboards and failing or disabled integrations.
 
 Times in these results are converted to the time zone configured in Home Assistant. Long results are cut to the
 newest entries (`limit`, `max_points`).
