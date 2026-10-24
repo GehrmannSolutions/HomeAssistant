@@ -94,6 +94,7 @@ function showView(name) {
   if (name === "chat") { chat.markSeen(); chat.focus("main"); }
   if (name === "home") renderHome();
   if (name === "settings") fillSettings();
+  if (name === "credentials") credentials.load();
 }
 
 function renderModePill() {
@@ -370,6 +371,111 @@ function initSettings() {
 
 /* ---------------------------------------------------------------- chat */
 
+/* ---------------------------------------------------------------- credentials */
+
+const credentials = {
+  items: [],
+  editing: null,
+
+  init() {
+    const form = $("#cred-form");
+    form.addEventListener("submit", (event) => { event.preventDefault(); this.save(); });
+    $("[data-action='cred-reset']", form).addEventListener("click", () => this.reset());
+    this.reset();
+  },
+
+  async load() {
+    const result = $("#cred-list-result");
+    try {
+      this.items = (await api("/api/credentials")).credentials || [];
+      setResult(result, "");
+    } catch (error) {
+      this.items = [];
+      setResult(result, error.message, "err");
+    }
+    this.render();
+  },
+
+  render() {
+    const rows = this.items.map((item) => el("tr", {},
+      el("td", {}, el("code", {}, item.alias)),
+      el("td", {}, item.label),
+      el("td", {}, item.fields.join(", ")),
+      el("td", {}, new Date(item.updated * 1000).toLocaleString("de-DE")),
+      el("td", { class: "row-actions" },
+        el("button", { type: "button", class: "ghost small", onclick: () => this.edit(item) }, "Ändern"),
+        el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Löschen"))));
+    $("#cred-rows").replaceChildren(...rows);
+    $("#cred-empty").hidden = this.items.length > 0;
+    $(".cred-table").hidden = this.items.length === 0;
+  },
+
+  reset() {
+    const form = $("#cred-form");
+    form.reset();
+    this.editing = null;
+    form.elements.alias.readOnly = false;
+    form.elements.username.placeholder = "";
+    form.elements.password.required = true;
+    $("#cred-form-title").textContent = "Neue Zugangsdaten";
+    $("#cred-password-hint").textContent = "";
+    setResult($(".result", form), "");
+  },
+
+  edit(item) {
+    const form = $("#cred-form");
+    this.reset();
+    this.editing = item;
+    form.elements.alias.value = item.alias;
+    form.elements.alias.readOnly = true;
+    form.elements.label.value = item.label;
+    form.elements.password.required = false;
+    $("#cred-form-title").textContent = `Zugangsdaten ändern: ${item.alias}`;
+    $("#cred-password-hint").textContent = "(leer lassen, um das gespeicherte zu behalten)";
+    form.elements.username.placeholder = item.fields.includes("username") ? "(gespeichert; leer = behalten)" : "";
+    form.elements.label.focus();
+  },
+
+  async save() {
+    const form = $("#cred-form");
+    const result = $(".result", form);
+    const button = $("button[type='submit']", form);
+    const fields = {};
+    const username = form.elements.username.value;
+    const password = form.elements.password.value;
+    const known = this.editing ? this.editing.fields : [];
+    if (username || known.includes("username")) fields.username = username;
+    if (password || known.includes("password")) fields.password = password;
+    if (!Object.keys(fields).length) { setResult(result, "Mindestens Benutzername oder Passwort angeben.", "err"); return; }
+    busy(button, true, "Speichere …");
+    try {
+      const saved = await api("/api/credentials", { method: "POST",
+        body: { alias: form.elements.alias.value.trim(), label: form.elements.label.value.trim(), fields } });
+      this.reset();
+      setResult($(".result", form), `Gespeichert. Im Chat: »${saved.credential.alias}«.`, "ok");
+      await this.load();
+    } catch (error) {
+      setResult(result, error.message, "err");
+    } finally {
+      form.elements.password.value = "";
+      busy(button, false);
+    }
+  },
+
+  async remove(item) {
+    if (!window.confirm(`Zugangsdaten »${item.alias}« löschen? Integrationen in Home Assistant behalten ihre Kopie.`)) return;
+    try {
+      await api(`/api/credentials/${encodeURIComponent(item.alias)}`, { method: "DELETE" });
+      if (this.editing && this.editing.alias === item.alias) this.reset();
+      await this.load();
+    } catch (error) {
+      setResult($("#cred-list-result"), error.message, "err");
+    }
+  },
+};
+
+/* ---------------------------------------------------------------- chat renderer */
+
 function renderRichText(text) {
   // Safe tiny formatter: ``` fences, `code` and **bold**; everything else is plain text.
   const fragment = document.createDocumentFragment();
@@ -462,17 +568,20 @@ const chat = {
     text = String(text || "").trim();
     if (!text || this.running) return;
     const history = this.history();
-    this.add({ kind: "user", text });
-    for (const root of Object.values(this.roots)) { root.textarea.value = ""; root.textarea.style.height = "auto"; }
+    const source = this.roots[from];
     this.typing = "Sende …";
     this.render();
     try {
       const started = await api("/api/chat", { method: "POST", body: { message: text, history, allow_write: this.allowWrite } });
+      // Only an accepted message enters the visible and persisted history: a refused one may contain a secret.
+      this.add({ kind: "user", text });
+      for (const root of Object.values(this.roots)) { root.textarea.value = ""; root.textarea.style.height = "auto"; }
       this.running = { runId: started.run_id, after: 0 };
       this.persist();
       this.poll();
     } catch (error) {
       this.typing = "";
+      if (source && !source.textarea.value) source.textarea.value = text;
       this.add({ kind: "error", text: error.message });
     }
     this.focus(from);
@@ -700,6 +809,7 @@ async function boot() {
   initShell();
   wizard.init();
   initSettings();
+  credentials.init();
   chat.init();
   try {
     await refreshStatus();
@@ -712,7 +822,7 @@ async function boot() {
     showView("setup");
   } else {
     const wanted = location.hash.slice(1);
-    showView(["home", "chat", "settings"].includes(wanted) ? wanted : "home");
+    showView(["home", "chat", "credentials", "settings"].includes(wanted) ? wanted : "home");
   }
 }
 

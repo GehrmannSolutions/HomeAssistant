@@ -18,6 +18,7 @@
     <nav class="tabs" aria-label="Bereiche" hidden>
       <button type="button" class="tab" data-view="home">Übersicht</button>
       <button type="button" class="tab" data-view="chat">Chat</button>
+      <button type="button" class="tab" data-view="credentials">Zugangsdaten</button>
       <button type="button" class="tab" data-view="settings">Einstellungen</button>
     </nav>
     <div class="mode-pill" id="mode-pill" hidden></div>
@@ -131,6 +132,41 @@
     <!-- Full chat section -->
     <section id="view-chat" class="view" hidden>
       <div class="chat-shell" data-chat-root="main"></div>
+    </section>
+
+    <!-- Credentials -->
+    <section id="view-credentials" class="view" hidden>
+      <div class="card">
+        <h2>Zugangsdaten</h2>
+        <p class="muted">Logins für Geräte und Dienste, z. B. Shelly-Passwörter. Sie liegen verschlüsselt auf diesem
+          Rechner und werden nie angezeigt. Im Chat nennst du nur den <strong>Alias</strong>; das Modell sieht nie den Wert.</p>
+        <table class="cred-table">
+          <thead><tr><th>Alias</th><th>Bezeichnung</th><th>Felder</th><th>Geändert</th><th></th></tr></thead>
+          <tbody id="cred-rows"></tbody>
+        </table>
+        <p class="muted" id="cred-empty" hidden>Noch keine Zugangsdaten gespeichert.</p>
+        <div class="result" id="cred-list-result" role="status" aria-live="polite"></div>
+      </div>
+      <form class="card" id="cred-form" autocomplete="off">
+        <h2 id="cred-form-title">Neue Zugangsdaten</h2>
+        <label>Alias <small class="muted">(Kleinbuchstaben, Ziffern, _; z. B. <code>shelly_login</code>)</small>
+          <input name="alias" required pattern="[a-z][a-z0-9_]{0,63}" spellcheck="false">
+        </label>
+        <label>Bezeichnung
+          <input name="label" maxlength="80">
+        </label>
+        <label>Benutzername <small class="muted">(leer lassen, wenn nicht nötig; Shelly Gen2+ braucht keinen)</small>
+          <input name="username" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Passwort <small class="muted" id="cred-password-hint"></small>
+          <input name="password" type="password" autocomplete="new-password" spellcheck="false">
+        </label>
+        <div class="result" role="status" aria-live="polite"></div>
+        <div class="actions">
+          <button type="button" class="ghost" data-action="cred-reset">Leeren</button>
+          <button type="submit" class="primary">Speichern</button>
+        </div>
+      </form>
     </section>
 
     <!-- Settings -->

@@ -13,6 +13,7 @@ import json
 import os
 import re
 from contextlib import asynccontextmanager
+from functools import partial
 from importlib import resources
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -28,6 +29,7 @@ from starlette.routing import Route
 from .chat_runs import RunBusy, RunManager
 from .access_auth import AccessTokenVerifier
 from .config_store import Settings, SettingsStore, SetupError, merge_settings, normalize_url, resolve_token
+from .credentials import CredentialError, CredentialStore
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
 
 UI_HEADER = "x-ha-mcp-ui"
@@ -38,6 +40,12 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' 
        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 STATIC = {"app.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
           "icon.svg": "image/svg+xml"}
+# "pw: x", "Passwort ist x", "password=x": a secret value typed into the chat. Asking about a password
+# field ("Wie ist das Passwort-Feld ...") or naming a stored alias stays allowed.
+PLAINTEXT_SECRET = re.compile(
+    r"(?i)\b(?:pw|pwd|pass|passwor[dt]|kennwort|secret|token|api[_-]?key)\b\s*(?::|=|\bist\b|\bis\b|\blautet\b)\s*\S+")
+SECRET_REFUSAL = ("Bitte keine Passwörter oder Tokens in den Chat schreiben: sie landen im Verlauf und beim Modell. "
+                  "Lege sie unter 'Zugangsdaten' an und nenne im Chat nur den Alias.")
 
 
 def _is_loopback(host: str | None) -> bool:
@@ -181,9 +189,12 @@ class LiveChecks:
 
 
 async def mcp_chat_runner(settings: Settings, prompt: str, history: list[dict], allow_write: bool,
-                          approve, on_event) -> str:
+                          approve, on_event, *, credentials_dir: Path | None = None) -> str:
     """One chat turn: start the MCP stdio server with exactly the saved settings and run the tool loop."""
-    async with stdio_client(mcp_parameters_for(settings.mcp_env())) as (reader, writer):
+    env = settings.mcp_env()
+    if credentials_dir is not None:
+        env["HA_CREDENTIALS_DIR"] = str(credentials_dir)
+    async with stdio_client(mcp_parameters_for(env)) as (reader, writer):
         async with ClientSession(reader, writer) as session:
             await session.initialize()
             async with httpx.AsyncClient(base_url=settings.ollama_url, timeout=300, trust_env=False) as http:
@@ -197,9 +208,11 @@ def _static_text(name: str) -> str:
 
 def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = None,
                allowed_hosts: set[str] | None = None, allow_remote: bool = False,
-               public_origin: str | None = None, access_verifier=None):
+               public_origin: str | None = None, access_verifier=None,
+               credentials: CredentialStore | None = None):
     checks = checks or LiveChecks()
-    runs = runs or RunManager(mcp_chat_runner)
+    credentials = credentials or CredentialStore()
+    runs = runs or RunManager(partial(mcp_chat_runner, credentials_dir=credentials.directory))
     lock = asyncio.Lock()
 
     async def index(request: Request):
@@ -258,6 +271,9 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE:
                 raise SetupError("Nachricht fehlt oder ist zu lang")
             history = sanitize_history(data.get("history") or [])
+            if PLAINTEXT_SECRET.search(message) or any(PLAINTEXT_SECRET.search(item["content"])
+                                                       for item in history if item["role"] == "user"):
+                raise SetupError(SECRET_REFUSAL)
             allow_write = data.get("allow_write", False)
             if not isinstance(allow_write, bool):
                 raise SetupError("allow_write muss true oder false sein")
@@ -300,6 +316,30 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             return _error("Keine laufende Anfrage", 404)
         return _ok({"ok": True})
 
+    async def credentials_list(request: Request):
+        try:
+            return _ok({"credentials": credentials.list_public()})
+        except CredentialError as exc:
+            return _error(str(exc), 500)
+
+    async def credentials_save(request: Request):
+        try:
+            data = await _json_body(request)
+            async with lock:
+                saved = credentials.save(str(data.get("alias") or ""), str(data.get("label") or ""),
+                                         data.get("fields") if isinstance(data.get("fields"), dict) else {})
+        except (SetupError, CredentialError) as exc:
+            return _error(str(exc))
+        return _ok({"credential": saved})
+
+    async def credentials_delete(request: Request):
+        try:
+            async with lock:
+                credentials.delete(request.path_params["alias"])
+        except CredentialError as exc:
+            return _error(str(exc), 404)
+        return _ok({"ok": True})
+
     routes = [
         Route("/", index), Route("/static/{name}", static),
         Route("/api/status", status),
@@ -310,6 +350,9 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/chat/{run_id}/events", chat_events),
         Route("/api/chat/{run_id}/approve", chat_approve, methods=["POST"]),
         Route("/api/chat/{run_id}/cancel", chat_cancel, methods=["POST"]),
+        Route("/api/credentials", credentials_list),
+        Route("/api/credentials", credentials_save, methods=["POST"]),
+        Route("/api/credentials/{alias}", credentials_delete, methods=["DELETE"]),
     ]
 
     @asynccontextmanager

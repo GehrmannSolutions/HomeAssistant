@@ -371,3 +371,78 @@ async def test_status_never_contains_the_token(tmp_path):
         await configure(http)
         texts = [(await http.get(path)).text for path in ("/api/status", "/")]
     assert all(TOKEN not in text for text in texts)
+
+
+SHELLY_PW = "Sh3lly-Geheim-42"
+
+
+def make_cred_app(tmp_path, runner=None):
+    from ha_safe_mcp.credentials import CredentialStore
+    checks = FakeChecks()
+
+    async def default_runner(settings, prompt, history, allow_write, approve, on_event):
+        return f"Echo: {prompt}"
+
+    creds = CredentialStore(tmp_path / "creds")
+    app = create_app(SettingsStore(tmp_path / ".env"), checks=checks,
+                     runs=RunManager(runner or default_runner), credentials=creds)
+    return app, creds
+
+
+async def test_credentials_can_be_managed_without_values_ever_coming_back(tmp_path):
+    app, creds = make_cred_app(tmp_path)
+    async with client(app) as http:
+        assert (await http.get("/api/credentials")).json() == {"credentials": []}
+        saved = await http.post("/api/credentials", headers=HEADERS, json={
+            "alias": "shelly_login", "label": "Shelly", "fields": {"password": SHELLY_PW}})
+        listed = await http.get("/api/credentials")
+        deleted = await http.delete("/api/credentials/shelly_login", headers=HEADERS)
+        after = await http.get("/api/credentials")
+    assert saved.status_code == 200 and SHELLY_PW not in saved.text
+    assert listed.json()["credentials"][0]["alias"] == "shelly_login" and SHELLY_PW not in listed.text
+    assert deleted.status_code == 200 and after.json() == {"credentials": []}
+
+
+async def test_credential_changes_need_the_ui_header_and_same_origin(tmp_path):
+    app, creds = make_cred_app(tmp_path)
+    async with client(app) as http:
+        forged = await http.post("/api/credentials", headers={"Origin": "http://evil.example", "X-HA-MCP-UI": "1"},
+                                 json={"alias": "evil_one", "fields": {"password": "x"}})
+        no_header = await http.delete("/api/credentials/evil_one", headers={"Origin": "http://127.0.0.1:8765"})
+    assert forged.status_code == 403 and no_header.status_code == 403
+    assert creds.list_public() == []
+
+
+async def test_invalid_credential_input_gives_german_error(tmp_path):
+    app, _ = make_cred_app(tmp_path)
+    async with client(app) as http:
+        response = await http.post("/api/credentials", headers=HEADERS,
+                                   json={"alias": "Shelly Login", "fields": {"password": "x"}})
+    assert response.status_code == 400 and "Alias" in response.json()["error"]
+
+
+@pytest.mark.parametrize("message", [
+    'Füge alle Shelly Geräte hinzu: user: admin pw: Geheim123',
+    "Das Passwort ist Geheim123, bitte einrichten",
+    "password=Geheim123",
+    "Kennwort: Geheim123",
+])
+async def test_chat_refuses_plaintext_secrets_and_points_to_the_credential_page(tmp_path, message):
+    app, _ = make_cred_app(tmp_path)
+    async with client(app) as http:
+        await configure(http)
+        response = await http.post("/api/chat", headers=HEADERS, json={"message": message})
+    assert response.status_code == 400
+    assert "Zugangsdaten" in response.json()["error"] and "Geheim123" not in response.text
+
+
+@pytest.mark.parametrize("message", [
+    "Wie ist das Passwort-Feld bei Shelly aufgebaut?",
+    "Richte Shelly mit dem Zugangsdatum shelly_login ein",
+])
+async def test_chat_allows_talking_about_credentials_without_values(tmp_path, message):
+    app, _ = make_cred_app(tmp_path)
+    async with client(app) as http:
+        await configure(http)
+        response = await http.post("/api/chat", headers=HEADERS, json={"message": message})
+    assert response.status_code == 200, response.text
