@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.21.0 – 2026-10-25
+
+- **Updates**: `ha_list_updates`, `ha_get_release_notes`, `ha_skip_update` (admin), `ha_install_update` (delete
+  level; a timeout is reported as "still installing").
+- **Reload and restart**: `ha_check_config` (read), `ha_reload` (all, core or any domain with a reload service;
+  admin), `ha_restart` (delete level, refused while the configuration check reports errors).
+- Verified on the dev HA: check, reload automation/all, real restart (logbook: stopped and started 5 s later).
+  Prod read-only: no pending updates, configuration valid; install/restart refused without the delete level.
+
 ## 0.20.0 – 2026-10-25
 
 - **Calendars**: `ha_list_calendars`, `ha_get_calendar_events` (one or all calendars, 1-31 days),

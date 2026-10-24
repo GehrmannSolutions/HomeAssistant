@@ -210,6 +210,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .diagnostics import HADiagnostics
     from .organize import HAOrganizer
     from .planner import HAPlanner
+    from .system import HASystem
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -220,6 +221,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     organizer = HAOrganizer(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     planner = HAPlanner(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    system = HASystem(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
@@ -428,6 +430,46 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         except (RuntimeError, ValueError) as exc:
             result["references_to_old_id"] = f"not checked: {exc}"
         return result
+
+    @tool()
+    async def ha_list_updates(pending_only: bool = True) -> list[dict]:
+        """Updates (firmware, integrations, add-ons, HA itself) with installed and latest version; by default only
+        pending ones."""
+        return await system.list_updates(pending_only)
+
+    @tool()
+    async def ha_get_release_notes(entity_id: str) -> dict:
+        """Release notes of one update entity (capped), if the integration provides them."""
+        return await system.release_notes(entity_id)
+
+    @tool()
+    async def ha_check_config() -> dict:
+        """Check Home Assistant's configuration files (result valid/invalid with errors and warnings); changes
+        nothing. Use before a restart or after YAML edits."""
+        return await system.check_config()
+
+    @tool()
+    async def ha_reload(target: str) -> dict:
+        """Reload configuration without a restart: target 'all', 'core' (core config) or a domain with a reload
+        service such as 'automation', 'script', 'scene', 'template', 'group'. Admin write required."""
+        return await system.reload(target)
+
+    @tool()
+    async def ha_skip_update(entity_id: str, clear: bool = False) -> dict:
+        """Skip the offered version of an update (clear=true offers it again). Admin write required."""
+        return await system.skip_update(entity_id, clear)
+
+    @tool()
+    async def ha_install_update(entity_id: str, version: str | None = None, backup: bool = False) -> dict:
+        """Install an update (entity from ha_list_updates); backup=true asks the integration to back up first
+        (where supported). Far-reaching: needs the delete level; the user should have read the release notes."""
+        return await system.install_update(entity_id, version, backup)
+
+    @tool()
+    async def ha_restart(safe_mode: bool = False) -> dict:
+        """Restart Home Assistant after a successful configuration check (refused when it reports errors).
+        Interrupts all automations for about a minute. Far-reaching: needs the delete level."""
+        return await system.restart(safe_mode)
 
     @tool()
     async def ha_list_calendars() -> list[dict]:

@@ -27,7 +27,7 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         "test_condition",
                         # organising: labels, categories, zones, one entity registry entry
                         "config/label_registry/list", "config/category_registry/list", "zone/list",
-                        "config/entity_registry/get", "todo/item/list"}) | frozenset(
+                        "config/entity_registry/get", "todo/item/list", "update/release_notes"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
                          "config/area_registry/create", "config/area_registry/update",

@@ -114,19 +114,19 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.20.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.21.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 49 | 49 | 0 |
-   | Steuern | 56 | 49 | 7 |
-   | Konfiguration ändern | 90 | 49 | 41 |
-   | Löschen | 105 | 49 | 56 |
+   | Nur lesen | 52 | 52 | 0 |
+   | Steuern | 59 | 52 | 7 |
+   | Konfiguration ändern | 95 | 52 | 43 |
+   | Löschen | 112 | 52 | 60 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (49)" and "write/delete
-   tools (41)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (52)" and "write/delete
+   tools (43)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -232,6 +232,18 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Updates, reload and restart
+
+- **Read:** `ha_list_updates` (pending updates of firmware, integrations, add-ons and HA with installed and latest
+  version; `pending_only:false` for all), `ha_get_release_notes`, `ha_check_config` (checks the configuration
+  files, changes nothing).
+- **Admin write:** `ha_reload` reloads configuration without a restart: `all`, `core` or a domain with a reload
+  service (`automation`, `script`, `scene`, `template`, `group`, ...). `ha_skip_update` skips an offered version
+  (`clear:true` offers it again).
+- **Delete level (the highest):** `ha_install_update` and `ha_restart`. They are the most far-reaching actions, so
+  they need the same level as deleting; in the UI they never run without an approval card unless deletes may run
+  without one. `ha_restart` runs the configuration check first and refuses while it reports errors.
 
 ### Calendars and to-do lists
 
