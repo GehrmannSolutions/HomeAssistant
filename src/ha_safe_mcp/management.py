@@ -16,12 +16,12 @@ from .server import HAClient
 HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime"})
 READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboards/list",
                         "config/entity_registry/list", "auth/current_user",
-                        "config_entries/flow/progress"}) | frozenset(
+                        "config_entries/flow/progress", "backup/info", "backup/agents/info"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
-WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create",
+WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
                          "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
-DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete",
+DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
                           "config/entity_registry/remove"}) | frozenset(f"{domain}/delete" for domain in HELPERS)
 
 

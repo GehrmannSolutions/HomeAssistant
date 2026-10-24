@@ -41,7 +41,7 @@ class FakeSession:
             SimpleNamespace(name="ha_rest_write", description="POST", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}}),
             SimpleNamespace(name="ha_rest_delete", description="DELETE", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}}),
             SimpleNamespace(name="ha_save_automation", description="Save automation", inputSchema={"type": "object", "properties": {"config_id": {"type": "string"}}}),
-            SimpleNamespace(name="ha_create_helper", description="Create helper", inputSchema={"type": "object", "properties": {"domain": {"type": "string"}}}),
+            SimpleNamespace(name="ha_create_helper", description="Create helper", inputSchema={"type": "object", "properties": {"domain": {"type": "string"}, "config": {"type": "object"}}}),
             SimpleNamespace(name="ha_save_dashboard", description="Save dashboard", inputSchema={"type": "object", "properties": {"config": {"type": "object"}}}),
         ])
 
@@ -402,3 +402,50 @@ async def test_raw_tool_json_never_reaches_the_user_as_an_answer():
         answer = await run_chat(session, http, "small", "status")
     assert "ha_not_offered" not in answer and "{" not in answer
     assert session.calls == []
+
+
+QWEN3_XML = ("Ich werde ein Backup erstellen. Dazu verwende ich das Tool `ha_create_helper`.\n\n"
+             "<function=ha_create_helper>\n<parameter=domain>\ninput_boolean\n</parameter>\n"
+             "<parameter=config>\n{\"name\": \"Vor Umbau\"}\n</parameter>\n</function>\n</tool_call>")
+
+
+@pytest.mark.asyncio
+async def test_qwen3_xml_tool_calls_in_text_go_through_the_approval():
+    """qwen3-coder:30b wrote '<function=ha_create_backup><parameter=name>...' as plain text; nothing ran."""
+    responses = iter([
+        {"message": {"role": "assistant", "content": QWEN3_XML}},
+        {"message": {"role": "assistant", "content": "Helfer angelegt."}},
+    ])
+    session, asked = FakeSession(), []
+
+    def approve(name, args):
+        asked.append((name, args))
+        return True
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
+                                 base_url="http://ollama:11434") as http:
+        answer = await run_chat(session, http, "qwen3", "Lege einen Helfer an", allow_write=True, approve=approve)
+    assert asked == [("ha_create_helper", {"domain": "input_boolean", "config": {"name": "Vor Umbau"}})]
+    assert session.calls == asked and answer == "Helfer angelegt."
+
+
+@pytest.mark.asyncio
+async def test_qwen3_xml_write_call_is_blocked_without_write_mode():
+    responses = iter([{"message": {"role": "assistant", "content": QWEN3_XML}}])
+    session = FakeSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
+                                 base_url="http://ollama:11434") as http:
+        answer = await run_chat(session, http, "qwen3", "Lege einen Helfer an")
+    assert session.calls == [] and "Aktionen erlauben" in answer and "<function" not in answer
+
+
+def test_xml_parameter_values_follow_the_tool_schema():
+    from ha_safe_mcp.ollama_client import _xml_tool_requests
+    schema = {"properties": {"name": {"type": "string"}, "limit": {"type": "integer"}, "on": {"type": "boolean"},
+                             "config": {"type": "object"}, "password": {"anyOf": [{"type": "object"}, {"type": "null"}]}}}
+    text = ("<function=t><parameter=name>\n123\n</parameter><parameter=limit>5</parameter>"
+            "<parameter=on>true</parameter><parameter=config>{\"a\": 1}</parameter>"
+            "<parameter=password>{\"$credential\": \"x\", \"field\": \"password\"}</parameter></function>")
+    [request] = _xml_tool_requests(text, {"t": schema})
+    assert request == {"name": "t", "arguments": {"name": "123", "limit": 5, "on": True, "config": {"a": 1},
+                                                  "password": {"$credential": "x", "field": "password"}}}

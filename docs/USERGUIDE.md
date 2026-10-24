@@ -107,7 +107,20 @@ Unter **Einstellungen** lässt sich alles später ändern. Ein leeres Token-Feld
 - `Enter` sendet, `Shift+Enter` erzeugt einen Zeilenumbruch. **Stopp** bricht eine laufende Anfrage ab, **Neu** leert den Verlauf. Es läuft immer nur **eine** Anfrage zur Zeit.
 - Der Verlauf liegt im Browser (`localStorage`). Die letzten zwölf Nachrichten gehen als Kontext an das Modell, aber nur Text: keine Tool-Ergebnisse und keine Systemanweisungen.
 
-### 7.2a Dateien: gespeicherte Pläne und Skripte
+### 7.2a Backups
+
+Der Reiter **Backups** listet alle Backups von Home Assistant (Name, Datum, Größe, Speicherort; 🔒 = verschlüsselt).
+
+- **Backup erstellen** (braucht „Konfiguration ändern“): fragt einen Namen ab und erstellt ein vollständiges Backup (Konfiguration und Datenbank) auf dem lokalen Speicherort von Home Assistant. Die Oberfläche wartet, bis HA es meldet (in der Dev-Instanz wenige Sekunden, bei großen Datenbanken Minuten; nach 10 Minuten meldet sie „läuft noch“).
+- **Herunterladen**: lädt die `.tar`-Datei direkt aus Home Assistant; der MCP speichert keine Kopie.
+- **Löschen** (nur sichtbar mit „Löschen erlauben“): entfernt das Backup in Home Assistant, nach Rückfrage.
+- **Wiederherstellen** gibt es hier nicht: in Home Assistant unter *Einstellungen → System → Backups*.
+
+Im Chat geht dasselbe mit „Aktionen erlauben“, z. B. *„Erstelle ein Backup mit dem Namen Vor Umbau“* → Freigabe-Karte `ha_create_backup` → **Ausführen**. Ein verschlüsseltes Backup braucht ein Passwort unter **Zugangsdaten** (z. B. Alias `backup_pw`, Feld *Passwort*); im Chat dann *„… verschlüsselt mit backup_pw“*.
+
+Empfehlung: vor jeder größeren Änderung (Integrationen löschen, Dashboards umbauen) ein Backup anlegen.
+
+### 7.2b Dateien: gespeicherte Pläne und Skripte
 
 Bittet man das Modell um einen **Plan** (Wörter wie „Plan“, „Konzept“, „Schritte“, „Checkliste“) und antwortet es mit mindestens zwei Schritten, wird die Antwort als Markdown unter `plan/plan-<Zeit>.md` gespeichert. Jeder Codeblock einer Antwort (```` ```yaml ````, ```` ```bash ````, ```` ```python ```` …) wird zusätzlich als eigene Datei unter `script/chat-<Zeit>-<n>.<endung>` abgelegt. Unter dem Chat erscheint dann „📄 Gespeichert unter Dateien: …“.
 
@@ -117,7 +130,7 @@ Im Reiter **Dateien** stehen alle gespeicherten Dateien mit **Lesen**, **Herunte
 - Ablage: `~/.local/share/ha-safe-mcp/files/` (Ordner 0700, Dateien 0600, nicht ausführbar). Höchstens 256 KB pro Datei und 500 Dateien; ältere Dateien bitte selbst löschen.
 - Eine Absage des Modells („kann keine Automation erstellen …“) wird nicht als Plan gespeichert.
 
-### 7.2b Protokoll: Kommunikation MCP ↔ Home Assistant
+### 7.2c Protokoll: Kommunikation MCP ↔ Home Assistant
 
 Der Reiter **Protokoll** zeigt jede Anfrage des MCP an Home Assistant (REST und WebSocket) und jeden Tool-Aufruf. Gespeichert werden **nur Metadaten**: Zeit (UTC), Tool, Kanal, Methode, Route als **Muster** (`/api/states/{entity_id}` statt der echten Entität), HTTP-Status, Dauer und bei Fehlern nur die Fehlerklasse. Keine Entitäts-IDs, Personennamen, Anfrage- oder Antwortinhalte, Chattexte oder Tokens.
 
@@ -316,7 +329,7 @@ Unbekannte Routen, Traversal und nicht erlaubte Query-Keys werden abgelehnt. RES
 
 ## 9. Sicherung, Prüfung und Rückweg
 
-Vor jeder Änderung auf der **isolierten** Instanz: Ziel und erwarteten Zustand lesend ermitteln; für bestehende Automation `ha_get_automation`, für Dashboard `ha_get_dashboard`, für Helper `ha_list_helpers`, für Registry `ha_list_entity_registry` sichern (ohne Token oder sensible Antwortdaten zu veröffentlichen). Ein separat angelegtes, **getestetes** HA-Backup ist sinnvoll; das MCP-Projekt erstellt/verwaltet selbst **keine Backups**. Home Assistant beschreibt Backups und Wiederherstellung in [Common tasks](https://www.home-assistant.io/common-tasks/general/#backups); beim Container das persistente Volume **`ha-mcp-dev-config`** nicht löschen und eine Volume-Sicherung nur nach geeigneter, konsistenter Backup-Prozedur vornehmen. Kein produktives Home Assistant für Experimente verwenden.
+Vor jeder Änderung auf der **isolierten** Instanz: Ziel und erwarteten Zustand lesend ermitteln; für bestehende Automation `ha_get_automation`, für Dashboard `ha_get_dashboard`, für Helper `ha_list_helpers`, für Registry `ha_list_entity_registry` sichern (ohne Token oder sensible Antwortdaten zu veröffentlichen). Vorher ein Backup mit `ha_create_backup` (oder im Reiter **Backups**) anlegen und prüfen, dass es in `ha_list_backups` erscheint; Wiederherstellen geht nur in der HA-Oberfläche. Home Assistant beschreibt Backups und Wiederherstellung in [Common tasks](https://www.home-assistant.io/common-tasks/general/#backups); beim Container das persistente Volume **`ha-mcp-dev-config`** nicht löschen und eine Volume-Sicherung nur nach geeigneter, konsistenter Backup-Prozedur vornehmen. Kein produktives Home Assistant für Experimente verwenden.
 
 Nach einem Write mit dem passenden Lesetool prüfen; eine erfolgreiche Tool-Rückgabe ist keine Garantie für wirksame Geräteaktion, fertigen Automation-Reload oder langfristige Persistenz. Rollback ist **manuell**: vorher gesicherte Dashboard-Konfiguration erneut mit `ha_save_dashboard` setzen; Automation mit gesicherter Config (ohne `id`-Feld) erneut `ha_save_automation` übermitteln; Helper/Registry-Metadaten anhand gesicherter Werte korrigieren. Gelöschte Objekte müssen ggf. aus Backup oder manuell wiederhergestellt werden. `ha_save_dashboard` liefert zwar `previous`, speichert es aber nicht selbst dauerhaft. Wer den alten Stand als Datei behalten will, lässt sich ihn im Chat als YAML-Codeblock ausgeben: er landet dann unter **Dateien**. Für den Rückweg bleiben die entsprechenden Write-Schalter und HA-Rechte notwendig. [Verwaltung](../src/ha_safe_mcp/management.py) · [HA-Backup-Hilfe](https://www.home-assistant.io/common-tasks/general/#backups).
 

@@ -3,6 +3,14 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.6.0 – 2026-10-24
+
+- **Backups**: `ha_list_backups`, `ha_create_backup` (lokal, wartet auf Fertigstellung, Passwort nur als
+  Zugangsdaten-Verweis), `ha_delete_backup`; Weboberfläche **Backups** mit Erstellen, gestreamtem Download und
+  Löschen. Wiederherstellen bewusst nicht enthalten.
+- Ollama-Client: Toolaufrufe im XML-Textformat von `qwen3-coder` (`<function=…><parameter=…>`) werden erkannt,
+  nach dem Tool-Schema typisiert und laufen durch dieselbe Freigabe.
+
 ## 0.5.0 – 2026-10-24
 
 - **Dateien** (Weboberfläche): Pläne und Codeblöcke aus Chat-Antworten werden lokal gespeichert

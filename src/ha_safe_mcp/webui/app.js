@@ -96,6 +96,7 @@ function showView(name) {
   if (name === "settings") fillSettings();
   if (name === "credentials") credentials.load();
   if (name === "files") fileManager.load();
+  if (name === "backups") backupPage.load();
   if (name === "audit") auditLog.load();
 }
 
@@ -873,6 +874,86 @@ const fileManager = {
   },
 };
 
+/* ---------------------------------------------------------------- backups */
+
+const backupPage = {
+  init() {
+    $("#view-backups [data-action='backups-reload']").addEventListener("click", () => this.load());
+    $("#view-backups [data-action='backups-create']").addEventListener("click", (event) => this.create(event.currentTarget));
+  },
+
+  settings() {
+    return (app.status && app.status.settings) || {};
+  },
+
+  async load() {
+    const settings = this.settings();
+    const createButton = $("#view-backups [data-action='backups-create']");
+    createButton.disabled = !(settings.allow_write && settings.allow_admin_write);
+    createButton.title = createButton.disabled ? "Braucht in den Einstellungen „Konfiguration ändern“" : "";
+    setResult($("#backup-result"), "Lade …");
+    try {
+      const data = await api("/api/backups");
+      this.render(data.backups || []);
+      setResult($("#backup-result"), data.state && data.state !== "idle" ? `Home Assistant meldet: ${data.state}` : "");
+    } catch (error) {
+      this.render([]);
+      setResult($("#backup-result"), error.message, "err");
+    }
+  },
+
+  render(items) {
+    const canDelete = Boolean(this.settings().allow_delete);
+    const rows = items.map((item) => el("tr", {},
+      el("td", {}, item.name || item.backup_id, item.protected ? " 🔒" : ""),
+      el("td", {}, item.date ? new Date(item.date).toLocaleString("de-DE") : "–"),
+      el("td", {}, typeof item.size === "number" ? formatBackupSize(item.size) : "–"),
+      el("td", {}, (item.agents || []).join(", ")),
+      el("td", { class: "row-actions" },
+        el("a", { class: "button ghost small", href: `/api/backups/${encodeURIComponent(item.backup_id)}/download`,
+                  download: "" }, "Herunterladen"),
+        canDelete ? el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Löschen") : null)));
+    $("#backup-rows").replaceChildren(...rows);
+    $("#backup-empty").hidden = items.length > 0;
+    $("#backup-table").hidden = items.length === 0;
+  },
+
+  async create(button) {
+    const name = window.prompt("Name für das Backup:", `MCP ${new Date().toLocaleString("de-DE")}`);
+    if (name === null) return;
+    busy(button, true, "Erstelle Backup …");
+    setResult($("#backup-result"), "Backup läuft, das kann einige Minuten dauern …");
+    try {
+      const result = await api("/api/backups", { method: "POST", body: { name } });
+      if (result.completed) setResult($("#backup-result"), `Backup »${result.backup.name}« erstellt.`, "ok");
+      else setResult($("#backup-result"), result.note || `Backup fehlgeschlagen (${result.reason || "unbekannt"}).`, "err");
+      await this.load();
+      if (result.completed) setResult($("#backup-result"), `Backup »${result.backup.name}« erstellt.`, "ok");
+    } catch (error) {
+      setResult($("#backup-result"), error.message, "err");
+    } finally {
+      busy(button, false);
+    }
+  },
+
+  async remove(item) {
+    if (!window.confirm(`Backup »${item.name}« endgültig löschen?`)) return;
+    try {
+      await api(`/api/backups/${encodeURIComponent(item.backup_id)}`, { method: "DELETE" });
+      await this.load();
+      setResult($("#backup-result"), `Backup »${item.name}« gelöscht.`, "ok");
+    } catch (error) {
+      setResult($("#backup-result"), error.message, "err");
+    }
+  },
+};
+
+function formatBackupSize(bytes) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return formatSize(bytes);
+}
+
 /* ---------------------------------------------------------------- audit log */
 
 const auditLog = {
@@ -935,6 +1016,7 @@ async function boot() {
   initSettings();
   credentials.init();
   fileManager.init();
+  backupPage.init();
   auditLog.init();
   chat.init();
   try {
@@ -948,7 +1030,7 @@ async function boot() {
     showView("setup");
   } else {
     const wanted = location.hash.slice(1);
-    showView(["home", "chat", "credentials", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
+    showView(["home", "chat", "credentials", "backups", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
   }
 }
 

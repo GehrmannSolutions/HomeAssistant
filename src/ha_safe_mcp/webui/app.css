@@ -218,3 +218,4 @@ a.button.ghost { background: transparent; color: var(--muted); }
 a.button.ghost:hover { color: var(--text); background: var(--surface-2); }
 a.button.small { padding: 6px 12px; font-size: 0.9rem; }
 .cred-table .row-actions a.button + button { margin-left: 6px; }
+button.primary.small { padding: 6px 12px; font-size: 0.9rem; }

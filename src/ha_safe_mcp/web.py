@@ -24,7 +24,7 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse, Response
+from starlette.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from .chat_runs import RunBusy, RunManager
@@ -228,6 +228,20 @@ async def mcp_chat_runner(settings: Settings, prompt: str, history: list[dict], 
                                       allow_write=allow_write, approve=approve, on_event=on_event)
 
 
+BACKUP_ID = re.compile(r"^[0-9a-z]{6,64}$")
+
+
+def live_backups(settings: Settings, credentials_dir: Path, audit: AuditLog):
+    """Backup client for the web UI: the same gated code the MCP tools use, with the saved switches."""
+    from .backups import HABackups
+    from .management import HAWebSocket
+    from .server import HAClient
+    client = HAClient(settings.ha_url, settings.ha_token, allow_write=settings.allow_write, audit=audit)
+    ws = HAWebSocket(client, allow_admin_write=settings.allow_admin_write, allow_delete=settings.allow_delete)
+    return HABackups(client, ws, allow_admin_write=settings.allow_admin_write, allow_delete=settings.allow_delete,
+                     credentials=CredentialStore(credentials_dir))
+
+
 def _static_text(name: str) -> str:
     return resources.files("ha_safe_mcp").joinpath("webui", name).read_text(encoding="utf-8")
 
@@ -236,7 +250,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                allowed_hosts: set[str] | None = None, allow_remote: bool = False,
                public_origin: str | None = None, access_verifier=None,
                credentials: CredentialStore | None = None, files: FileStore | None = None,
-               audit: AuditLog | None = None):
+               audit: AuditLog | None = None, backups_factory=None):
     checks = checks or LiveChecks()
     credentials = credentials or CredentialStore()
     files = files or FileStore()
@@ -244,6 +258,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     runs = runs or RunManager(partial(mcp_chat_runner, credentials_dir=credentials.directory,
                                       audit_dir=audit.directory))
     runs.on_answer = partial(store_generated_files, files)
+    backups_factory = backups_factory or (lambda settings: live_backups(settings, credentials.directory, audit))
     lock = asyncio.Lock()
 
     async def index(request: Request):
@@ -399,6 +414,77 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def audit_clear(request: Request):
         return _ok({"deleted": audit.clear()})
 
+    def _backups_or_error():
+        settings = store.load()
+        if not settings.configured:
+            return None, None, _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+        return settings, backups_factory(settings), None
+
+    async def backups_list(request: Request):
+        settings, backups, problem = _backups_or_error()
+        if problem:
+            return problem
+        try:
+            return _ok(await backups.list_backups())
+        except (RuntimeError, ValueError) as exc:
+            return _error(str(exc), 502)
+
+    async def backups_create(request: Request):
+        settings, backups, problem = _backups_or_error()
+        if problem:
+            return problem
+        if not (settings.allow_write and settings.allow_admin_write):
+            return _error("Backups anlegen braucht in den Einstellungen 'Konfiguration ändern'", 403)
+        try:
+            data = await _json_body(request)
+            name = str(data.get("name") or "").strip() or time.strftime("MCP %Y-%m-%d %H:%M")
+            result = await backups.create_backup(name)
+        except SetupError as exc:
+            return _error(str(exc))
+        except (RuntimeError, ValueError) as exc:
+            return _error(str(exc), 502)
+        return _ok(result)
+
+    async def backups_delete(request: Request):
+        settings, backups, problem = _backups_or_error()
+        if problem:
+            return problem
+        if not (settings.allow_write and settings.allow_admin_write and settings.allow_delete):
+            return _error("Backups löschen braucht in den Einstellungen 'Löschen erlauben'", 403)
+        backup_id = request.path_params["backup_id"]
+        if not BACKUP_ID.fullmatch(backup_id):
+            return _error("Ungültige Backup-ID", 400)
+        try:
+            return _ok(await backups.delete_backup(backup_id))
+        except (RuntimeError, ValueError) as exc:
+            return _error(str(exc), 502)
+
+    async def backups_download(request: Request):
+        settings, backups, problem = _backups_or_error()
+        if problem:
+            return problem
+        backup_id = request.path_params["backup_id"]
+        if not BACKUP_ID.fullmatch(backup_id):
+            return _error("Ungültige Backup-ID", 400)
+        context = backups.download(backup_id)
+        try:
+            filename, stream = await context.__aenter__()
+        except ValueError as exc:
+            return _error(str(exc), 404)
+        except RuntimeError as exc:
+            return _error(str(exc), 502)
+
+        async def body():
+            try:
+                async for chunk in stream:
+                    yield chunk
+            finally:
+                await context.__aexit__(None, None, None)
+
+        response = StreamingResponse(body(), media_type="application/x-tar",
+                                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        return _security_headers(response)
+
     routes = [
         Route("/", index), Route("/static/{name}", static),
         Route("/api/status", status),
@@ -417,6 +503,10 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/files/{kind}/{name}", files_delete, methods=["DELETE"]),
         Route("/api/audit", audit_list),
         Route("/api/audit", audit_clear, methods=["DELETE"]),
+        Route("/api/backups", backups_list),
+        Route("/api/backups", backups_create, methods=["POST"]),
+        Route("/api/backups/{backup_id}", backups_delete, methods=["DELETE"]),
+        Route("/api/backups/{backup_id}/download", backups_download),
     ]
 
     @asynccontextmanager

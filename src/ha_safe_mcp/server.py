@@ -23,6 +23,9 @@ FlowId = Annotated[str, Field(
     pattern=r"^(?:[0-9a-f]{32}|[0-9A-HJKMNP-TV-Z]{26})$",
     description="flow_id copied exactly from the previous ha_start_integration_setup/ha_integration_setup_step "
                 "result or from ha_list_discovered")]
+BackupId = Annotated[str, Field(
+    pattern=r"^[0-9a-z]{6,64}$",
+    description="backup_id from ha_list_backups (e.g. 'a1b2c3d4'); not the backup name")]
 EntryId = Annotated[str, Field(
     pattern=r"^[0-9A-Za-z]{20,40}$",
     description="entry_id from ha_list_integrations; not the title and not the domain")]
@@ -165,11 +168,14 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .rest_api import RestGateway
     from .management import HAAdmin
     from .integrations import HAIntegrations
+    from .backups import HABackups
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     integrations = HAIntegrations(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                                   credentials=credentials or credential_store_from_env())
+    backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
+                        credentials=integrations.credentials)
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
 
     tool = _audited_tool(server, client)
@@ -349,6 +355,23 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_integration(entry_id: EntryId) -> dict:
         """Remove a configured integration and its devices by entry_id. Admin write and delete required."""
         return await integrations.delete_entry(entry_id)
+
+    @tool()
+    async def ha_list_backups() -> dict:
+        """List Home Assistant backups (newest first) with backup_id, name, date, size and storage agents."""
+        return await backups.list_backups()
+
+    @tool()
+    async def ha_create_backup(name: str, password: dict | None = None) -> dict:
+        """Create a full backup (configuration + database) on the local backup agent and wait until it is
+        listed. Optional encryption password only as credential reference {"$credential": "<alias>",
+        "field": "password"}. Admin write required. Restoring is not available through this MCP."""
+        return await backups.create_backup(name, password)
+
+    @tool()
+    async def ha_delete_backup(backup_id: BackupId) -> dict:
+        """Delete one backup by backup_id from ha_list_backups. Admin write and delete required."""
+        return await backups.delete_backup(backup_id)
 
     return server
 

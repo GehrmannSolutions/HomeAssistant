@@ -19,6 +19,7 @@
       <button type="button" class="tab" data-view="home">Übersicht</button>
       <button type="button" class="tab" data-view="chat">Chat</button>
       <button type="button" class="tab" data-view="credentials">Zugangsdaten</button>
+      <button type="button" class="tab" data-view="backups">Backups</button>
       <button type="button" class="tab" data-view="files">Dateien</button>
       <button type="button" class="tab" data-view="audit">Protokoll</button>
       <button type="button" class="tab" data-view="settings">Einstellungen</button>
@@ -169,6 +170,29 @@
           <button type="submit" class="primary">Speichern</button>
         </div>
       </form>
+    </section>
+
+    <!-- Backups of Home Assistant (HA's own backup integration) -->
+    <section id="view-backups" class="view" hidden>
+      <div class="card">
+        <div class="viewer-head">
+          <h2>Backups</h2>
+          <div>
+            <button type="button" class="ghost small" data-action="backups-reload">Aktualisieren</button>
+            <button type="button" class="primary small" data-action="backups-create">Backup erstellen</button>
+          </div>
+        </div>
+        <p class="muted">Sicherungen von Home Assistant (Konfiguration und Datenbank) über die Backup-Funktion von
+          Home Assistant selbst. Erstellen braucht „Konfiguration ändern“, Löschen „Löschen erlauben“.
+          <strong>Wiederherstellen</strong> geht bewusst nur in Home Assistant (Einstellungen → System → Backups),
+          weil es die laufende Konfiguration ersetzt und neu startet.</p>
+        <table class="cred-table" id="backup-table">
+          <thead><tr><th>Name</th><th>Datum</th><th>Größe</th><th>Speicherort</th><th></th></tr></thead>
+          <tbody id="backup-rows"></tbody>
+        </table>
+        <p class="muted" id="backup-empty" hidden>Noch keine Backups.</p>
+        <div class="result" id="backup-result" role="status" aria-live="polite"></div>
+      </div>
     </section>
 
     <!-- Files: plans and scripts the model wrote -->
