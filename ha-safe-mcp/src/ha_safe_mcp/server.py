@@ -209,6 +209,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .changes import Changes, journal_from_env
     from .diagnostics import HADiagnostics
     from .organize import HAOrganizer
+    from .planner import HAPlanner
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -218,6 +219,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     scenes = HAScenes(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     organizer = HAOrganizer(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    planner = HAPlanner(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
@@ -426,6 +428,70 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         except (RuntimeError, ValueError) as exc:
             result["references_to_old_id"] = f"not checked: {exc}"
         return result
+
+    @tool()
+    async def ha_list_calendars() -> list[dict]:
+        """List calendar entities (entity_id, name)."""
+        return await planner.list_calendars()
+
+    @tool()
+    async def ha_get_calendar_events(entity_id: str = "", days: int = 7, start: str = "") -> dict:
+        """Events of one calendar (or all calendars when entity_id is empty) from start (default now; date or
+        date+time) for 1-31 days, sorted by start, with uid for changes."""
+        return await planner.get_events(entity_id, days, start)
+
+    @tool()
+    async def ha_create_calendar_event(entity_id: str, summary: str, start: str, end: str,
+                                       description: str | None = None, location: str | None = None) -> dict:
+        """Add an event. start/end as 'YYYY-MM-DDTHH:MM' (local time) or as dates 'YYYY-MM-DD' for an all-day event
+        (end = the day after the last day). Needs writes and the domain 'calendar' allowed."""
+        return await planner.create_event(entity_id, summary, start, end, description, location)
+
+    @tool()
+    async def ha_update_calendar_event(entity_id: str, uid: str, summary: str, start: str, end: str,
+                                       description: str | None = None, location: str | None = None,
+                                       recurrence_id: str | None = None, recurrence_range: str | None = None) -> dict:
+        """Replace an event (uid from ha_get_calendar_events): pass summary, start and end even if unchanged. For one
+        occurrence of a series add recurrence_id ('THISANDFUTURE' as recurrence_range changes the rest of the
+        series too). Needs writes and the domain 'calendar' allowed."""
+        return await planner.update_event(entity_id, uid, summary, start, end, description, location, recurrence_id,
+                                          recurrence_range)
+
+    @tool()
+    async def ha_delete_calendar_event(entity_id: str, uid: str, recurrence_id: str | None = None,
+                                       recurrence_range: str | None = None) -> dict:
+        """Delete an event (or one occurrence with recurrence_id). Cannot be undone. Needs the delete level and the
+        domain 'calendar' allowed."""
+        return await planner.delete_event(entity_id, uid, recurrence_id, recurrence_range)
+
+    @tool()
+    async def ha_list_todo_lists() -> list[dict]:
+        """List to-do lists (e.g. shopping list) with the number of open items."""
+        return await planner.list_todo_lists()
+
+    @tool()
+    async def ha_get_todo_items(entity_id: str, status: str = "needs_action") -> list[dict]:
+        """Items of a to-do list; status 'needs_action' (open, default), 'completed' or '' for all."""
+        return await planner.get_todo_items(entity_id, status)
+
+    @tool()
+    async def ha_add_todo_item(entity_id: str, item: str, due: str | None = None,
+                               description: str | None = None) -> dict:
+        """Add an item to a to-do list (due as date or date+time). Needs writes and the domain 'todo' allowed."""
+        return await planner.add_todo_item(entity_id, item, due, description)
+
+    @tool()
+    async def ha_update_todo_item(entity_id: str, item: str, rename: str | None = None, status: str | None = None,
+                                  due: str | None = None, description: str | None = None) -> dict:
+        """Change an item (name or uid): status 'completed' ticks it off, 'needs_action' opens it again; rename,
+        due, description. Needs writes and the domain 'todo' allowed."""
+        return await planner.update_todo_item(entity_id, item, rename, status, due, description)
+
+    @tool()
+    async def ha_remove_todo_items(entity_id: str, items: list[str]) -> dict:
+        """Remove items (names or uids) from a to-do list. Cannot be undone; to finish an item prefer
+        ha_update_todo_item with status 'completed'. Needs the delete level and the domain 'todo' allowed."""
+        return await planner.remove_todo_items(entity_id, items)
 
     @tool()
     async def ha_list_labels() -> list[dict]:

@@ -114,19 +114,19 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.19.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.20.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 45 | 45 | 0 |
-   | Steuern | 48 | 45 | 3 |
-   | Konfiguration ändern | 82 | 45 | 37 |
-   | Löschen | 95 | 45 | 50 |
+   | Nur lesen | 49 | 49 | 0 |
+   | Steuern | 56 | 49 | 7 |
+   | Konfiguration ändern | 90 | 49 | 41 |
+   | Löschen | 105 | 49 | 56 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (45)" and "write/delete
-   tools (37)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (49)" and "write/delete
+   tools (41)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -232,6 +232,19 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Calendars and to-do lists
+
+- **Read:** `ha_list_calendars`, `ha_get_calendar_events` (one calendar or all, from now or `start`, 1-31 `days`,
+  with `uid`), `ha_list_todo_lists` (open items per list), `ha_get_todo_items` (open, completed or all).
+- **Add and change** like switching a light (control level, writes on, domain `calendar` or `todo` in the allowed
+  domains): `ha_create_calendar_event` (`start`/`end` as `YYYY-MM-DDTHH:MM` local time, or dates for all-day events
+  where `end` is the day after the last day), `ha_update_calendar_event` (pass summary, start and end even if
+  unchanged; `recurrence_id` for one occurrence of a series), `ha_add_todo_item`, `ha_update_todo_item`
+  (`status: completed` ticks an item off).
+- **Delete** needs the delete level: `ha_delete_calendar_event`, `ha_remove_todo_items`. Events and items are data,
+  not configuration, so they are not in the change journal and cannot be undone there.
+- Writes to a calendar or list that does not exist are refused (HA itself would silently ignore them).
 
 ### Helpers: counters, timers, schedules, templates, groups, meters
 

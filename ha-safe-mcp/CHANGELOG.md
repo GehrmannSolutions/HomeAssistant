@@ -3,6 +3,17 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.20.0 – 2026-10-25
+
+- **Calendars**: `ha_list_calendars`, `ha_get_calendar_events` (one or all calendars, 1-31 days),
+  `ha_create_calendar_event` (timed or all-day), `ha_update_calendar_event` (incl. one occurrence of a series),
+  `ha_delete_calendar_event`.
+- **To-do lists**: `ha_list_todo_lists`, `ha_get_todo_items`, `ha_add_todo_item`, `ha_update_todo_item` (tick off,
+  rename, due), `ha_remove_todo_items`.
+- Adding/changing is control level (writes + domain `calendar`/`todo` allowed), deleting needs the delete level;
+  writes to unknown calendars or lists are refused instead of reported as done. No calendar integration = no
+  calendars (not an error). New WS gate class for data actions (`calendar/event/update`).
+
 ## 0.19.0 – 2026-10-25
 
 - **Helpers**: `ha_create_helper` also creates `input_button`, `counter`, `timer` and `schedule`;

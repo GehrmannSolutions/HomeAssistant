@@ -25,7 +25,8 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_history", "ha_get_statistics", "ha_list_statistic_ids", "ha_list_repairs",
                         "ha_get_system_health", "ha_render_template", "ha_test_condition", "ha_find_usages",
                         "ha_get_overview", "ha_list_labels", "ha_get_label", "ha_list_categories", "ha_list_zones",
-                        "ha_get_entity_registry", "ha_list_helper_types"})
+                        "ha_get_entity_registry", "ha_list_helper_types", "ha_list_calendars",
+                        "ha_get_calendar_events", "ha_list_todo_lists", "ha_get_todo_items"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -39,12 +40,15 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_start_integration_reconfigure", "ha_update_integration", "ha_set_integration_disabled",
                          "ha_undo_change", "ha_create_label", "ha_update_label", "ha_delete_label",
                          "ha_create_category", "ha_update_category", "ha_delete_category", "ha_create_zone",
-                         "ha_update_zone", "ha_delete_zone", "ha_rename_entity"})
-CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script"})
+                         "ha_update_zone", "ha_delete_zone", "ha_rename_entity", "ha_create_calendar_event",
+                         "ha_update_calendar_event", "ha_delete_calendar_event", "ha_add_todo_item",
+                         "ha_update_todo_item", "ha_remove_todo_items"})
+CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
+                           "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
                           "ha_delete_integration", "ha_delete_backup", "ha_delete_area", "ha_delete_floor",
                           "ha_delete_scene", "ha_delete_script", "ha_delete_label", "ha_delete_category",
-                          "ha_delete_zone",
+                          "ha_delete_zone", "ha_delete_calendar_event", "ha_remove_todo_items",
                           # an undo may remove what a change created, so it never runs without a card unless
                           # deletes may run without one
                           "ha_undo_change"})
@@ -138,6 +142,11 @@ TOOL_TOPICS = (
     (r"template|jinja|bedingung|condition", {"ha_render_template", "ha_test_condition"}),
     (r"wo (?:wird|ist|kommt)|verwendet|benutzt|genutzt|vorkommt|referenz|abh[äa]ngig|umbenenn",
      {"ha_find_usages"}),
+    (r"kalender|termin|calendar|veranstaltung|geburtstag|urlaub|morgen|n[äa]chste woche|wochenende|wann (?:ist|habe)",
+     {"ha_list_calendars", "ha_get_calendar_events", "ha_create_calendar_event", "ha_update_calendar_event",
+      "ha_delete_calendar_event"}),
+    (r"to.?do|aufgabe|einkauf|liste|erledig|abhaken|besorgen|kaufen|notier",
+     {"ha_list_todo_lists", "ha_get_todo_items", "ha_add_todo_item", "ha_update_todo_item", "ha_remove_todo_items"}),
     (r"label|etikett|schlagwort|markier|kategori",
      {"ha_list_labels", "ha_get_label", "ha_list_categories", "ha_create_label", "ha_update_label",
       "ha_delete_label", "ha_create_category", "ha_update_category", "ha_delete_category",
