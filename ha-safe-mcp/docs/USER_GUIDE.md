@@ -114,19 +114,19 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.21.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.22.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 52 | 52 | 0 |
-   | Steuern | 59 | 52 | 7 |
-   | Konfiguration ändern | 95 | 52 | 43 |
-   | Löschen | 112 | 52 | 60 |
+   | Nur lesen | 55 | 55 | 0 |
+   | Steuern | 62 | 55 | 7 |
+   | Konfiguration ändern | 102 | 55 | 47 |
+   | Löschen | 121 | 55 | 66 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (52)" and "write/delete
-   tools (43)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (55)" and "write/delete
+   tools (47)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -232,6 +232,21 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Blueprints, themes and dashboard resources
+
+- **Blueprints:** `ha_list_blueprints` (automation, script or template) shows path, name and inputs.
+  `ha_preview_blueprint` lets Home Assistant fetch one from an https URL (GitHub, gist, community forum) and shows
+  name, inputs, validation errors and the YAML without saving. `ha_save_blueprint` saves it (new paths only, no
+  overwriting); use it in an automation with `{"use_blueprint": {"path": "...", "input": {...}}}` via
+  `ha_save_automation`. `ha_delete_blueprint` (delete level) is refused by HA while something uses the blueprint;
+  undo re-imports it from its `source_url`.
+- **Themes:** `ha_list_themes`, `ha_set_theme` (`mode` light or dark; `default` resets, `none` clears the dark
+  theme). Themes themselves are YAML files and cannot be created here.
+- **Dashboard resources** (custom cards): `ha_list_dashboard_resources`, `ha_add_dashboard_resource`,
+  `ha_delete_dashboard_resource` (delete level). Resources run as JavaScript in every user's browser, so only files
+  served by this Home Assistant are accepted (`/local/...`, `/hacsfiles/...`); external URLs are refused.
+- All writes here are journaled and can be undone.
 
 ### Updates, reload and restart
 

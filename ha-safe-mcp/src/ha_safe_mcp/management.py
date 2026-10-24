@@ -27,7 +27,8 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         "test_condition",
                         # organising: labels, categories, zones, one entity registry entry
                         "config/label_registry/list", "config/category_registry/list", "zone/list",
-                        "config/entity_registry/get", "todo/item/list", "update/release_notes"}) | frozenset(
+                        "config/entity_registry/get", "todo/item/list", "update/release_notes",
+                        "blueprint/list", "frontend/get_themes", "lovelace/resources"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
                          "config/area_registry/create", "config/area_registry/update",
@@ -36,12 +37,14 @@ WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "
                          "lovelace/dashboards/update", "config/entity_registry/update",
                          "config/label_registry/create", "config/label_registry/update",
                          "config/category_registry/create", "config/category_registry/update",
-                         "zone/create", "zone/update"}) | frozenset(
+                         "zone/create", "zone/update", "blueprint/import", "blueprint/save",
+                         "lovelace/resources/create"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
 DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
                           "config/area_registry/delete", "config/floor_registry/delete",
                           "config/entity_registry/remove", "config/label_registry/delete",
-                          "config/category_registry/delete", "zone/delete", "calendar/event/delete"}) | frozenset(
+                          "config/category_registry/delete", "zone/delete", "calendar/event/delete",
+                          "blueprint/delete", "lovelace/resources/delete"}) | frozenset(
                               f"{domain}/delete" for domain in HELPERS)
 
 

@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.22.0 – 2026-10-25
+
+- **Blueprints**: `ha_list_blueprints`, `ha_preview_blueprint` (HA fetches from an https URL, nothing saved),
+  `ha_save_blueprint` (new path only), `ha_delete_blueprint` (delete level; undo re-imports from source_url).
+- **Themes**: `ha_list_themes`, `ha_set_theme` (light/dark default, journaled).
+- **Dashboard resources**: `ha_list_dashboard_resources`, `ha_add_dashboard_resource` (only `/local/` and
+  `/hacsfiles/` paths: resources run in every user's browser), `ha_delete_dashboard_resource` (delete level).
+- Journal kinds `blueprint`, `theme`, `resource`. Verified on the dev HA with the official motion light blueprint
+  fetched from GitHub; prod read-only.
+
 ## 0.21.0 – 2026-10-25
 
 - **Updates**: `ha_list_updates`, `ha_get_release_notes`, `ha_skip_update` (admin), `ha_install_update` (delete

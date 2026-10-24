@@ -20,7 +20,7 @@ MAX_ENTRIES = 1000
 CHANGE_ID = re.compile(r"^\d{8}T\d{12}Z-[0-9a-f]{8}$")
 STAMP = "%Y%m%dT%H%M%S%fZ"
 KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "helper", "entity", "area", "floor",
-         "device", "integration", "label", "category", "zone")
+         "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
 AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
@@ -143,10 +143,11 @@ def _pick(item: dict | None, keys) -> dict | None:
 class Changes:
     """Journaled writes and undo over the gated admin/scenes/registry/integrations objects."""
 
-    def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None):
+    def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None,
+                 customize=None):
         self.journal = journal
         self.admin, self.scenes, self.registry, self.integrations = admin, scenes, registry, integrations
-        self.organizer = organizer
+        self.organizer, self.customize = organizer, customize
 
     # ------------------------------------------------------------------ read the current state
     async def _or_none(self, reader: Callable[[], Awaitable[Any]]):
@@ -207,6 +208,15 @@ class Changes:
             return before
         if kind == "zone":
             return _pick(await self.organizer.find_zone(target), ZONE_FIELDS)
+        if kind == "blueprint":
+            domain, path = target.split("/", 1)
+            meta = await self.customize.find_blueprint(domain, path)
+            return None if meta is None else {"source_url": meta.get("source_url")}
+        if kind == "theme":
+            themes = await self.customize.list_themes()
+            return {"name": themes["default_dark_theme" if target == "dark" else "default_theme"]}
+        if kind == "resource":
+            return _pick(await self.customize.find_resource(target), ("url", "type"))
         if kind == "area":
             item = next((a for a in await self.registry.list_areas() if a.get("area_id") == target), None)
             return _pick(item, AREA_FIELDS)
@@ -341,6 +351,21 @@ class Changes:
             return await self._restore_category(target, before)
         if kind == "zone":
             return await self._restore_zone(target, before)
+        if kind == "blueprint":
+            domain, path = target.split("/", 1)
+            if before is None:
+                return await self.customize.delete_blueprint(domain, path), target
+            if not before.get("source_url"):
+                raise ValueError("this blueprint had no source_url, so it cannot be re-imported")
+            return await self.customize.save_blueprint(before["source_url"], path), target
+        if kind == "theme":
+            name = before.get("name") or ("none" if target == "dark" else "default")
+            return await self.customize.set_theme(name, target), target
+        if kind == "resource":
+            if before is None:
+                return await self.customize.delete_resource(target), target
+            created = await self.customize.add_resource(before["url"], before.get("type") or "module")
+            return created, created["id"]
         raise ValueError("unknown change kind")
 
     async def _restore_label(self, target: str, before):

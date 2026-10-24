@@ -211,6 +211,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .organize import HAOrganizer
     from .planner import HAPlanner
     from .system import HASystem
+    from .customize import HACustomize
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -222,12 +223,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     organizer = HAOrganizer(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     planner = HAPlanner(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     system = HASystem(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    customize = HACustomize(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
     overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
-                      integrations=integrations, organizer=organizer)
+                      integrations=integrations, organizer=organizer, customize=customize)
 
     async def journaled(tool_name: str, kind: str, target, writer, **options):
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
@@ -430,6 +432,62 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         except (RuntimeError, ValueError) as exc:
             result["references_to_old_id"] = f"not checked: {exc}"
         return result
+
+    @tool()
+    async def ha_list_blueprints(domain: str = "automation") -> list[dict]:
+        """Blueprints of a domain ('automation', 'script', 'template') with path, name, inputs and source_url.
+        Use one in an automation with {"use_blueprint": {"path": ..., "input": {...}}} via ha_save_automation."""
+        return await customize.list_blueprints(domain)
+
+    @tool()
+    async def ha_preview_blueprint(url: str) -> dict:
+        """Let Home Assistant fetch a blueprint from an https URL and show name, inputs, validation errors and the
+        YAML without saving it. Admin write required."""
+        return await customize.preview_blueprint(url)
+
+    @tool()
+    async def ha_save_blueprint(url: str, path: str | None = None) -> dict:
+        """Import a blueprint from an https URL and save it (default path as suggested by HA; existing blueprints are
+        not overwritten). Journaled: undo deletes it again. Admin write required."""
+        return await journaled("ha_save_blueprint", "blueprint", None, lambda: customize.save_blueprint(url, path),
+                               target_from=lambda saved: f"{saved['domain']}/{saved['path']}")
+
+    @tool()
+    async def ha_delete_blueprint(domain: str, path: str) -> dict:
+        """Delete a blueprint (HA refuses while automations or scripts use it); undo re-imports it from its
+        source_url. Admin write and delete required."""
+        return await journaled("ha_delete_blueprint", "blueprint", f"{domain}/{path}",
+                               lambda: customize.delete_blueprint(domain, path))
+
+    @tool()
+    async def ha_list_themes() -> dict:
+        """Installed frontend themes and the default (dark) theme."""
+        return await customize.list_themes()
+
+    @tool()
+    async def ha_set_theme(name: str, mode: str = "light") -> dict:
+        """Set the default frontend theme for light or dark mode ('default' resets light mode, 'none' clears the
+        dark theme). Journaled. Admin write required."""
+        return await journaled("ha_set_theme", "theme", mode if mode in ("light", "dark") else "light",
+                               lambda: customize.set_theme(name, mode))
+
+    @tool()
+    async def ha_list_dashboard_resources() -> list[dict]:
+        """Dashboard resources (custom cards: JavaScript/CSS files loaded by the frontend) with id, url and type."""
+        return await customize.list_resources()
+
+    @tool()
+    async def ha_add_dashboard_resource(url: str, res_type: str = "module") -> dict:
+        """Register a custom card file served by this Home Assistant ('/local/...' or '/hacsfiles/...'; external
+        URLs are refused because resources run in every user's browser). Journaled. Admin write required."""
+        return await journaled("ha_add_dashboard_resource", "resource", None,
+                               lambda: customize.add_resource(url, res_type), target_from=lambda added: added["id"])
+
+    @tool()
+    async def ha_delete_dashboard_resource(resource_id: str) -> dict:
+        """Remove a dashboard resource (undo registers it again). Admin write and delete required."""
+        return await journaled("ha_delete_dashboard_resource", "resource", resource_id,
+                               lambda: customize.delete_resource(resource_id))
 
     @tool()
     async def ha_list_updates(pending_only: bool = True) -> list[dict]:
