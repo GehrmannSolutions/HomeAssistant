@@ -255,11 +255,17 @@
         <label>Modell
           <select name="ollama_model" required></select>
         </label>
-        <div class="switches">
+        <div class="switches levels">
           <label class="switch"><input type="checkbox" name="allow_write"> <span>Steuern erlauben</span></label>
+          <label class="switch auto"><input type="checkbox" name="auto_write"> <span>ohne Freigabe ausführen</span></label>
           <label class="switch"><input type="checkbox" name="allow_admin_write"> <span>Konfiguration ändern erlauben</span></label>
+          <label class="switch auto"><input type="checkbox" name="auto_admin_write"> <span>ohne Freigabe ausführen</span></label>
           <label class="switch"><input type="checkbox" name="allow_delete"> <span>Löschen erlauben</span></label>
+          <label class="switch auto"><input type="checkbox" name="auto_delete"> <span>ohne Freigabe ausführen</span></label>
         </div>
+        <p class="muted small">„Erlauben“: das Modell darf diese Aktionen vorschlagen, jede braucht deine Freigabe-Karte.
+          „Ohne Freigabe“: zusätzlich sofort ausführen; die Aktion steht trotzdem im Chat und im Protokoll. Im Chat
+          bleibt das Häkchen „Aktionen erlauben“ nötig.</p>
         <label>Erlaubte Domains für Steuerbefehle
           <input name="allowed_domains" spellcheck="false">
         </label>

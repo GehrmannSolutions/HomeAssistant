@@ -14,6 +14,7 @@ from pydantic import Field
 
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 ENTITY = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
+MAX_TARGETS = 20
 DEFAULT_DOMAINS = frozenset({"light", "switch", "fan", "climate", "cover", "media_player"})
 HelperId = Annotated[str, Field(
     pattern=r"^[a-z][a-z0-9_]{0,63}$",
@@ -127,16 +128,26 @@ class HAClient:
                 and isinstance(item.get("domain"), str)
                 and (not domain or item["domain"] == domain)]
 
-    async def call_service(self, domain: str, service: str, entity_id: str,
+    async def call_service(self, domain: str, service: str, entity_id: str | list[str],
                            service_data: dict | None = None, *, return_response: bool = False) -> list[dict] | dict:
         if not self.allow_write:
             raise ValueError("Writes are disabled; set HA_ALLOW_WRITE=true to enable")
         if domain not in self.allowed_domains:
             raise ValueError("domain not allowed")
-        if not IDENTIFIER.fullmatch(domain) or not IDENTIFIER.fullmatch(service) or not ENTITY.fullmatch(entity_id):
+        if not IDENTIFIER.fullmatch(domain) or not IDENTIFIER.fullmatch(service):
             raise ValueError("invalid domain, service, or entity_id")
-        if not entity_id.startswith(domain + "."):
-            raise ValueError("entity_id domain must match service domain")
+        targets = [entity_id] if isinstance(entity_id, str) else entity_id
+        if not isinstance(targets, list) or not targets:
+            raise ValueError("entity_id must be one entity_id or a non-empty list")
+        if len(targets) > MAX_TARGETS:
+            raise ValueError(f"at most {MAX_TARGETS} entities per call")
+        for target in targets:
+            if not isinstance(target, str) or not ENTITY.fullmatch(target):
+                raise ValueError("invalid domain, service, or entity_id")
+            if not target.startswith(domain + "."):
+                raise ValueError("entity_id domain must match service domain")
+        targets = list(dict.fromkeys(targets))
+        entity_id = targets[0] if len(targets) == 1 else targets
         if service_data is None:
             service_data = {}
         if not isinstance(service_data, dict) or "entity_id" in service_data or "area_id" in service_data or "device_id" in service_data:
@@ -213,9 +224,11 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await client.list_services(domain)
 
     @tool()
-    async def ha_call_service(domain: str, service: str, entity_id: str,
+    async def ha_call_service(domain: str, service: str, entity_id: str | list[str],
                               service_data: dict | None = None) -> list[dict]:
-        """Call an action for one entity; disabled unless HA_ALLOW_WRITE=true; only configured domains allowed."""
+        """Call an action (e.g. light.turn_on) for one entity_id or a list of up to 20 entity_ids of the same
+        domain (e.g. all available lights of a room from ha_list_area_entities). Disabled unless
+        HA_ALLOW_WRITE=true; only configured domains allowed."""
         return await client.call_service(domain, service, entity_id, service_data)
 
     @tool()
@@ -473,6 +486,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_list_floors() -> list[dict]:
         """List floors with floor_id, name and level."""
         return await registry.list_floors()
+
+    @tool()
+    async def ha_list_area_entities(area: str, domain: str = "") -> dict:
+        """Entities of one room: area may be the area_id, its name or an alias (e.g. 'Wohnzimmer'). Follows the
+        device's area like HA does. Returns available/unavailable entity_ids, the entities with state, and groups
+        whose members are in the room. Optional domain filter, e.g. 'light'."""
+        return await registry.list_area_entities(area, domain)
 
     @tool()
     async def ha_list_devices(area_id: str = "", query: str = "", limit: int = 200) -> list[dict]:

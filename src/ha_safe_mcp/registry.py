@@ -83,6 +83,60 @@ class HARegistry:
     async def list_floors(self) -> list[dict]:
         return [{key: item.get(key) for key in FLOOR_FIELDS} for item in await self._list("floor")]
 
+    async def list_area_entities(self, area: str, domain: str = "") -> dict:
+        """Entities in one area, resolved like HA: an entity's own area wins, otherwise its device's area."""
+        if not isinstance(area, str) or not area.strip() or len(area) > 100:
+            raise ValueError("area: area_id, name or alias of a room")
+        if domain and (not isinstance(domain, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", domain)):
+            raise ValueError("invalid domain, e.g. 'light'")
+        areas = await self._list("area")
+        wanted = area.strip().casefold()
+        match = next((a for a in areas if str(a.get("area_id", "")).casefold() == wanted), None) or next(
+            (a for a in areas if str(a.get("name", "")).casefold() == wanted
+             or wanted in (str(alias).casefold() for alias in a.get("aliases") or [])), None)
+        if match is None:
+            names = ", ".join(sorted(str(a.get("name")) for a in areas))
+            raise ValueError(f"unknown area '{area}'; known areas: {names}")
+        area_id = match["area_id"]
+        devices = {d.get("id"): d for d in await self._list("device")}
+        entities = await self._list("entity")
+        states = await self.client._request("GET", "/api/states")
+        if not isinstance(states, list):
+            raise RuntimeError("Unexpected Home Assistant response")
+        state_by_id = {s.get("entity_id"): s for s in states if isinstance(s, dict)}
+        found = []
+        for entry in entities:
+            entity_id = entry.get("entity_id")
+            if not isinstance(entity_id, str) or entry.get("disabled_by") or entry.get("hidden_by"):
+                continue
+            if domain and not entity_id.startswith(domain + "."):
+                continue
+            own = entry.get("area_id")
+            device_area = (devices.get(entry.get("device_id")) or {}).get("area_id")
+            if (own or device_area) != area_id:
+                continue
+            state = state_by_id.get(entity_id) or {}
+            attributes = state.get("attributes") if isinstance(state.get("attributes"), dict) else {}
+            found.append({"entity_id": entity_id, "name": attributes.get("friendly_name"),
+                          "state": state.get("state", "unknown")})
+        found.sort(key=lambda item: item["entity_id"])
+        in_area = {item["entity_id"] for item in found}
+        groups = []
+        for state in states:
+            members = (state.get("attributes") or {}).get("entity_id") if isinstance(state, dict) else None
+            entity_id = state.get("entity_id") if isinstance(state, dict) else None
+            if (isinstance(members, list) and members and isinstance(entity_id, str)
+                    and (not domain or entity_id.startswith(domain + "."))
+                    and all(member in in_area for member in members)):
+                groups.append({"entity_id": entity_id, "name": state["attributes"].get("friendly_name"),
+                               "members": members})
+        group_ids = {group["entity_id"] for group in groups}
+        down = {"unavailable", "unknown"}
+        return {"area_id": area_id, "name": match.get("name"), "entities": found,
+                "available": [i["entity_id"] for i in found if i["state"] not in down and i["entity_id"] not in group_ids],
+                "unavailable": [i["entity_id"] for i in found if i["state"] in down],
+                "groups": sorted(groups, key=lambda g: g["entity_id"])}
+
     @staticmethod
     def _device(item: dict) -> dict:
         return {"device_id": item.get("id"), **{key: item.get(key) for key in DEVICE_FIELDS}}

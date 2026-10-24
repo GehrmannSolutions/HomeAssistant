@@ -43,7 +43,7 @@ Nichts davon liegt im Repository. Für ein Backup des MCP-Rechners die drei Ordn
 | Entity Registry | `ha_list_entity_registry` | `ha_update_entity_registry` (Name/Bereich/Icon) | — |
 | Szenen | `ha_list_scenes`, `ha_get_scene` | `ha_save_scene` (Rücklesung, vorherige Fassung), `ha_activate_scene` (Domain `scene` nötig) | `ha_delete_scene` |
 | Skripte | `ha_list_scripts`, `ha_get_script` | `ha_save_script` (HA-Validierung + Dienstprüfung), `ha_run_script` (Domain `script` nötig) | `ha_delete_script` |
-| Bereiche, Etagen, Geräte | `ha_list_areas`, `ha_list_floors`, `ha_list_devices` | `ha_create_area`, `ha_update_area`, `ha_create_floor`, `ha_update_floor`, `ha_update_device` (Bereich, Name, deaktivieren) | `ha_delete_area`, `ha_delete_floor` |
+| Bereiche, Etagen, Geräte | `ha_list_areas`, `ha_list_floors`, `ha_list_devices`, `ha_list_area_entities` | `ha_create_area`, `ha_update_area`, `ha_create_floor`, `ha_update_floor`, `ha_update_device` (Bereich, Name, deaktivieren) | `ha_delete_area`, `ha_delete_floor` |
 | Backups | `ha_list_backups` | `ha_create_backup` (lokal, wartet auf Fertigstellung) | `ha_delete_backup` |
 | Integrationen | `ha_list_integrations`, `ha_list_integration_types`, `ha_list_discovered`, `ha_list_credentials` | `ha_start_integration_setup`, `ha_integration_setup_step`, `ha_abort_integration_setup`, `ha_reload_integration`, `ha_start_integration_options`, `ha_integration_options_step`, `ha_abort_integration_options`, `ha_start_integration_reconfigure`, `ha_update_integration`, `ha_set_integration_disabled` | `ha_delete_integration` |
 
@@ -72,9 +72,15 @@ Automation-CRUD nutzt `/api/config/automation/config/{id}`; Dashboard- und Helpe
 - `HA_ALLOW_WRITE=true`: Dienste für einzelne Entitäten in `HA_ALLOWED_DOMAINS` und gewöhnliche REST-Schreibaktionen freigeben.
 - Zusätzlich `HA_ALLOW_ADMIN_WRITE=true`: Automationen, Dashboards, Helper, Registry-Updates sowie administrative REST-Schreibaktionen. Der HA-Token muss Admin-Rechte haben.
 - Zusätzlich `HA_ALLOW_DELETE=true`: Löschwerkzeuge/-routen freigeben. Die beiden anderen Schalter bleiben erforderlich.
+- **Ohne Freigabe** (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE`, in der Oberfläche „ohne Freigabe
+  ausführen“ je Stufe): Aktionen dieser Stufe laufen im Chat ohne Freigabe-Karte; sie erscheinen trotzdem als
+  „Aktion ohne Freigabe“ im Verlauf und im Protokoll. Gilt nur zusammen mit dem jeweiligen Erlauben-Schalter und dem
+  Chat-Häkchen „Aktionen erlauben“; eine Obergrenze (`--max-level`) gilt auch hier.
 - **Ollama-Client zusätzlich:** `--allow-write` und manuelles `JA` **pro Tool-Aufruf**; in der Weboberfläche entsprechend „Aktionen erlauben“ und **Ausführen** auf der Freigabe-Karte. Andere MCP-Clients müssen eigene menschliche Freigaben durchsetzen; Server-Schalter allein stellen keine Nutzerbestätigung dar.
 
-`ha_call_service` beschränkt Ziel-Domains standardmäßig auf `light,switch,fan,climate,cover,media_player`, erfordert eine konkrete Einzel-Entität und verbietet zusätzliche Targets. Der explizite REST-Katalog hat dagegen eigene Berechtigungsklassen und kein willkürliches URL-Schema. Ein HA-Admin-Token besitzt trotzdem weitreichende Rechte; diese Adapter-Checks ersetzen **keine** Home-Assistant-Autorisierung. Der stdio-Server darf nicht ungeschützt ans Netzwerk. Token und Response-Bodies werden in Fehlern nicht ausgegeben.
+`ha_call_service` beschränkt Ziel-Domains standardmäßig auf `light,switch,fan,climate,cover,media_player`, nimmt eine `entity_id` oder eine Liste von bis zu 20 `entity_id` derselben Domain (jede einzeln geprüft) und
+verbietet zusätzliche Targets wie `area_id`/`device_id`. Räume löst `ha_list_area_entities` auf (Name, Alias oder
+`area_id`; Geräte-Bereich wie in HA), mit verfügbaren und nicht verfügbaren Entitäten und Gruppen des Raums. Der explizite REST-Katalog hat dagegen eigene Berechtigungsklassen und kein willkürliches URL-Schema. Ein HA-Admin-Token besitzt trotzdem weitreichende Rechte; diese Adapter-Checks ersetzen **keine** Home-Assistant-Autorisierung. Der stdio-Server darf nicht ungeschützt ans Netzwerk. Token und Response-Bodies werden in Fehlern nicht ausgegeben.
 
 ### Zweite Instanz nur lesend (z. B. Produktiv-HA)
 

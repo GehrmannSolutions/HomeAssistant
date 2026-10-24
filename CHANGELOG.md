@@ -3,6 +3,15 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.10.0 – 2026-10-24
+
+- **Ohne Freigabe pro Stufe**: neben „Steuern/Konfiguration ändern/Löschen erlauben“ (Freigabe-Karte je Aktion) je
+  ein Schalter „ohne Freigabe ausführen“ (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE`). Solche Aktionen
+  erscheinen als „Aktion ohne Freigabe“ im Chat und im Protokoll; das Chat-Häkchen bleibt Pflicht.
+- **Mehrere Entitäten pro Aufruf**: `ha_call_service` nimmt eine Liste von bis zu 20 `entity_id` derselben Domain.
+- **Räume**: neues Tool `ha_list_area_entities` (Name/Alias/ID, Geräte-Bereich wie in HA, verfügbare/nicht verfügbare
+  Entitäten, Gruppen). Systemhinweis: Mehrzahl = alle verfügbaren Entitäten des Raums in einem Aufruf, ohne Rückfrage.
+
 ## 0.9.2 – 2026-10-24
 
 - **`--max-level control`**: Zwischenstufe für Produktiv-Instanzen; nur „Steuern“ lässt sich einschalten,

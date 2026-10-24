@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 
 from .config_store import Settings
+from .ollama_client import write_level
 
 Runner = Callable[..., Awaitable[str]]
 MAX_EVENTS = 500
@@ -45,10 +46,11 @@ def friendly_error(error: BaseException) -> str:
 
 
 class ChatRun:
-    def __init__(self, manager: "RunManager", allow_write: bool):
+    def __init__(self, manager: "RunManager", allow_write: bool, auto_levels: frozenset[str] = frozenset()):
         self.id = secrets.token_urlsafe(12)
         self.manager = manager
         self.allow_write = allow_write
+        self.auto_levels = auto_levels
         self.events: list[dict] = []
         self.pending: dict[str, asyncio.Future] = {}
         self.finished = False
@@ -94,6 +96,11 @@ class ChatRun:
     async def approve(self, name: str, arguments: dict) -> bool:
         if not self.allow_write:
             return False
+        level = write_level(name)
+        if level is not None and level in self.auto_levels:
+            # "enabled" level: no card, but every action stays visible in the chat and the audit log
+            await self.emit({"type": "auto_approved", "name": name, "arguments": arguments, "level": level})
+            return True
         approval_id = secrets.token_urlsafe(9)
         future = asyncio.get_running_loop().create_future()
         self.pending[approval_id] = future
@@ -133,7 +140,7 @@ class RunManager:
     def start(self, settings: Settings, prompt: str, history: list[dict], *, allow_write: bool) -> ChatRun:
         if self.active is not None and not self.active.finished:
             raise RunBusy("Es läuft bereits eine Anfrage")
-        run = ChatRun(self, allow_write)
+        run = ChatRun(self, allow_write, frozenset(settings.auto_levels()) if allow_write else frozenset())
         self.runs[run.id] = run
         while len(self.runs) > self.keep:
             oldest = next(iter(self.runs))

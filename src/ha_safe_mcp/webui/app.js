@@ -109,6 +109,7 @@ function renderModePill() {
   if (settings.allow_delete) text = "Löschen erlaubt";
   else if (settings.allow_admin_write) text = "Konfiguration erlaubt";
   else if (settings.allow_write) text = capped ? "Steuern erlaubt (max.)" : "Steuern erlaubt";
+  if (settings.auto_write || settings.auto_admin_write || settings.auto_delete) text += " · teils ohne Freigabe";
   pill.textContent = text;
   pill.classList.toggle("write", Boolean(settings.allow_write));
   pill.hidden = false;
@@ -342,6 +343,9 @@ function fillSettings() {
   form.elements.allow_write.checked = settings.allow_write;
   form.elements.allow_admin_write.checked = settings.allow_admin_write;
   form.elements.allow_delete.checked = settings.allow_delete;
+  form.elements.auto_write.checked = Boolean(settings.auto_write);
+  form.elements.auto_admin_write.checked = Boolean(settings.auto_admin_write);
+  form.elements.auto_delete.checked = Boolean(settings.auto_delete);
   form.elements.allowed_domains.value = settings.allowed_domains.join(",");
   fillModelSelect(form.elements.ollama_model, app.models, settings.ollama_model);
   if (!app.models.length) loadModels(form, $("[data-action='load-models']", form));
@@ -352,22 +356,32 @@ function fillSettings() {
 function syncSettingsSwitches() {
   const form = $("#settings-form");
   const { allow_write: write, allow_admin_write: admin, allow_delete: del } = form.elements;
+  const autos = [[write, form.elements.auto_write], [admin, form.elements.auto_admin_write], [del, form.elements.auto_delete]];
+  const syncAutos = () => { for (const [allow, auto] of autos) { auto.disabled = !allow.checked || allow.disabled; if (auto.disabled) auto.checked = false; } };
   if (app.status && app.status.read_only) {
     for (const box of [write, admin, del]) { box.checked = false; box.disabled = true; }
+    syncAutos();
     return;
   }
   write.disabled = false;
   if (app.status && app.status.max_level === "control") {
     for (const box of [admin, del]) { box.checked = false; box.disabled = true; }
+    syncAutos();
     return;
   }
   admin.disabled = !write.checked; if (!write.checked) admin.checked = false;
   del.disabled = !admin.checked; if (!admin.checked) del.checked = false;
+  syncAutos();
 }
 
 function initSettings() {
   const form = $("#settings-form");
   for (const name of ["allow_write", "allow_admin_write", "allow_delete"]) form.elements[name].addEventListener("change", syncSettingsSwitches);
+  for (const name of ["auto_write", "auto_admin_write", "auto_delete"]) {
+    form.elements[name].addEventListener("change", (event) => {
+      if (event.target.checked && !window.confirm("Aktionen dieser Stufe werden dann ohne Freigabe-Karte sofort ausgeführt. Einschalten?")) event.target.checked = false;
+    });
+  }
   $("[data-action='load-models']", form).addEventListener("click", (event) => loadModels(form, event.currentTarget));
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -377,6 +391,8 @@ function initSettings() {
       ollama_url: form.elements.ollama_url.value.trim(), ollama_model: form.elements.ollama_model.value,
       allow_write: form.elements.allow_write.checked, allow_admin_write: form.elements.allow_admin_write.checked,
       allow_delete: form.elements.allow_delete.checked, allowed_domains: domainsFrom(form.elements.allowed_domains.value),
+      auto_write: form.elements.auto_write.checked, auto_admin_write: form.elements.auto_admin_write.checked,
+      auto_delete: form.elements.auto_delete.checked,
     };
     busy(button, true, "Prüfe und speichere …");
     try {
@@ -660,6 +676,10 @@ const chat = {
                    name: event.name, args: event.arguments, state: "pending", deadline: Date.now() + event.timeout * 1000 });
         if (app.view !== "chat") this.openBubble();
         return;
+      case "auto_approved":
+        this.typing = "Führe aus (ohne Freigabe)";
+        this.add({ kind: "approval", name: event.name, args: event.arguments, state: "auto", level: event.level });
+        return;
       case "approval_resolved": {
         const approval = this.items.find((item) => item.kind === "approval" && item.approvalId === event.approval_id);
         if (approval) approval.state = event.approved ? "approved" : event.reason === "timeout" ? "timeout" : "rejected";
@@ -758,12 +778,13 @@ const chat = {
     if (item.kind === "approval") {
       const pending = item.state === "pending";
       const stateText = {
-        approved: "✓ Freigegeben", rejected: "✕ Abgelehnt", timeout: "⏱ Zeit abgelaufen – nicht ausgeführt",
+        approved: "✓ Freigegeben", auto: "⚡ Ohne Freigabe ausgeführt (Einstellung)", rejected: "✕ Abgelehnt", timeout: "⏱ Zeit abgelaufen – nicht ausgeführt",
         expired: "Nicht mehr offen", "sending-yes": "Sende Freigabe …", "sending-no": "Sende Ablehnung …",
       }[item.state];
-      return el("div", { class: "approval" },
-        el("h4", {}, "Freigabe erforderlich"),
-        el("div", {}, "Das Modell möchte folgende Aktion ausführen:"),
+      const auto = item.state === "auto";
+      return el("div", { class: `approval${auto ? " auto" : ""}` },
+        el("h4", {}, auto ? "Aktion ohne Freigabe" : "Freigabe erforderlich"),
+        el("div", {}, auto ? "Das Modell führt diese Aktion aus:" : "Das Modell möchte folgende Aktion ausführen:"),
         el("pre", {}, `${item.name}\n${argsText(item.args)}`),
         pending
           ? el("div", { class: "actions" },

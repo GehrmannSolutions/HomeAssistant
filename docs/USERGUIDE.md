@@ -163,6 +163,17 @@ Ein Modell darf nur dann Schreib-Tools vorschlagen, wenn **beides** gilt: „Ste
 - **Ablehnen** führt nichts aus; der Chat meldet „Schreibaktion nicht freigegeben – diese Aktion wurde nicht ausgeführt.“
 - Ohne Entscheidung verfällt die Freigabe nach **120 Sekunden** als Ablehnung. **Stopp** lehnt offene Freigaben ebenfalls ab.
 
+**Ohne Freigabe:** In den Einstellungen hat jede Stufe (Steuern, Konfiguration ändern, Löschen) zusätzlich den
+Schalter **ohne Freigabe ausführen**. „Erlauben“ heißt: das Modell darf vorschlagen, jede Aktion braucht die Karte.
+„Ohne Freigabe“ heißt: Aktionen dieser Stufe laufen sofort; im Chat steht dann „Aktion ohne Freigabe“ mit den
+vollständigen Argumenten, im Protokoll der Aufruf. Das Häkchen **Aktionen erlauben** im Chat bleibt Pflicht. Beispiel:
+Steuern ohne Freigabe, Konfiguration und Löschen mit Karte.
+
+**Mehrere Geräte auf einmal:** „Schalte die Lampen im Wohnzimmer ein“ führt zu `ha_list_area_entities` mit
+`{"area":"Wohnzimmer","domain":"light"}` und dann zu **einem** `ha_call_service` mit allen verfügbaren Lampen als
+Liste, also einer Karte (oder keiner, wenn Steuern ohne Freigabe läuft). Nicht erreichbare Lampen werden genannt, nicht
+geschaltet; eine Gruppe wird nicht zusätzlich zu ihren Mitgliedern geschaltet.
+
 Wie beim `JA` im CLI gilt: Die Freigabe bestätigt den **angezeigten Payload**, keine allgemeine Erlaubnis. Entity-ID und Dienst vor dem Klick prüfen; ein Modell kann IDs erfinden.
 
 ### 7.4 Sicherheit der Weboberfläche

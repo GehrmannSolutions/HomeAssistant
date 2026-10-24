@@ -15,7 +15,7 @@ DOMAIN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 TOKEN_CHARS = re.compile(r"^[A-Za-z0-9._~+/=-]{20,4096}$")
 ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_ALLOW_DELETE",
-            "HA_ALLOWED_DOMAINS", "OLLAMA_URL", "OLLAMA_MODEL")
+            "HA_AUTO_WRITE", "HA_AUTO_ADMIN_WRITE", "HA_AUTO_DELETE", "HA_ALLOWED_DOMAINS", "OLLAMA_URL", "OLLAMA_MODEL")
 
 
 class SetupError(ValueError):
@@ -47,6 +47,10 @@ class Settings:
     allow_write: bool = False
     allow_admin_write: bool = False
     allow_delete: bool = False
+    # "enabled" per level: run that level's chat actions without an approval card (only on top of allow_*)
+    auto_write: bool = False
+    auto_admin_write: bool = False
+    auto_delete: bool = False
     allowed_domains: tuple[str, ...] = DEFAULT_DOMAINS
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5-coder:7b"
@@ -58,8 +62,16 @@ class Settings:
     def public(self) -> dict:
         return {"ha_url": self.ha_url, "token_set": self.configured, "allow_write": self.allow_write,
                 "allow_admin_write": self.allow_admin_write, "allow_delete": self.allow_delete,
-                "allowed_domains": list(self.allowed_domains), "ollama_url": self.ollama_url,
+                "auto_write": self.auto_write, "auto_admin_write": self.auto_admin_write,
+                "auto_delete": self.auto_delete, "allowed_domains": list(self.allowed_domains), "ollama_url": self.ollama_url,
                 "ollama_model": self.ollama_model}
+
+    def auto_levels(self) -> set[str]:
+        """Levels whose chat actions run without an approval card; each needs its allow switch too."""
+        return {level for level, allowed, auto in (("control", self.allow_write, self.auto_write),
+                                                   ("admin", self.allow_admin_write, self.auto_admin_write),
+                                                   ("delete", self.allow_delete, self.auto_delete))
+                if allowed and auto}
 
     def mcp_env(self) -> dict[str, str]:
         """Exactly the variables the MCP server reads; nothing else reaches the child process."""
@@ -109,9 +121,20 @@ def merge_settings(current: Settings, data: dict) -> Settings:
         raise SetupError("Konfigurationsänderungen setzen 'Steuern erlauben' voraus")
     if allow_delete and not allow_admin:
         raise SetupError("Löschen setzt 'Konfiguration ändern erlauben' voraus")
+    autos = {}
+    for key, allowed, label in (("auto_write", allow_write, "Steuern"),
+                                ("auto_admin_write", allow_admin, "Konfiguration ändern"),
+                                ("auto_delete", allow_delete, "Löschen")):
+        if key in data:
+            value = _flag(data[key])
+            if value and not allowed:
+                raise SetupError(f"'Ohne Freigabe' setzt '{label} erlauben' voraus")
+            autos[key] = value
+        else:
+            autos[key] = getattr(current, key) and allowed
     return replace(current, ha_url=ha_url, ha_token=token, ollama_url=ollama_url, ollama_model=model,
                    allowed_domains=domains, allow_write=allow_write, allow_admin_write=allow_admin,
-                   allow_delete=allow_delete)
+                   allow_delete=allow_delete, **autos)
 
 
 def _as_bool(value) -> bool:
@@ -151,11 +174,15 @@ class SettingsStore:
         domains = tuple(item.strip() for item in (values.get("HA_ALLOWED_DOMAINS") or "").split(",") if item.strip())
         control = self.max_level != "read"
         full = self.max_level == "full"
+        allow_write = control and _as_bool(values.get("HA_ALLOW_WRITE"))
+        allow_admin = full and allow_write and _as_bool(values.get("HA_ALLOW_ADMIN_WRITE"))
+        allow_delete = full and allow_admin and _as_bool(values.get("HA_ALLOW_DELETE"))
         return Settings(ha_url=(values.get("HA_URL") or defaults.ha_url).strip().rstrip("/"),
                         ha_token="" if token == PLACEHOLDER_TOKEN else token,
-                        allow_write=control and _as_bool(values.get("HA_ALLOW_WRITE")),
-                        allow_admin_write=full and _as_bool(values.get("HA_ALLOW_ADMIN_WRITE")),
-                        allow_delete=full and _as_bool(values.get("HA_ALLOW_DELETE")),
+                        allow_write=allow_write, allow_admin_write=allow_admin, allow_delete=allow_delete,
+                        auto_write=allow_write and _as_bool(values.get("HA_AUTO_WRITE")),
+                        auto_admin_write=allow_admin and _as_bool(values.get("HA_AUTO_ADMIN_WRITE")),
+                        auto_delete=allow_delete and _as_bool(values.get("HA_AUTO_DELETE")),
                         allowed_domains=domains or defaults.allowed_domains,
                         ollama_url=(values.get("OLLAMA_URL") or defaults.ollama_url).strip().rstrip("/"),
                         ollama_model=(values.get("OLLAMA_MODEL") or defaults.ollama_model).strip())
@@ -172,6 +199,9 @@ class SettingsStore:
                   "HA_ALLOW_WRITE": flag(settings.allow_write),
                   "HA_ALLOW_ADMIN_WRITE": flag(settings.allow_admin_write),
                   "HA_ALLOW_DELETE": flag(settings.allow_delete),
+                  "HA_AUTO_WRITE": flag(settings.auto_write and settings.allow_write),
+                  "HA_AUTO_ADMIN_WRITE": flag(settings.auto_admin_write and settings.allow_admin_write),
+                  "HA_AUTO_DELETE": flag(settings.auto_delete and settings.allow_delete),
                   "HA_ALLOWED_DOMAINS": ",".join(settings.allowed_domains),
                   "OLLAMA_URL": settings.ollama_url, "OLLAMA_MODEL": settings.ollama_model}
         if any("\n" in value or "\r" in value for value in values.values()):

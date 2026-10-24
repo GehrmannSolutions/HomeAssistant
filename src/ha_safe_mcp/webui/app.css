@@ -219,3 +219,7 @@ a.button.ghost:hover { color: var(--text); background: var(--surface-2); }
 a.button.small { padding: 6px 12px; font-size: 0.9rem; }
 .cred-table .row-actions a.button + button { margin-left: 6px; }
 button.primary.small { padding: 6px 12px; font-size: 0.9rem; }
+
+.switches.levels { display: grid; grid-template-columns: max-content max-content; gap: .4rem 1.5rem; align-items: center; }
+.switch.auto span { font-size: .9em; }
+.approval.auto { border-color: var(--warn, #c8a200); }
