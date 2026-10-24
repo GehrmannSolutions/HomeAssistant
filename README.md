@@ -5,7 +5,7 @@ Eigenständiger Home-Assistant-MCP-Server (stdio) mit explizitem REST-Katalog un
 ## Schnellstart mit Weboberfläche
 
 ```bash
-cd /home/user/projects/ha-mcp-local
+cd ha-mcp-local   # Klon dieses Repositorys
 .venv/bin/python -m pip install -e '.[test]'
 .venv/bin/ha-mcp-ui            # http://127.0.0.1:8765/
 ```
@@ -16,7 +16,20 @@ Die **Ersteinrichtung** fragt nacheinander die Home-Assistant-Adresse mit Token 
 
 - **[Userguide](docs/USERGUIDE.md)** – Einrichtung, Token, MCP-/Ollama-Bedienung, sichere Beispiele und Fehlersuche.
 - **[Technische Dokumentation](docs/TECHNISCHE_DOKUMENTATION.md)** – Architektur, API- und Tool-Referenz, Berechtigungen, Tests und Erweiterung.
+- **[Changelog](CHANGELOG.md)** – Versionen und Änderungen.
 - Diese README bleibt der kompakte Einstieg; die beiden Dokumente sind die ausführlichen Nachschlagewerke.
+
+## Lokale Daten
+
+| Was | Ort (Standard) | Rechte | Aufbewahrung |
+|---|---|---|---|
+| Einstellungen und HA-Token | `.env` im Projektordner (git-ignoriert) | 0600 | bis zur Änderung |
+| Zugangsdaten (Fernet-verschlüsselt) und Schlüssel | `~/.config/ha-safe-mcp/credentials/` | 0700/0600 | bis zum Löschen in der UI |
+| Pläne und Skripte aus dem Chat | `~/.local/share/ha-safe-mcp/files/` | 0700/0600 | bis zum Löschen in der UI |
+| Protokoll MCP ↔ HA (nur Metadaten) | `~/.local/state/ha-safe-mcp/audit/` | 0700/0600 | 30 Tage, Löschknopf |
+| Chatverlauf | `localStorage` des Browsers | – | bis „Neu“ |
+
+Nichts davon liegt im Repository. Für ein Backup des MCP-Rechners die drei Ordner unter `~/.config`, `~/.local/share` und `~/.local/state` mitsichern; der Credential-Schlüssel gehört dazu, sonst sind die Zugangsdaten nicht wiederherstellbar.
 
 ## Plan / Build / Run
 
@@ -54,7 +67,7 @@ Automation-CRUD nutzt `/api/config/automation/config/{id}`; Dashboard- und Helpe
 ## Installation und MCP-Client
 
 ```bash
-cd /home/user/projects/ha-mcp-local
+cd ha-mcp-local   # Klon dieses Repositorys
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]'
 cp -n .env.example .env
@@ -67,8 +80,8 @@ cp -n .env.example .env
 {
   "mcpServers": {
     "home-assistant-local": {
-      "command": "/home/user/projects/ha-mcp-local/.venv/bin/ha-safe-mcp",
-      "cwd": "/home/user/projects/ha-mcp-local"
+      "command": "/PFAD/ZU/ha-mcp-local/.venv/bin/ha-safe-mcp",
+      "cwd": "/PFAD/ZU/ha-mcp-local"
     }
   }
 }

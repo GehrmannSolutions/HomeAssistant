@@ -26,7 +26,7 @@ Falls die bereits eingerichtete Testinstanz steht, **nicht neu initialisieren**.
 Im Projektverzeichnis auf **dem Rechner des MCP-Clients**:
 
 ```bash
-cd /home/user/projects/ha-mcp-local
+cd ha-mcp-local   # Klon dieses Repositorys
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .
 cp -n .env.example .env
@@ -58,8 +58,8 @@ Ein Client, der eine `mcpServers`-Konfiguration unterstützt, kann **sinngemäß
 {
   "mcpServers": {
     "home-assistant-local": {
-      "command": "/home/user/projects/ha-mcp-local/.venv/bin/ha-safe-mcp",
-      "cwd": "/home/user/projects/ha-mcp-local"
+      "command": "/PFAD/ZU/ha-mcp-local/.venv/bin/ha-safe-mcp",
+      "cwd": "/PFAD/ZU/ha-mcp-local"
     }
   }
 }
@@ -87,7 +87,7 @@ Optional Ollama gemäß [offizieller Ollama-Dokumentation](https://docs.ollama.c
 ### 7.1 Weboberfläche starten und Ersteinrichtung
 
 ```bash
-cd /home/user/projects/ha-mcp-local
+cd ha-mcp-local   # Klon dieses Repositorys
 .venv/bin/ha-mcp-ui            # dann http://127.0.0.1:8765/ im Browser öffnen
 ```
 
@@ -152,7 +152,7 @@ Die Kommandozeile ist die Alternative ohne Browser:
 
 ```bash
 ollama pull qwen2.5-coder:7b
-cd /home/user/projects/ha-mcp-local
+cd ha-mcp-local   # Klon dieses Repositorys
 .venv/bin/ha-ollama-chat 'Finde verfügbare Licht-Entitäten und nenne nur geprüfte IDs.'
 ```
 

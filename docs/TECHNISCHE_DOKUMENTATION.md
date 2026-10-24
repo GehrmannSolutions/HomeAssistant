@@ -274,7 +274,7 @@ Alle Antworten tragen `Content-Security-Policy` (`default-src 'self'`, keine Inl
 ### 9.1 Lokale Einrichtung und Betrieb
 
 ```bash
-cd /home/user/projects/ha-mcp-local
+cd ha-mcp-local   # Klon dieses Repositorys
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]'
 cp -n .env.example .env
