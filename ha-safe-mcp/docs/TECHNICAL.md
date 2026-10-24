@@ -29,7 +29,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 
 | Source | Responsibility |
 | --- | --- |
-| [`server.py`](../src/ha_safe_mcp/server.py), [`__main__.py`](../src/ha_safe_mcp/__main__.py) | FastMCP registration, stdio entry point, `HAClient`, service-target checks, tool audit wrapper |
+| [`server.py`](../src/ha_safe_mcp/server.py), [`__main__.py`](../src/ha_safe_mcp/__main__.py) | FastMCP registration, stdio entry point, `HAClient`, service-target checks, tool audit wrapper; read-back of action targets (`read_back`, expected states per domain/service) |
 | [`rest_api.py`](../src/ha_safe_mcp/rest_api.py) | Method/path/query catalog, permission classes, response handling |
 | [`management.py`](../src/ha_safe_mcp/management.py) | Authenticated allowlisted WS transport; typed automation, dashboard, helper and entity-registry operations |
 | [`integrations.py`](../src/ha_safe_mcp/integrations.py) | Config-entry HTTP flows and typed WS entry settings; credential-reference resolution and result reduction; helper types (`flow_handlers?type=helper`), entries created by a flow are journaled |
@@ -39,6 +39,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`oauth.py`](../src/ha_safe_mcp/oauth.py), [`webui/oauth.html`](../src/ha_safe_mcp/webui/oauth.html) | OAuth 2.1 authorization server for the remote endpoint: metadata, dynamic registration, consent, PKCE code flow, refresh rotation |
 | [`domains.py`](../src/ha_safe_mcp/domains.py), [`webui/domains.js`](../src/ha_safe_mcp/webui/domains.js) | Domain labels and risk notes; `/api/domains` (read-only states + services of the connected HA) feeding the domain pickers |
 | [`diagnostics.py`](../src/ha_safe_mcp/diagnostics.py) | Read-only debugging: traces, system log, logbook, history, statistics, repairs, system health (WS subscription collected until `finish`), template rendering, condition tests; timestamps converted to HA's time zone |
+| [`weather.py`](../src/ha_safe_mcp/weather.py) | Weather now + forecast from the `weather.get_forecasts` service response (`?return_response`), times in HA's time zone |
 | [`customize.py`](../src/ha_safe_mcp/customize.py) | Blueprints (WS `blueprint/list|import|save|delete`, https URLs only, no overwrite), themes (`frontend/get_themes`, admin service `frontend.set_theme`), dashboard resources (`lovelace/resources[/create|delete]`, same-origin paths only) |
 | [`system.py`](../src/ha_safe_mcp/system.py) | Update entities (states, WS `update/release_notes`, `update.install|skip|clear_skipped`), reload services discovered from `/api/services`, `POST /api/config/core/check_config`, `homeassistant.restart` after a passing check (dropped connection = restarting) |
 | [`planner.py`](../src/ha_safe_mcp/planner.py) | Calendars (REST `/api/calendars`, `calendar.create_event`, WS `calendar/event/update|delete`) and to-do lists (WS `todo/item/list`, `todo.*` services); control-level writes with domain check and existence check, delete level for removals |

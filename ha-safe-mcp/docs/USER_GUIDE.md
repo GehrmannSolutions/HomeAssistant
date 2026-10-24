@@ -114,18 +114,18 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.22.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.23.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 55 | 55 | 0 |
-   | Steuern | 62 | 55 | 7 |
-   | Konfiguration ändern | 102 | 55 | 47 |
-   | Löschen | 121 | 55 | 66 |
+   | Nur lesen | 56 | 56 | 0 |
+   | Steuern | 63 | 56 | 7 |
+   | Konfiguration ändern | 103 | 56 | 47 |
+   | Löschen | 122 | 56 | 66 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (55)" and "write/delete
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (56)" and "write/delete
    tools (47)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
@@ -232,6 +232,17 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Switching results and weather
+
+- **`ha_call_service` reads the targets back** for about 3 seconds after the call and returns `states_after` with
+  `confirmed` per entity: true when the expected state was reached (on/off, open(ing)/closed/closing,
+  locked/unlocked, the requested HVAC mode, ...), false when not (slow, moving or offline device: the answer should
+  say so instead of claiming success), `null` for actions without a single expected result (toggle, set values).
+  `all_confirmed` summarises them.
+- **`ha_get_weather_forecast`**: current weather and the forecast (`daily`, `hourly` or `twice_daily`) of a weather
+  entity, read from HA's `weather.get_forecasts` service response (forecasts are no longer state attributes). Times
+  are in HA's time zone. Read-only.
 
 ### Blueprints, themes and dashboard resources
 

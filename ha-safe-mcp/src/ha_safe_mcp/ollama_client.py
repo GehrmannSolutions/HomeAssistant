@@ -28,7 +28,7 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_entity_registry", "ha_list_helper_types", "ha_list_calendars",
                         "ha_get_calendar_events", "ha_list_todo_lists", "ha_get_todo_items", "ha_list_updates",
                         "ha_get_release_notes", "ha_check_config", "ha_list_blueprints", "ha_list_themes",
-                        "ha_list_dashboard_resources"})
+                        "ha_list_dashboard_resources", "ha_get_weather_forecast"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -86,7 +86,9 @@ SYSTEM = ("Du bist ein Home-Assistant-Assistent. Nutze Tools für aktuelle Zust�
           "Automation, Backups), rufe zuerst find_tools mit Stichworten auf, statt aufzugeben oder zu raten. "
           "Fragen nach Problemen, Fehlern oder Warnungen: ha_get_error_log und ha_list_repairs. Fragen nach "
           "Verlauf oder Uhrzeiten von Zustandswechseln: ha_get_history. "
-          "Uhrzeiten und Werte nur aus Werkzeug-Ergebnissen nennen, nie schätzen.")
+          "Uhrzeiten und Werte nur aus Werkzeug-Ergebnissen nennen, nie schätzen. "
+          "Nach ha_call_service zählt states_after: Erfolg nur melden, wenn confirmed true ist; sonst den gemeldeten "
+          "Zustand nennen.")
 READ_ONLY_HINT = (" In diesem Chat sind nur lesende Tools freigegeben. Pläne, Anleitungen und Entwürfe (z. B. eine "
                   "Automation als YAML-Codeblock) darfst du trotzdem als Text schreiben; sie werden nur gespeichert, "
                   "nicht ausgeführt. Bittet der Nutzer darum, in Home Assistant tatsächlich etwas anzulegen, "
@@ -148,6 +150,8 @@ TOOL_TOPICS = (
     (r"template|jinja|bedingung|condition", {"ha_render_template", "ha_test_condition"}),
     (r"wo (?:wird|ist|kommt)|verwendet|benutzt|genutzt|vorkommt|referenz|abh[äa]ngig|umbenenn",
      {"ha_find_usages"}),
+    (r"wetter|vorhersage|regen|schnee|sonnig|bew[öo]lkt|gewitter|forecast|\bwind",
+     {"ha_get_weather_forecast"}),
     (r"blueprint|vorlage f[üu]r automation|bauplan",
      {"ha_list_blueprints", "ha_preview_blueprint", "ha_save_blueprint", "ha_delete_blueprint", "ha_save_automation",
       "ha_validate_automation"}),

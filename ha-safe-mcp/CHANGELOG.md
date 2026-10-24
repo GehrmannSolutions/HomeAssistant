@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.23.0 – 2026-10-25
+
+- **`ha_call_service` reads the targets back** (about 3 s) and returns `states_after` with `confirmed` per entity
+  and `all_confirmed`; unconfirmed results carry a hint not to claim success. The chat prompt says the same.
+- **`ha_get_weather_forecast`** (read-only): current weather and daily/hourly/twice-daily forecast from the
+  `weather.get_forecasts` service response, times in HA's time zone.
+- Verified on the dev HA (input_boolean on = confirmed, toggle = no expectation; forecasts incl. the DST change) and
+  read-only on prod (forecast).
+
 ## 0.22.0 – 2026-10-25
 
 - **Blueprints**: `ha_list_blueprints`, `ha_preview_blueprint` (HA fetches from an https URL, nothing saved),

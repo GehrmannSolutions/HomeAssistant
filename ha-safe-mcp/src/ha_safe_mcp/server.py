@@ -1,5 +1,6 @@
 """Safety-first standalone MCP bridge for Home Assistant's documented REST API."""
 
+import asyncio
 import functools
 import os
 import re
@@ -165,6 +166,61 @@ class HAClient:
                                    data={"entity_id": entity_id, **service_data})
 
 
+READ_BACK_DELAYS = (0.4, 0.8, 1.5)  # seconds between read-backs after an action (about 3 s in total)
+KEY_ATTRIBUTES = ("brightness", "color_temp_kelvin", "current_position", "current_tilt_position", "temperature",
+                  "hvac_action", "percentage", "volume_level")
+ON_OFF_DOMAINS = frozenset({"light", "switch", "fan", "input_boolean", "siren", "humidifier", "remote"})
+
+
+def expected_states(domain: str, service: str, data) -> set[str] | None:
+    """States that confirm an action; None when an action has no single expected result (toggle, set values)."""
+    if domain in ON_OFF_DOMAINS:
+        return {"turn_on": {"on"}, "turn_off": {"off"}}.get(service)
+    if domain == "cover":
+        return {"open_cover": {"open", "opening"}, "close_cover": {"closed", "closing"}}.get(service)
+    if domain == "lock":
+        return {"lock": {"locked", "locking"}, "unlock": {"unlocked", "unlocking", "open"}}.get(service)
+    if domain == "media_player":
+        return {"turn_off": {"off"}, "media_pause": {"paused"}, "media_play": {"playing"}}.get(service)
+    if domain == "climate":
+        if service == "set_hvac_mode" and isinstance(data, dict) and isinstance(data.get("hvac_mode"), str):
+            return {data["hvac_mode"]}
+        return {"turn_off": {"off"}}.get(service)
+    return None
+
+
+async def read_back(client: HAClient, domain: str, service: str, entity_id, data) -> dict:
+    """Read the targets after an action until they show the expected state (or about 3 s passed)."""
+    targets = [entity_id] if isinstance(entity_id, str) else list(dict.fromkeys(entity_id))
+    expected = expected_states(domain, service, data)
+    states: dict[str, dict] = {}
+    for delay in (0,) + tuple(READ_BACK_DELAYS):
+        if delay:
+            await asyncio.sleep(delay)
+        for target in targets:
+            if target in states and expected is not None and states[target].get("state") in expected:
+                continue
+            try:
+                states[target] = await client._request("GET", f"/api/states/{target}")
+            except RuntimeError:
+                states[target] = {"state": "unknown"}
+        if expected is None or all(states[t].get("state") in expected for t in targets):
+            break
+    after = []
+    for target in targets:
+        current = states[target]
+        attributes = current.get("attributes") or {}
+        after.append({"entity_id": target, "state": current.get("state"),
+                      "confirmed": None if expected is None else current.get("state") in expected,
+                      **{key: attributes[key] for key in KEY_ATTRIBUTES if attributes.get(key) is not None}})
+    confirmed = None if expected is None else all(item["confirmed"] for item in after)
+    result = {"states_after": after, "all_confirmed": confirmed}
+    if confirmed is False:
+        result["hint"] = ("not confirmed: some devices did not report the expected state within about 3 s (still "
+                          "moving, slow or offline). Tell the user what was reported instead of claiming success.")
+    return result
+
+
 def _audited_tool(server: FastMCP, client: HAClient):
     """Like server.tool(), plus one metadata-only audit record per call and the tool name for every
     HA request made during it (contextvar). Arguments and results are never logged."""
@@ -212,6 +268,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .planner import HAPlanner
     from .system import HASystem
     from .customize import HACustomize
+    from .weather import HAWeather
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -224,6 +281,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     planner = HAPlanner(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     system = HASystem(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     customize = HACustomize(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    weather = HAWeather(client)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
@@ -268,11 +326,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_call_service(domain: str, service: str, entity_id: str | list[str],
-                              service_data: dict | None = None) -> list[dict]:
+                              service_data: dict | None = None) -> dict:
         """Call an action (e.g. light.turn_on) for one entity_id or a list of up to 20 entity_ids of the same
-        domain (e.g. all available lights of a room from ha_list_area_entities). Disabled unless
-        HA_ALLOW_WRITE=true; only configured domains allowed."""
-        return await client.call_service(domain, service, entity_id, service_data)
+        domain (e.g. all available lights of a room from ha_list_area_entities). Returns states_after: the targets
+        read back after the call with confirmed true/false (false = expected state not reached; report that, do not
+        claim success). Disabled unless HA_ALLOW_WRITE=true; only configured domains allowed."""
+        await client.call_service(domain, service, entity_id, service_data)
+        return await read_back(client, domain, service, entity_id, service_data)
 
     @tool()
     async def ha_rest_catalog() -> list[dict]:
@@ -432,6 +492,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         except (RuntimeError, ValueError) as exc:
             result["references_to_old_id"] = f"not checked: {exc}"
         return result
+
+    @tool()
+    async def ha_get_weather_forecast(entity_id: str = "", type: str = "daily", limit: int = 10) -> dict:
+        """Weather now and the forecast (type 'daily', 'hourly' or 'twice_daily') of a weather entity (default: the
+        first one); times in Home Assistant's time zone. Read-only."""
+        return await weather.forecast(entity_id, type, limit)
 
     @tool()
     async def ha_list_blueprints(domain: str = "automation") -> list[dict]:
