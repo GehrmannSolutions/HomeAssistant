@@ -3,6 +3,20 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.18.0 – 2026-10-25
+
+- **Labels**: `ha_list_labels` (with usage), `ha_get_label` (members), `ha_create_label`, `ha_update_label`,
+  `ha_delete_label`; areas accept `labels` in `ha_update_area`.
+- **Categories** per scope (automation, script, scene, helpers): `ha_list_categories`, `ha_create_category`,
+  `ha_update_category`, `ha_delete_category`.
+- **Zones**: `ha_list_zones` (incl. persons inside; zone.home/YAML zones marked not editable), `ha_create_zone`,
+  `ha_update_zone`, `ha_delete_zone`.
+- **Entity registry**: `ha_get_entity_registry`; `ha_update_entity_registry` now also changes aliases, labels,
+  categories, `disabled_by` and `hidden_by` (read-back via `config/entity_registry/get`); `ha_rename_entity` changes
+  an entity ID within its domain and lists configs still using the old ID.
+- Journal kinds `label`, `category`, `zone`; undoing a label/category delete also restores where it was used;
+  rename undo renames back. Older area journal entries without labels still undo.
+
 ## 0.17.0 – 2026-10-25
 
 - **`ha_find_usages`**: where is an entity or service used? Searches UI automations, scripts, scenes, groups and

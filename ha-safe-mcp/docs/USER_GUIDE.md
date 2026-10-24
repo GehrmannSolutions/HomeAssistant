@@ -113,19 +113,20 @@ Under **Einstellungen**, each level has a separate **ohne Freigabe ausführen** 
 A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
-   instance switches. Tools above the level are not even listed for the client. Number of tools a client sees:
+   instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
+   (version 0.18.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 26 | 26 | 0 |
-   | Steuern | 29 | 26 | 3 |
-   | Konfiguration ändern | 56 | 26 | 30 |
-   | Löschen | 66 | 26 | 40 |
+   | Nur lesen | 44 | 44 | 0 |
+   | Steuern | 47 | 44 | 3 |
+   | Konfiguration ändern | 81 | 44 | 37 |
+   | Löschen | 94 | 44 | 50 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (26)" and "write/delete
-   tools (30)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (44)" and "write/delete
+   tools (37)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -231,6 +232,28 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Organise: labels, categories, zones, entity names
+
+These change Home Assistant's configuration (admin write; deleting needs delete as well). Every change is journaled
+and can be undone in the "Änderungen" tab or with `ha_undo_change`.
+
+- **Labels** tag entities, devices and areas across rooms (e.g. "Batterie", "Urlaub"). `ha_list_labels` shows them
+  with usage counts, `ha_get_label` the members. Create with `ha_create_label` (`color` is an HA theme colour such
+  as `amber`, `teal`, `blue-grey`, or `#rrggbb`), then assign with `labels` in `ha_update_entity_registry`,
+  `ha_update_device` or `ha_update_area` (always the complete new list). Deleting a label removes it everywhere;
+  undo puts the label back on the same entities, devices and areas.
+- **Categories** sort the lists in the HA UI. Each belongs to a `scope`: `automation`, `script`, `scene` or
+  `helpers`. File an item with `ha_update_entity_registry` `{"categories": {"automation": "<category_id>"}}`
+  (`null` removes it). Undoing a delete recreates the category (with a new ID) and files the items again.
+- **Zones:** `ha_list_zones` lists all zones with the persons inside. Zones created in the UI can be created,
+  changed and deleted (`radius` in metres; `passive` zones only serve automations). `zone.home` (Settings > System >
+  General) and YAML zones are shown as not editable.
+- **Entity names and IDs:** `ha_get_entity_registry` shows one entity's registry entry including `aliases` (extra
+  names for voice assistants; a `null` entry stands for the entity's own name). `ha_update_entity_registry` changes
+  name, icon, area, aliases, labels, categories and can hide or disable an entity. `ha_rename_entity` changes the
+  entity ID within its domain; HA keeps the history, but automations, scripts and dashboards that use the old ID
+  are not updated. The result lists them under `references_to_old_id` (from `ha_find_usages`).
 
 ### Debug: why did something (not) happen?
 

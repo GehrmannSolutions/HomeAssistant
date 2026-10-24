@@ -110,6 +110,9 @@ class FakeHA:
         self.entities[entity_id].update(changes)
         return dict(self.entities[entity_id])
 
+    async def entity_registry_get(self, entity_id):
+        return dict(self.entities[entity_id]) if entity_id in self.entities else None
+
     # scenes / scripts ------------------------------------------------------
     async def get_script(self, script_id):
         if script_id not in self.scripts:

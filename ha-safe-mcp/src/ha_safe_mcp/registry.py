@@ -24,7 +24,7 @@ NAME_MAX = 100
 AREA_FIELDS = ("area_id", "name", "floor_id", "icon", "aliases", "labels")
 FLOOR_FIELDS = ("floor_id", "name", "level", "icon", "aliases")
 DEVICE_FIELDS = ("name", "name_by_user", "manufacturer", "model", "area_id", "disabled_by", "entry_type", "labels")
-AREA_UPDATE = frozenset({"name", "floor_id", "icon", "aliases"})
+AREA_UPDATE = frozenset({"name", "floor_id", "icon", "aliases", "labels"})
 FLOOR_UPDATE = frozenset({"name", "level", "icon", "aliases"})
 DEVICE_UPDATE = frozenset({"area_id", "name_by_user", "disabled_by", "labels"})
 
@@ -201,11 +201,19 @@ class HARegistry:
             _aliases(payload["aliases"])
         if "floor_id" in payload:
             await self._check_floor(payload["floor_id"])
+        if "labels" in payload:
+            if not isinstance(payload["labels"], list) or not all(isinstance(x, str) and ID.fullmatch(x)
+                                                                  for x in payload["labels"]):
+                raise ValueError("labels must be a list of label IDs (the complete new list)")
+            known = {item.get("label_id") for item in await self.ws.command("config/label_registry/list")}
+            if not set(payload["labels"]) <= known:
+                raise ValueError("unknown label: create it with ha_create_label or pick one from ha_list_labels")
         if await self._area(area_id) is None:
             raise ValueError("unknown area_id")
         await self.ws.command("config/area_registry/update", {"area_id": area_id, **payload})
         current = await self._area(area_id)
-        if current is None or any(current.get(key) != value for key, value in payload.items()):
+        if current is None or any(sorted(current.get(key) or []) != sorted(value) if key == "labels"
+                                  else current.get(key) != value for key, value in payload.items()):
             raise RuntimeError("Area update not confirmed by read-back")
         return current
 

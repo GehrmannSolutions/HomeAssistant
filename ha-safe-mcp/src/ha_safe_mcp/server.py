@@ -208,6 +208,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .scenes import HAScenes
     from .changes import Changes, journal_from_env
     from .diagnostics import HADiagnostics
+    from .organize import HAOrganizer
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -216,12 +217,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
                                   credentials=credentials or credential_store_from_env())
     scenes = HAScenes(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    organizer = HAOrganizer(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
     overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
-                      integrations=integrations)
+                      integrations=integrations, organizer=organizer)
 
     async def journaled(tool_name: str, kind: str, target, writer, **options):
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
@@ -371,11 +373,125 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await admin.entity_registry_list()
 
     @tool()
+    async def ha_get_entity_registry(entity_id: str) -> dict:
+        """One entity's registry entry: name, icon, area, labels, categories, aliases (voice assistant names),
+        disabled/hidden state, platform. Entities without a unique ID are not in the registry."""
+        entry = await admin.entity_registry_get(entity_id)
+        if entry is None:
+            raise ValueError("entity not in the entity registry (no unique ID) or unknown")
+        return entry
+
+    @tool()
     async def ha_update_entity_registry(entity_id: str, changes: dict) -> dict:
-        """Edit entity name, area or icon; does not create an entity. Admin write required."""
+        """Edit an entity's registry entry; does not create entities. changes may contain: name (null = name from
+        the integration), icon, area_id (null = follow the device), aliases (complete list of names for voice
+        assistants; a null entry stands for the entity's own name, keep it), labels (complete list of label_ids), categories ({scope: category_id or null}, e.g.
+        {"automation": "<id>"} to file an automation), disabled_by / hidden_by ('user' or null). Admin write
+        required. To change the entity_id use ha_rename_entity."""
         fields = list(changes) if isinstance(changes, dict) else None
         return await journaled("ha_update_entity_registry", "entity", entity_id,
                                lambda: admin.entity_registry_update(entity_id, changes), fields=fields)
+
+    @tool()
+    async def ha_rename_entity(entity_id: str, new_entity_id: str) -> dict:
+        """Change an entity_id within its domain (light.x -> light.y); HA keeps its history. Automations, scripts
+        and dashboards that use the old ID are NOT updated: the result lists them under references_to_old_id.
+        Admin write required."""
+        result = await journaled("ha_rename_entity", "entity", entity_id,
+                                 lambda: admin.entity_rename(entity_id, new_entity_id), fields=["new_entity_id"],
+                                 target_from=lambda renamed: renamed["entity_id"])
+        try:
+            usages = await overview.find_usages(entity_id)
+            result["references_to_old_id"] = [{key: match[key] for key in ("kind", "id", "name")}
+                                              for match in usages["matches"]]
+        except (RuntimeError, ValueError) as exc:
+            result["references_to_old_id"] = f"not checked: {exc}"
+        return result
+
+    @tool()
+    async def ha_list_labels() -> list[dict]:
+        """List labels with label_id, name, colour, icon and how many entities, devices and areas carry them."""
+        return await organizer.list_labels()
+
+    @tool()
+    async def ha_get_label(label_id: str) -> dict:
+        """One label with the entities, devices and areas that carry it."""
+        return await organizer.get_label(label_id)
+
+    @tool()
+    async def ha_create_label(name: str, color: str | None = None, icon: str | None = None,
+                              description: str | None = None) -> dict:
+        """Create a label, e.g. name 'Batterie', color 'amber' (HA theme colour or '#rrggbb'), icon 'mdi:battery'.
+        Assign it with ha_update_entity_registry / ha_update_device / ha_update_area (labels). Admin write
+        required."""
+        return await journaled("ha_create_label", "label", None,
+                               lambda: organizer.create_label(name, color, icon, description),
+                               target_from=lambda created: created["label_id"])
+
+    @tool()
+    async def ha_update_label(label_id: str, changes: dict) -> dict:
+        """Change a label's name, color, icon or description and read back. Admin write required."""
+        return await journaled("ha_update_label", "label", label_id,
+                               lambda: organizer.update_label(label_id, changes))
+
+    @tool()
+    async def ha_delete_label(label_id: str) -> dict:
+        """Delete a label; HA removes it from all entities, devices and areas (undo puts it back there).
+        Admin write and delete required."""
+        return await journaled("ha_delete_label", "label", label_id, lambda: organizer.delete_label(label_id),
+                               fields=["assigned"])
+
+    @tool()
+    async def ha_list_categories(scope: str) -> list[dict]:
+        """Categories of one HA UI list, with usage count. scope: 'automation', 'script', 'scene' or 'helpers'."""
+        return await organizer.list_categories(scope)
+
+    @tool()
+    async def ha_create_category(scope: str, name: str, icon: str | None = None) -> dict:
+        """Create a category in a scope ('automation', 'script', 'scene', 'helpers'); file items into it with
+        ha_update_entity_registry (categories). Admin write required."""
+        return await journaled("ha_create_category", "category", None,
+                               lambda: organizer.create_category(scope, name, icon),
+                               target_from=lambda created: f"{scope}/{created['category_id']}")
+
+    @tool()
+    async def ha_update_category(scope: str, category_id: str, changes: dict) -> dict:
+        """Rename a category or change its icon and read back. Admin write required."""
+        return await journaled("ha_update_category", "category", f"{scope}/{category_id}",
+                               lambda: organizer.update_category(scope, category_id, changes))
+
+    @tool()
+    async def ha_delete_category(scope: str, category_id: str) -> dict:
+        """Delete a category; its items become uncategorised (undo files them again). Admin write and delete
+        required."""
+        return await journaled("ha_delete_category", "category", f"{scope}/{category_id}",
+                               lambda: organizer.delete_category(scope, category_id), fields=["assigned"])
+
+    @tool()
+    async def ha_list_zones() -> list[dict]:
+        """List zones with name, position, radius, passive flag, persons inside and whether they can be edited
+        here (zone.home and YAML zones cannot)."""
+        return await organizer.list_zones()
+
+    @tool()
+    async def ha_create_zone(name: str, latitude: float, longitude: float, radius: float = 100,
+                             passive: bool = False, icon: str | None = None) -> dict:
+        """Create a zone (e.g. work, school) at latitude/longitude with radius in metres; passive zones only serve
+        automations and do not change a person's state. Admin write required."""
+        return await journaled("ha_create_zone", "zone", None,
+                               lambda: organizer.create_zone(name, latitude, longitude, radius, passive, icon),
+                               target_from=lambda created: created["zone_id"])
+
+    @tool()
+    async def ha_update_zone(zone_id: str, changes: dict) -> dict:
+        """Change a zone's name, latitude, longitude, radius, passive or icon and read back. Admin write
+        required."""
+        return await journaled("ha_update_zone", "zone", zone_id, lambda: organizer.update_zone(zone_id, changes))
+
+    @tool()
+    async def ha_delete_zone(zone_id: str) -> dict:
+        """Delete an editable zone. Admin write and delete required."""
+        return await journaled("ha_delete_zone", "zone", zone_id, lambda: organizer.delete_zone(zone_id))
 
     @tool()
     async def ha_list_integrations(domain: str = "") -> list[dict]:

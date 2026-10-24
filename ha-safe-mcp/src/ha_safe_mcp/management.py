@@ -22,17 +22,29 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         # debugging (read-only; some need an HA admin user)
                         "trace/list", "trace/get", "system_log/list", "recorder/statistics_during_period",
                         "recorder/list_statistic_ids", "repairs/list_issues", "system_health/info",
-                        "test_condition"}) | frozenset(
+                        "test_condition",
+                        # organising: labels, categories, zones, one entity registry entry
+                        "config/label_registry/list", "config/category_registry/list", "zone/list",
+                        "config/entity_registry/get"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
                          "config/area_registry/create", "config/area_registry/update",
                          "config/floor_registry/create", "config/floor_registry/update",
                          "config/device_registry/update", "config_entries/update", "config_entries/disable",
-                         "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
+                         "lovelace/dashboards/update", "config/entity_registry/update",
+                         "config/label_registry/create", "config/label_registry/update",
+                         "config/category_registry/create", "config/category_registry/update",
+                         "zone/create", "zone/update"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
 DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
                           "config/area_registry/delete", "config/floor_registry/delete",
-                          "config/entity_registry/remove"}) | frozenset(f"{domain}/delete" for domain in HELPERS)
+                          "config/entity_registry/remove", "config/label_registry/delete",
+                          "config/category_registry/delete", "zone/delete"}) | frozenset(
+                              f"{domain}/delete" for domain in HELPERS)
+
+
+ENTITY_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
+ENTITY_UPDATE = frozenset({"name", "area_id", "icon", "aliases", "labels", "categories", "disabled_by", "hidden_by"})
 
 
 class HAWebSocket:
@@ -288,14 +300,95 @@ class HAAdmin:
     async def entity_registry_list(self):
         return await self.ws.command("config/entity_registry/list")
 
+    async def entity_registry_get(self, entity_id: str) -> dict | None:
+        """One registry entry including aliases; None when the entity is not in the registry."""
+        if not isinstance(entity_id, str) or not ENTITY_ID.fullmatch(entity_id):
+            raise ValueError("invalid entity_id")
+        try:
+            return await self.ws.command("config/entity_registry/get", {"entity_id": entity_id})
+        except RuntimeError as exc:
+            if "not_found" in str(exc):
+                return None
+            raise
+
+    async def _validate_entity_changes(self, payload: dict):
+        for key in ("disabled_by", "hidden_by"):
+            if key in payload and payload[key] not in ("user", None):
+                raise ValueError(f"{key} may only be 'user' or null")
+        if "name" in payload and payload["name"] is not None and (
+                not isinstance(payload["name"], str) or not payload["name"].strip() or len(payload["name"]) > 100):
+            raise ValueError("name must be 1-100 characters or null (null = name from the integration)")
+        if "icon" in payload and payload["icon"] is not None and (
+                not isinstance(payload["icon"], str) or not re.fullmatch(r"mdi:[a-z0-9-]{1,64}", payload["icon"])):
+            raise ValueError("icon must look like 'mdi:lamp' or be null")
+        if "area_id" in payload and payload["area_id"] is not None and (
+                not isinstance(payload["area_id"], str) or not re.fullmatch(r"[a-z0-9_]{1,64}", payload["area_id"])):
+            raise ValueError("invalid area_id: use the area_id from ha_list_areas")
+        if "aliases" in payload and (not isinstance(payload["aliases"], list) or len(payload["aliases"]) > 20 or not all(
+                item is None or (isinstance(item, str) and 0 < len(item) <= 100) for item in payload["aliases"])):
+            raise ValueError("aliases must be a list of up to 20 names")
+        if "labels" in payload:
+            labels = payload["labels"]
+            if not isinstance(labels, list) or not all(isinstance(x, str) for x in labels):
+                raise ValueError("labels must be a list of label IDs (the complete new list)")
+            known = {item.get("label_id") for item in await self.ws.command("config/label_registry/list")}
+            unknown = sorted(set(labels) - known)
+            if unknown:
+                raise ValueError(f"unknown label(s) {', '.join(unknown)}: create with ha_create_label or pick from "
+                                 "ha_list_labels")
+        if "categories" in payload:
+            categories = payload["categories"]
+            if not isinstance(categories, dict) or not all(
+                    isinstance(scope, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,31}", scope)
+                    and (cid is None or isinstance(cid, str)) for scope, cid in categories.items()):
+                raise ValueError("categories must map a scope to a category_id or null, e.g. {'automation': '<id>'}")
+            for scope, cid in categories.items():
+                if cid is not None and not any(
+                        c.get("category_id") == cid
+                        for c in await self.ws.command("config/category_registry/list", {"scope": scope})):
+                    raise ValueError(f"unknown category {cid} in scope {scope}: pick one from ha_list_categories")
+
     async def entity_registry_update(self, entity_id: str, changes: dict):
         self._check_write()
-        if not re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z0-9_]+", entity_id) or not isinstance(changes, dict):
+        if not isinstance(entity_id, str) or not ENTITY_ID.fullmatch(entity_id) or not isinstance(changes, dict):
             raise ValueError("invalid entity ID or changes")
-        if not changes or not changes.keys() <= {"name", "area_id", "icon"}:
-            raise ValueError("unsupported entity registry fields")
-        await self.ws.command("config/entity_registry/update", {"entity_id": entity_id, **changes})
-        current = next((item for item in await self.entity_registry_list() if item.get("entity_id") == entity_id), None)
-        if current is None or any(current.get(key) != val for key, val in changes.items()):
+        if not changes or not changes.keys() <= ENTITY_UPDATE:
+            raise ValueError(f"unsupported entity registry fields; allowed: {', '.join(sorted(ENTITY_UPDATE))}")
+        payload = dict(changes)
+        await self._validate_entity_changes(payload)
+        result = await self.ws.command("config/entity_registry/update", {"entity_id": entity_id, **payload})
+        current = await self.entity_registry_get(entity_id)
+
+        def confirmed(key, value):
+            if key in ("labels", "aliases"):
+                return sorted(map(str, current.get(key) or [])) == sorted(map(str, value or []))
+            if key == "categories":
+                return all((current.get("categories") or {}).get(scope) == cid for scope, cid in value.items())
+            return current.get(key) == value
+        if current is None or not all(confirmed(key, value) for key, value in payload.items()):
             raise RuntimeError("Entity registry update not confirmed by read-back")
+        hints = {key: result[key] for key in ("require_restart", "reload_delay") if isinstance(result, dict)
+                 and key in result}
+        return {**current, **hints}
+
+    async def entity_rename(self, entity_id: str, new_entity_id: str) -> dict:
+        """Change an entity_id (same domain). References in automations, scripts and dashboards are not updated."""
+        self._check_write()
+        for value in (entity_id, new_entity_id):
+            if not isinstance(value, str) or not ENTITY_ID.fullmatch(value) or len(value) > 255:
+                raise ValueError("entity IDs look like 'light.hallway' (lowercase letters, digits, underscores)")
+        if new_entity_id == entity_id:
+            raise ValueError("new_entity_id equals the current entity_id")
+        if new_entity_id.split(".", 1)[0] != entity_id.split(".", 1)[0]:
+            raise ValueError("new_entity_id must keep the same domain (light.x -> light.y)")
+        if await self.entity_registry_get(entity_id) is None:
+            raise ValueError("unknown entity_id, or the entity has no unique ID (not in the registry) and cannot be "
+                             "renamed")
+        if await self.entity_registry_get(new_entity_id) is not None:
+            raise ValueError("an entity with this ID already exists")
+        await self.ws.command("config/entity_registry/update",
+                              {"entity_id": entity_id, "new_entity_id": new_entity_id})
+        current = await self.entity_registry_get(new_entity_id)
+        if current is None or current.get("entity_id") != new_entity_id:
+            raise RuntimeError("Entity rename not confirmed by read-back")
         return current

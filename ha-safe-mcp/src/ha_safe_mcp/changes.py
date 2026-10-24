@@ -20,11 +20,14 @@ MAX_ENTRIES = 1000
 CHANGE_ID = re.compile(r"^\d{8}T\d{12}Z-[0-9a-f]{8}$")
 STAMP = "%Y%m%dT%H%M%S%fZ"
 KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "helper", "entity", "area", "floor",
-         "device", "integration")
+         "device", "integration", "label", "category", "zone")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
-AREA_FIELDS = ("name", "floor_id", "icon", "aliases")
+AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
 ENTRY_FIELDS = ("title", "pref_disable_polling", "pref_disable_new_entities")
+LABEL_FIELDS = ("name", "color", "icon", "description")
+CATEGORY_FIELDS = ("name", "icon")
+ZONE_FIELDS = ("name", "latitude", "longitude", "radius", "passive", "icon")
 NOT_FOUND = ("Home Assistant returned HTTP 404", "Home Assistant WebSocket error: config_not_found")
 
 
@@ -140,9 +143,10 @@ def _pick(item: dict | None, keys) -> dict | None:
 class Changes:
     """Journaled writes and undo over the gated admin/scenes/registry/integrations objects."""
 
-    def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations):
+    def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None):
         self.journal = journal
         self.admin, self.scenes, self.registry, self.integrations = admin, scenes, registry, integrations
+        self.organizer = organizer
 
     # ------------------------------------------------------------------ read the current state
     async def _or_none(self, reader: Callable[[], Awaitable[Any]]):
@@ -180,8 +184,29 @@ class Changes:
             item = next((h for h in await self.admin.helper_list(domain) if h.get("id") == helper_id), None)
             return None if item is None else {k: v for k, v in item.items() if k != "id"}
         if kind == "entity":
-            item = next((e for e in await self.admin.entity_registry_list() if e.get("entity_id") == target), None)
+            item = await self.admin.entity_registry_get(target)
+            if fields and "new_entity_id" in fields:  # a rename: remember the old ID
+                return None if item is None else {"new_entity_id": target}
             return _pick(item, fields or ("name", "area_id", "icon"))
+        if kind == "label":
+            item = await self.organizer.find_label(target)
+            if item is None:
+                return None
+            before = _pick(item, LABEL_FIELDS)
+            if fields and "assigned" in fields:
+                before["assigned"] = await self.organizer.label_assignments(target)
+            return before
+        if kind == "category":
+            scope, category_id = target.split("/", 1)
+            item = await self.organizer.find_category(scope, category_id)
+            if item is None:
+                return None
+            before = _pick(item, CATEGORY_FIELDS)
+            if fields and "assigned" in fields:
+                before["assigned"] = await self.organizer.category_assignments(scope, category_id)
+            return before
+        if kind == "zone":
+            return _pick(await self.organizer.find_zone(target), ZONE_FIELDS)
         if kind == "area":
             item = next((a for a in await self.registry.list_areas() if a.get("area_id") == target), None)
             return _pick(item, AREA_FIELDS)
@@ -228,6 +253,8 @@ class Changes:
             raise ValueError(f"newer changes to this target exist: {', '.join(newer[:5])}; undo them first "
                              "(newest first) or repeat with force=true to overwrite them")
         fields = list(before) if isinstance(before, dict) and kind in ("entity", "device", "integration") else None
+        if kind in ("label", "category") and before is None:
+            fields = ["assigned"]  # the undo deletes it: keep where it was used, so a redo can put it back
         holder: dict = {}
 
         async def restore():
@@ -280,7 +307,15 @@ class Changes:
         if kind in ("entity", "device", "integration") and not before:
             raise ValueError("nothing stored to restore for this change")
         if kind == "entity":
-            return await a.entity_registry_update(target, before), target
+            if "new_entity_id" in before:
+                return await a.entity_rename(target, before["new_entity_id"]), before["new_entity_id"]
+            payload = dict(before)
+            if "categories" in payload:
+                # scopes added by the change are removed again; HA only touches the scopes it is given
+                current = await a.entity_registry_get(target) or {}
+                payload["categories"] = {**{scope: None for scope in current.get("categories") or {}},
+                                         **(payload["categories"] or {})}
+            return await a.entity_registry_update(target, payload), target
         if kind == "device":
             return await r.update_device(target, before), target
         if kind == "integration":
@@ -293,7 +328,60 @@ class Changes:
             return result, target
         if kind in ("area", "floor"):
             return await self._restore_place(kind, target, before)
+        if kind == "label":
+            return await self._restore_label(target, before)
+        if kind == "category":
+            return await self._restore_category(target, before)
+        if kind == "zone":
+            return await self._restore_zone(target, before)
         raise ValueError("unknown change kind")
+
+    async def _restore_label(self, target: str, before):
+        o = self.organizer
+        if before is None:
+            return await o.delete_label(target), target
+        settings = {key: before.get(key) for key in LABEL_FIELDS if key in before}
+        current = await o.find_label(target)
+        if current is None:
+            result = await o.create_label(settings["name"], color=settings.get("color"), icon=settings.get("icon"),
+                                          description=settings.get("description"))
+            target = result["label_id"]
+        else:
+            changes = {key: value for key, value in settings.items() if current.get(key) != value}
+            result = await o.update_label(target, changes) if changes else current
+        if before.get("assigned"):
+            result = {**result, "restored_assignments": await o.assign_label(target, before["assigned"])}
+        return result, target
+
+    async def _restore_category(self, target: str, before):
+        o = self.organizer
+        scope, category_id = target.split("/", 1)
+        if before is None:
+            return await o.delete_category(scope, category_id), target
+        settings = {key: before.get(key) for key in CATEGORY_FIELDS if key in before}
+        current = await o.find_category(scope, category_id)
+        if current is None:
+            result = await o.create_category(scope, settings["name"], icon=settings.get("icon"))
+            category_id = result["category_id"]
+        else:
+            changes = {key: value for key, value in settings.items() if current.get(key) != value}
+            result = await o.update_category(scope, category_id, changes) if changes else current
+        if before.get("assigned"):
+            result = {**result, "restored_assignments": await o.assign_category(scope, category_id,
+                                                                                 before["assigned"])}
+        return result, f"{scope}/{category_id}"
+
+    async def _restore_zone(self, target: str, before):
+        o = self.organizer
+        if before is None:
+            return await o.delete_zone(target), target
+        settings = {key: before[key] for key in ZONE_FIELDS if before.get(key) is not None}
+        current = await o.find_zone(target)
+        if current is None:
+            created = await o.create_zone(**settings)
+            return created, created["zone_id"]
+        changes = {key: value for key, value in settings.items() if current.get(key) != value}
+        return (await o.update_zone(target, changes) if changes else current), target
 
     async def _restore_dashboard(self, url_path: str, before):
         a = self.admin
@@ -320,7 +408,8 @@ class Changes:
         if before is None:
             return await (r.delete_area(target) if kind == "area" else r.delete_floor(target)), target
         if current is not None:
-            changes = {k: before.get(k) for k in fields if current.get(k) != before.get(k)}
+            # entries written before a field existed (e.g. area labels) do not touch that field
+            changes = {k: before.get(k) for k in fields if k in before and current.get(k) != before.get(k)}
             if not changes:
                 return current, target
             return await (r.update_area(target, changes) if kind == "area" else r.update_floor(target, changes)), target
@@ -329,7 +418,7 @@ class Changes:
         else:
             created = await r.create_floor(before["name"], level=before.get("level"), icon=before.get("icon"))
         new_target = created[key]
-        if before.get("aliases"):
-            created = await (r.update_area(new_target, {"aliases": before["aliases"]}) if kind == "area"
-                             else r.update_floor(new_target, {"aliases": before["aliases"]}))
+        extra = {k: before[k] for k in ("aliases", "labels") if before.get(k) and (kind == "area" or k == "aliases")}
+        if extra:
+            created = await (r.update_area(new_target, extra) if kind == "area" else r.update_floor(new_target, extra))
         return created, new_target

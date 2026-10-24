@@ -48,6 +48,8 @@ class FakeWS:
         if kind == "config/entity_registry/update":
             self.registry[0].update(payload)
             return self.registry[0]
+        if kind == "config/entity_registry/get":
+            return next((dict(e) for e in self.registry if e["entity_id"] == payload["entity_id"]), None)
         if kind == "validate_config":
             return {"triggers": {"valid": True}, "actions": {"valid": True}}
         return []
