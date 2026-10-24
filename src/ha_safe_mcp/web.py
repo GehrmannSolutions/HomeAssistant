@@ -12,6 +12,7 @@ import ipaddress
 import json
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from functools import partial
 from importlib import resources
@@ -23,13 +24,15 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
 from .chat_runs import RunBusy, RunManager
 from .access_auth import AccessTokenVerifier
 from .config_store import Settings, SettingsStore, SetupError, merge_settings, normalize_url, resolve_token
 from .credentials import CredentialError, CredentialStore
+from .audit import AuditLog
+from .files import FileError, FileStore
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
 
 UI_HEADER = "x-ha-mcp-ui"
@@ -188,12 +191,35 @@ class LiveChecks:
         return {"ok": True, "message": f"Ollama {version} erreichbar".strip(), "version": version, "models": models}
 
 
+PLAN_REQUEST = re.compile(r"(?i)\b(plan|planung|konzept|vorgehen|schritte|roadmap|checkliste)\w*")
+PLAN_MIN_CHARS = 200
+FENCE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+PLAN_STEP = re.compile(r"(?m)^\s*(?:\d+[.)]|[-*•]|#{1,4})\s+\S")
+PLAN_MIN_STEPS = 2
+
+
+def store_generated_files(files: FileStore, prompt: str, answer: str) -> list[dict]:
+    """Keep what the model produced: fenced code blocks as scripts, a requested plan as Markdown.
+    Storage only: nothing here is executed or sent to Home Assistant."""
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    saved = files.save_answer_blocks(answer, prefix=f"chat-{stamp}")
+    if (PLAN_REQUEST.search(prompt) and len(answer) >= PLAN_MIN_CHARS
+            and len(PLAN_STEP.findall(FENCE_BLOCK.sub("", answer))) >= PLAN_MIN_STEPS):
+        title = " ".join(prompt.split())[:200]
+        body = f"# Plan\n\n> Anfrage: {title}\n\n{answer.strip()}\n"
+        saved.append(files.save("plan", f"plan-{stamp}.md", body, overwrite=False))
+    return saved
+
+
 async def mcp_chat_runner(settings: Settings, prompt: str, history: list[dict], allow_write: bool,
-                          approve, on_event, *, credentials_dir: Path | None = None) -> str:
+                          approve, on_event, *, credentials_dir: Path | None = None,
+                          audit_dir: Path | None = None) -> str:
     """One chat turn: start the MCP stdio server with exactly the saved settings and run the tool loop."""
     env = settings.mcp_env()
     if credentials_dir is not None:
         env["HA_CREDENTIALS_DIR"] = str(credentials_dir)
+    if audit_dir is not None:
+        env["HA_AUDIT_DIR"] = str(audit_dir)
     async with stdio_client(mcp_parameters_for(env)) as (reader, writer):
         async with ClientSession(reader, writer) as session:
             await session.initialize()
@@ -209,10 +235,15 @@ def _static_text(name: str) -> str:
 def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = None,
                allowed_hosts: set[str] | None = None, allow_remote: bool = False,
                public_origin: str | None = None, access_verifier=None,
-               credentials: CredentialStore | None = None):
+               credentials: CredentialStore | None = None, files: FileStore | None = None,
+               audit: AuditLog | None = None):
     checks = checks or LiveChecks()
     credentials = credentials or CredentialStore()
-    runs = runs or RunManager(partial(mcp_chat_runner, credentials_dir=credentials.directory))
+    files = files or FileStore()
+    audit = audit or AuditLog()
+    runs = runs or RunManager(partial(mcp_chat_runner, credentials_dir=credentials.directory,
+                                      audit_dir=audit.directory))
+    runs.on_answer = partial(store_generated_files, files)
     lock = asyncio.Lock()
 
     async def index(request: Request):
@@ -340,6 +371,34 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             return _error(str(exc), 404)
         return _ok({"ok": True})
 
+    async def files_list(request: Request):
+        return _ok({"files": files.entries()})
+
+    async def files_get(request: Request):
+        kind, name = request.path_params["kind"], request.path_params["name"]
+        try:
+            content = files.read(kind, name)
+        except FileError as exc:
+            return _error(str(exc), 404)
+        if request.query_params.get("download") == "1":
+            response = PlainTextResponse(content, headers={
+                "Content-Disposition": f'attachment; filename="{name}"'})
+            return _security_headers(response)
+        return _ok({"kind": kind, "name": name, "content": content})
+
+    async def files_delete(request: Request):
+        try:
+            files.delete(request.path_params["kind"], request.path_params["name"])
+        except FileError as exc:
+            return _error(str(exc), 404)
+        return _ok({"ok": True})
+
+    async def audit_list(request: Request):
+        return _ok({"retention_days": audit.retention_days, "entries": audit.entries(limit=500)})
+
+    async def audit_clear(request: Request):
+        return _ok({"deleted": audit.clear()})
+
     routes = [
         Route("/", index), Route("/static/{name}", static),
         Route("/api/status", status),
@@ -353,6 +412,11 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/credentials", credentials_list),
         Route("/api/credentials", credentials_save, methods=["POST"]),
         Route("/api/credentials/{alias}", credentials_delete, methods=["DELETE"]),
+        Route("/api/files", files_list),
+        Route("/api/files/{kind}/{name}", files_get),
+        Route("/api/files/{kind}/{name}", files_delete, methods=["DELETE"]),
+        Route("/api/audit", audit_list),
+        Route("/api/audit", audit_clear, methods=["DELETE"]),
     ]
 
     @asynccontextmanager

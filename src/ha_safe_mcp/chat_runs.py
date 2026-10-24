@@ -128,6 +128,7 @@ class RunManager:
         self.keep = keep
         self.runs: dict[str, ChatRun] = {}
         self.active: ChatRun | None = None
+        self.on_answer: Callable[[str, str], list[dict]] | None = None
 
     def start(self, settings: Settings, prompt: str, history: list[dict], *, allow_write: bool) -> ChatRun:
         if self.active is not None and not self.active.finished:
@@ -155,6 +156,14 @@ class RunManager:
         try:
             answer = await self.runner(settings, prompt, history, run.allow_write, run.approve, run.emit)
             await run.emit({"type": "answer", "content": answer or "(keine Antwort)"})
+            if answer and self.on_answer is not None:
+                try:
+                    saved = self.on_answer(prompt, answer)
+                except Exception:  # noqa: BLE001 - storing a copy must never fail the chat
+                    await run.emit({"type": "note", "content": "Erzeugte Dateien konnten nicht gespeichert werden."})
+                else:
+                    if saved:
+                        await run.emit({"type": "files_saved", "files": saved})
         except asyncio.CancelledError:
             status = "cancelled"
         except BaseException as error:  # noqa: BLE001 - every failure must reach the UI as an event

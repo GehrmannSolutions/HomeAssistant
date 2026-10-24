@@ -30,14 +30,16 @@ SYSTEM = ("Du bist ein Home-Assistant-Assistent. Nutze Tools für aktuelle Zust�
           "Passwörter kennst du nie: für Passwort-, Token- oder PIN-Felder nutzt du nur Referenzen "
           "{\"$credential\": \"<alias>\", \"field\": \"<feld>\"} aus ha_list_credentials. Fehlt ein passender "
           "Alias, bitte den Nutzer, ihn unter 'Zugangsdaten' anzulegen. Sage klar, was nicht geht.")
-READ_ONLY_HINT = (" In diesem Chat sind nur lesende Tools freigegeben. Bittet der Nutzer darum, etwas anzulegen, "
+READ_ONLY_HINT = (" In diesem Chat sind nur lesende Tools freigegeben. Pläne, Anleitungen und Entwürfe (z. B. eine "
+                  "Automation als YAML-Codeblock) darfst du trotzdem als Text schreiben; sie werden nur gespeichert, "
+                  "nicht ausgeführt. Bittet der Nutzer darum, in Home Assistant tatsächlich etwas anzulegen, "
                   "zu ändern, zu schalten oder zu löschen, antworte nur mit genau diesem Satz: Dafür bitte unter "
                   "dem Eingabefeld das Häkchen 'Aktionen erlauben' setzen und die Anfrage erneut senden. "
                   "Nenne dabei keine Befehle, keine Toolnamen und kein JSON.")
 WRITE_BLOCKED = ("Schreibaufruf nicht freigegeben; keine Aktion ausgeführt. Zum Ausführen das Häkchen "
                  "'Aktionen erlauben' setzen und die Anfrage erneut senden.")
 HA_ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_ALLOW_DELETE", "HA_ALLOWED_DOMAINS",
-               "HA_CREDENTIALS_DIR")
+               "HA_CREDENTIALS_DIR", "HA_AUDIT", "HA_AUDIT_DIR")
 HISTORY_TURNS = 12
 HISTORY_CHARS = 4000
 PREVIEW_CHARS = 300

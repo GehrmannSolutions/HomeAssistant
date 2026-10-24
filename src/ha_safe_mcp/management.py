@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import time
 from urllib.parse import urlsplit
 
 import httpx
@@ -45,6 +46,7 @@ class HAWebSocket:
         url = urlsplit(self.client.url)
         scheme = "wss" if url.scheme == "https" else "ws"
         ws_url = f"{scheme}://{url.netloc}/api/websocket"
+        started, error = time.monotonic(), None
         try:
             async with asyncio.timeout(20):
                 async with connect(ws_url, max_size=2_000_000, open_timeout=10) as ws:
@@ -62,10 +64,19 @@ class HAWebSocket:
                     if not response.get("success"):
                         code = response.get("error", {}).get("code", "unknown")
                         safe_code = code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,60}", code) else "unknown"
+                        error = "WebSocketError"
                         raise RuntimeError(f"Home Assistant WebSocket error: {safe_code}")
                     return response.get("result")
         except (OSError, TimeoutError, WebSocketException, json.JSONDecodeError) as exc:
+            error = type(exc).__name__
             raise RuntimeError(f"Home Assistant WebSocket request failed ({type(exc).__name__})") from None
+        except RuntimeError:
+            error = error or "RuntimeError"
+            raise
+        finally:
+            if hasattr(self.client, "log"):
+                self.client.log(channel="ws", method="WS", route=command_type, ok=error is None,
+                                ms=(time.monotonic() - started) * 1000, error=error)
 
 
 class HAAdmin:

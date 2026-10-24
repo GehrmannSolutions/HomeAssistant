@@ -19,6 +19,8 @@
       <button type="button" class="tab" data-view="home">Übersicht</button>
       <button type="button" class="tab" data-view="chat">Chat</button>
       <button type="button" class="tab" data-view="credentials">Zugangsdaten</button>
+      <button type="button" class="tab" data-view="files">Dateien</button>
+      <button type="button" class="tab" data-view="audit">Protokoll</button>
       <button type="button" class="tab" data-view="settings">Einstellungen</button>
     </nav>
     <div class="mode-pill" id="mode-pill" hidden></div>
@@ -167,6 +169,50 @@
           <button type="submit" class="primary">Speichern</button>
         </div>
       </form>
+    </section>
+
+    <!-- Files: plans and scripts the model wrote -->
+    <section id="view-files" class="view" hidden>
+      <div class="card">
+        <h2>Dateien</h2>
+        <p class="muted">Pläne und Skripte, die das Modell im Chat erzeugt hat. Sie liegen nur auf diesem Rechner und
+          werden <strong>nie automatisch ausgeführt</strong>. Lesen, herunterladen oder löschen.</p>
+        <table class="cred-table" id="file-table">
+          <thead><tr><th>Name</th><th>Art</th><th>Größe</th><th>Geändert</th><th></th></tr></thead>
+          <tbody id="file-rows"></tbody>
+        </table>
+        <p class="muted" id="file-empty" hidden>Noch keine Dateien. Bitte im Chat z. B. um einen Plan oder ein Skript.</p>
+        <div class="result" id="file-result" role="status" aria-live="polite"></div>
+      </div>
+      <div class="card" id="file-viewer" hidden>
+        <div class="viewer-head">
+          <h2 id="file-viewer-title"></h2>
+          <button type="button" class="ghost small" data-action="file-close">Schließen</button>
+        </div>
+        <pre class="file-content" id="file-content"></pre>
+      </div>
+    </section>
+
+    <!-- Audit log: MCP <-> Home Assistant, metadata only -->
+    <section id="view-audit" class="view" hidden>
+      <div class="card">
+        <div class="viewer-head">
+          <h2>Protokoll</h2>
+          <div>
+            <button type="button" class="ghost small" data-action="audit-reload">Aktualisieren</button>
+            <button type="button" class="danger small" data-action="audit-clear">Protokoll löschen</button>
+          </div>
+        </div>
+        <p class="muted">Kommunikation zwischen MCP und Home Assistant, datensparsam: nur Zeit, Tool, Kanal, Route als
+          Muster (z. B. <code>/api/states/{entity_id}</code>), Status und Dauer. Keine Entitäten, Namen, Inhalte,
+          Antworten oder Tokens. Einträge werden nach <strong id="audit-days">30</strong> Tagen automatisch gelöscht.</p>
+        <table class="cred-table" id="audit-table">
+          <thead><tr><th>Zeit</th><th>Tool</th><th>Kanal</th><th>Route</th><th>Status</th><th>Dauer</th></tr></thead>
+          <tbody id="audit-rows"></tbody>
+        </table>
+        <p class="muted" id="audit-empty" hidden>Keine Einträge.</p>
+        <div class="result" id="audit-result" role="status" aria-live="polite"></div>
+      </div>
     </section>
 
     <!-- Settings -->

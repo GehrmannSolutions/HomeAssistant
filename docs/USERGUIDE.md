@@ -107,6 +107,24 @@ Unter **Einstellungen** lässt sich alles später ändern. Ein leeres Token-Feld
 - `Enter` sendet, `Shift+Enter` erzeugt einen Zeilenumbruch. **Stopp** bricht eine laufende Anfrage ab, **Neu** leert den Verlauf. Es läuft immer nur **eine** Anfrage zur Zeit.
 - Der Verlauf liegt im Browser (`localStorage`). Die letzten zwölf Nachrichten gehen als Kontext an das Modell, aber nur Text: keine Tool-Ergebnisse und keine Systemanweisungen.
 
+### 7.2a Dateien: gespeicherte Pläne und Skripte
+
+Bittet man das Modell um einen **Plan** (Wörter wie „Plan“, „Konzept“, „Schritte“, „Checkliste“) und antwortet es mit mindestens zwei Schritten, wird die Antwort als Markdown unter `plan/plan-<Zeit>.md` gespeichert. Jeder Codeblock einer Antwort (```` ```yaml ````, ```` ```bash ````, ```` ```python ```` …) wird zusätzlich als eigene Datei unter `script/chat-<Zeit>-<n>.<endung>` abgelegt. Unter dem Chat erscheint dann „📄 Gespeichert unter Dateien: …“.
+
+Im Reiter **Dateien** stehen alle gespeicherten Dateien mit **Lesen**, **Herunterladen** und **Löschen**. Wichtig:
+
+- Dateien werden **nie automatisch ausgeführt** und nicht an Home Assistant übertragen. Ein Skript prüfen, bevor man es selbst verwendet: Das Modell kann Entitäten erfinden (z. B. `weather.your_weather_entity`).
+- Ablage: `~/.local/share/ha-safe-mcp/files/` (Ordner 0700, Dateien 0600, nicht ausführbar). Höchstens 256 KB pro Datei und 500 Dateien; ältere Dateien bitte selbst löschen.
+- Eine Absage des Modells („kann keine Automation erstellen …“) wird nicht als Plan gespeichert.
+
+### 7.2b Protokoll: Kommunikation MCP ↔ Home Assistant
+
+Der Reiter **Protokoll** zeigt jede Anfrage des MCP an Home Assistant (REST und WebSocket) und jeden Tool-Aufruf. Gespeichert werden **nur Metadaten**: Zeit (UTC), Tool, Kanal, Methode, Route als **Muster** (`/api/states/{entity_id}` statt der echten Entität), HTTP-Status, Dauer und bei Fehlern nur die Fehlerklasse. Keine Entitäts-IDs, Personennamen, Anfrage- oder Antwortinhalte, Chattexte oder Tokens.
+
+- Aufbewahrung: **30 Tage**; ältere Tagesdateien werden bei jedem Schreiben und Lesen gelöscht. **Protokoll löschen** entfernt sofort alles.
+- Ablage: `~/.local/state/ha-safe-mcp/audit/audit-JJJJ-MM-TT.jsonl` (0700/0600), nur lokal.
+- Abschalten: `HA_AUDIT=false` in der Umgebung des MCP-Servers; anderer Ordner mit `HA_AUDIT_DIR`.
+
 ### 7.3 Aktionen freigeben
 
 Ein Modell darf nur dann Schreib-Tools vorschlagen, wenn **beides** gilt: „Steuern erlauben“ ist in den Einstellungen aktiv **und** im Chat ist das Häkchen **Aktionen erlauben** gesetzt. Dann erscheint vor jeder Schreibaktion eine Karte **Freigabe erforderlich** mit Tool-Name und vollständigen JSON-Argumenten:
@@ -300,7 +318,7 @@ Unbekannte Routen, Traversal und nicht erlaubte Query-Keys werden abgelehnt. RES
 
 Vor jeder Änderung auf der **isolierten** Instanz: Ziel und erwarteten Zustand lesend ermitteln; für bestehende Automation `ha_get_automation`, für Dashboard `ha_get_dashboard`, für Helper `ha_list_helpers`, für Registry `ha_list_entity_registry` sichern (ohne Token oder sensible Antwortdaten zu veröffentlichen). Ein separat angelegtes, **getestetes** HA-Backup ist sinnvoll; das MCP-Projekt erstellt/verwaltet selbst **keine Backups**. Home Assistant beschreibt Backups und Wiederherstellung in [Common tasks](https://www.home-assistant.io/common-tasks/general/#backups); beim Container das persistente Volume **`ha-mcp-dev-config`** nicht löschen und eine Volume-Sicherung nur nach geeigneter, konsistenter Backup-Prozedur vornehmen. Kein produktives Home Assistant für Experimente verwenden.
 
-Nach einem Write mit dem passenden Lesetool prüfen; eine erfolgreiche Tool-Rückgabe ist keine Garantie für wirksame Geräteaktion, fertigen Automation-Reload oder langfristige Persistenz. Rollback ist **manuell**: vorher gesicherte Dashboard-Konfiguration erneut mit `ha_save_dashboard` setzen; Automation mit gesicherter Config (ohne `id`-Feld) erneut `ha_save_automation` übermitteln; Helper/Registry-Metadaten anhand gesicherter Werte korrigieren. Gelöschte Objekte müssen ggf. aus Backup oder manuell wiederhergestellt werden. `ha_save_dashboard` liefert zwar `previous`, speichert es aber nicht selbst dauerhaft. Für den Rückweg bleiben die entsprechenden Write-Schalter und HA-Rechte notwendig. [Verwaltung](../src/ha_safe_mcp/management.py) · [HA-Backup-Hilfe](https://www.home-assistant.io/common-tasks/general/#backups).
+Nach einem Write mit dem passenden Lesetool prüfen; eine erfolgreiche Tool-Rückgabe ist keine Garantie für wirksame Geräteaktion, fertigen Automation-Reload oder langfristige Persistenz. Rollback ist **manuell**: vorher gesicherte Dashboard-Konfiguration erneut mit `ha_save_dashboard` setzen; Automation mit gesicherter Config (ohne `id`-Feld) erneut `ha_save_automation` übermitteln; Helper/Registry-Metadaten anhand gesicherter Werte korrigieren. Gelöschte Objekte müssen ggf. aus Backup oder manuell wiederhergestellt werden. `ha_save_dashboard` liefert zwar `previous`, speichert es aber nicht selbst dauerhaft. Wer den alten Stand als Datei behalten will, lässt sich ihn im Chat als YAML-Codeblock ausgeben: er landet dann unter **Dateien**. Für den Rückweg bleiben die entsprechenden Write-Schalter und HA-Rechte notwendig. [Verwaltung](../src/ha_safe_mcp/management.py) · [HA-Backup-Hilfe](https://www.home-assistant.io/common-tasks/general/#backups).
 
 ## 10. Fehlersuche
 

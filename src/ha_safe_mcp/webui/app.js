@@ -95,6 +95,8 @@ function showView(name) {
   if (name === "home") renderHome();
   if (name === "settings") fillSettings();
   if (name === "credentials") credentials.load();
+  if (name === "files") fileManager.load();
+  if (name === "audit") auditLog.load();
 }
 
 function renderModePill() {
@@ -643,6 +645,9 @@ const chat = {
         this.typing = event.approved ? "Führe aus" : "";
         break;
       }
+      case "files_saved":
+        this.add({ kind: "files", files: event.files || [] });
+        return;
       case "answer":
         this.typing = "";
         this.add({ kind: "assistant", text: event.content });
@@ -716,6 +721,11 @@ const chat = {
     }
     if (item.kind === "error") return el("div", { class: "msg error" }, item.text);
     if (item.kind === "note") return el("div", { class: "msg note" }, item.text);
+    if (item.kind === "files") {
+      return el("div", { class: "saved-files" }, "📄 Gespeichert unter Dateien: ",
+        ...item.files.flatMap((file, index) => [index ? ", " : "",
+          el("a", { href: "#files", onclick: (event) => { event.preventDefault(); showView("files"); } }, file.name)]));
+    }
     if (item.kind === "tool") {
       const label = { running: "läuft", ok: "ok", failed: "fehlgeschlagen" }[item.status] || item.status;
       return el("div", { class: `tool${item.write ? " write" : ""}${item.status === "failed" ? " failed" : ""}` },
@@ -794,6 +804,120 @@ const chat = {
 
 /* ---------------------------------------------------------------- boot */
 
+
+/* ---------------------------------------------------------------- files */
+
+function formatSize(bytes) {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function fileUrl(item, download = false) {
+  return `/api/files/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.name)}` + (download ? "?download=1" : "");
+}
+
+const fileManager = {
+  items: [],
+
+  init() {
+    $("#file-viewer [data-action='file-close']").addEventListener("click", () => { $("#file-viewer").hidden = true; });
+  },
+
+  async load() {
+    try {
+      this.items = (await api("/api/files")).files || [];
+      setResult($("#file-result"), "");
+    } catch (error) {
+      this.items = [];
+      setResult($("#file-result"), error.message, "err");
+    }
+    this.render();
+  },
+
+  render() {
+    const rows = this.items.map((item) => el("tr", {},
+      el("td", {}, el("code", {}, item.name)),
+      el("td", {}, item.kind === "plan" ? "Plan" : "Skript"),
+      el("td", {}, formatSize(item.size)),
+      el("td", {}, new Date(item.modified).toLocaleString("de-DE")),
+      el("td", { class: "row-actions" },
+        el("button", { type: "button", class: "ghost small", onclick: () => this.open(item) }, "Lesen"),
+        el("a", { class: "button ghost small", href: fileUrl(item, true), download: item.name }, "Herunterladen"),
+        el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Löschen"))));
+    $("#file-rows").replaceChildren(...rows);
+    $("#file-empty").hidden = this.items.length > 0;
+    $("#file-table").hidden = this.items.length === 0;
+  },
+
+  async open(item) {
+    try {
+      const data = await api(fileUrl(item));
+      $("#file-viewer-title").textContent = item.name;
+      $("#file-content").textContent = data.content;
+      $("#file-viewer").hidden = false;
+      $("#file-viewer").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      setResult($("#file-result"), error.message, "err");
+    }
+  },
+
+  async remove(item) {
+    if (!window.confirm(`Datei »${item.name}« endgültig löschen?`)) return;
+    try {
+      await api(fileUrl(item), { method: "DELETE" });
+      if ($("#file-viewer-title").textContent === item.name) $("#file-viewer").hidden = true;
+      await this.load();
+      setResult($("#file-result"), `»${item.name}« gelöscht.`, "ok");
+    } catch (error) {
+      setResult($("#file-result"), error.message, "err");
+    }
+  },
+};
+
+/* ---------------------------------------------------------------- audit log */
+
+const auditLog = {
+  init() {
+    $("#view-audit [data-action='audit-reload']").addEventListener("click", () => this.load());
+    $("#view-audit [data-action='audit-clear']").addEventListener("click", () => this.clear());
+  },
+
+  async load() {
+    try {
+      const data = await api("/api/audit");
+      $("#audit-days").textContent = String(data.retention_days);
+      this.render(data.entries || []);
+      setResult($("#audit-result"), "");
+    } catch (error) {
+      this.render([]);
+      setResult($("#audit-result"), error.message, "err");
+    }
+  },
+
+  render(entries) {
+    const rows = entries.map((entry) => el("tr", { class: entry.ok ? "" : "failed" },
+      el("td", {}, new Date(entry.ts).toLocaleString("de-DE")),
+      el("td", {}, entry.tool || "–"),
+      el("td", {}, entry.kind === "tool" ? "Tool" : (entry.channel || "").toUpperCase()),
+      el("td", {}, entry.route ? el("code", {}, `${entry.method || ""} ${entry.route}`.trim()) : "–"),
+      el("td", {}, entry.status ? String(entry.status) : (entry.ok ? "ok" : (entry.error || "Fehler"))),
+      el("td", {}, `${entry.ms} ms`)));
+    $("#audit-rows").replaceChildren(...rows);
+    $("#audit-empty").hidden = entries.length > 0;
+    $("#audit-table").hidden = entries.length === 0;
+  },
+
+  async clear() {
+    if (!window.confirm("Gesamtes Protokoll endgültig löschen?")) return;
+    try {
+      const result = await api("/api/audit", { method: "DELETE" });
+      await this.load();
+      setResult($("#audit-result"), `${result.deleted} Einträge gelöscht.`, "ok");
+    } catch (error) {
+      setResult($("#audit-result"), error.message, "err");
+    }
+  },
+};
+
 function initShell() {
   for (const tab of $$(".tab")) tab.addEventListener("click", () => showView(tab.dataset.view));
   for (const link of $$("[data-view-link]")) link.addEventListener("click", () => showView(link.dataset.viewLink));
@@ -810,6 +934,8 @@ async function boot() {
   wizard.init();
   initSettings();
   credentials.init();
+  fileManager.init();
+  auditLog.init();
   chat.init();
   try {
     await refreshStatus();
@@ -822,7 +948,7 @@ async function boot() {
     showView("setup");
   } else {
     const wanted = location.hash.slice(1);
-    showView(["home", "chat", "credentials", "settings"].includes(wanted) ? wanted : "home");
+    showView(["home", "chat", "credentials", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
   }
 }
 

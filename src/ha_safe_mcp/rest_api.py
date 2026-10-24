@@ -6,6 +6,7 @@ before any network request. Administrative writes require separate opt-in.
 
 import base64
 import re
+import time
 
 import httpx
 
@@ -92,11 +93,13 @@ class RestGateway:
                                                     {k: v for k, v in body.items() if k != "entity_id"},
                                                     return_response="return_response" in query)
             return {"status": 200, "content_type": "application/json", "data": result}
+        started, status, error = time.monotonic(), None, None
         try:
             async with httpx.AsyncClient(base_url=self.client.url, timeout=20, trust_env=False,
                                          follow_redirects=False,
                                          headers={"Authorization": f"Bearer {self.client.token}"}) as http:
                 response = await http.request(method, path, params=query, json=body)
+                status = response.status_code
                 response.raise_for_status()
                 if len(response.content) > MAX_RESPONSE:
                     raise RuntimeError("Home Assistant response exceeds size limit")
@@ -110,6 +113,15 @@ class RestGateway:
                     data = response.json()
                 return {"status": response.status_code, "content_type": content_type, "data": data}
         except httpx.HTTPStatusError as exc:
+            error = "HTTPStatusError"
             raise RuntimeError(f"Home Assistant returned HTTP {exc.response.status_code}") from None
         except (httpx.RequestError, ValueError) as exc:
+            error = type(exc).__name__
             raise RuntimeError(f"Home Assistant request failed ({type(exc).__name__})") from None
+        except RuntimeError:
+            error = "RuntimeError"
+            raise
+        finally:
+            if hasattr(self.client, "log"):
+                self.client.log(channel="rest", method=method, route=path, status=status, ok=error is None,
+                                ms=(time.monotonic() - started) * 1000, error=error)

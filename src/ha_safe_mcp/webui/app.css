@@ -203,3 +203,18 @@ button.icon:hover { color: var(--text); background: var(--surface-2); }
   .msg { max-width: 92%; }
   .chat-shell { height: calc(100vh - 210px); }
 }
+
+/* Files and audit log */
+.viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.viewer-head h2 { margin: 0; }
+.file-content { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); padding: 12px;
+  border-radius: 8px; max-height: 60vh; overflow: auto; font-size: 0.85rem; margin: 12px 0 0; }
+#audit-table td { font-size: 0.85rem; }
+#audit-table .failed { color: var(--danger); }
+.saved-files { align-self: flex-start; font-size: 0.85rem; color: var(--muted); }
+.saved-files a { color: var(--accent); }
+a.button { display: inline-block; font: inherit; border-radius: 10px; text-decoration: none; border: 1px solid transparent; margin-left: 6px; }
+a.button.ghost { background: transparent; color: var(--muted); }
+a.button.ghost:hover { color: var(--text); background: var(--surface-2); }
+a.button.small { padding: 6px 12px; font-size: 0.9rem; }
+.cred-table .row-actions a.button + button { margin-left: 6px; }
