@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.16.0 – 2026-10-25
+
+- **Tool search for small local models** (UI chat and CLI): besides the keyword preselection the model always gets
+  a local `find_tools` search (German topic patterns plus word overlap with tool names/descriptions, read tools win
+  ties, write tools only when actions are allowed); found tools are offered from the next round. A real permitted
+  tool called by name is loaded instead of refused. More rounds (6) for search + call.
+- Entity search understands German domain names ("Sonne" finds `sun.sun`, "Rollläden" finds covers).
+- System prompt maps problem/error and history questions to the right tools; dangling `<tool_call>` tags are
+  removed from answers.
+
 ## 0.15.0 – 2026-10-25
 
 - **Debugging tools** (all read-only): `ha_list_traces`, `ha_get_trace` (automation/script runs step by step),

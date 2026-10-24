@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import inspect
 import json
+import math
 import os
 import re
 import sys
@@ -65,7 +66,12 @@ SYSTEM = ("Du bist ein Home-Assistant-Assistent. Nutze Tools für aktuelle Zust�
           "Entitäten des Raums aus 'available', in EINEM ha_call_service-Aufruf mit einer Liste von entity_id; "
           "frage dann nicht nach. Eine Gruppe aus 'groups' nicht zusätzlich zu ihren Mitgliedern schalten. "
           "Nicht verfügbare Entitäten nicht schalten, sondern in der Antwort nennen. Rückfragen nur, wenn der Raum "
-          "nicht eindeutig ist oder die Anfrage mehrdeutig bleibt.")
+          "nicht eindeutig ist oder die Anfrage mehrdeutig bleibt. "
+          "Fehlt dir ein passendes Werkzeug (z. B. für Verlauf, Statistik, Fehlerprotokoll, Ablauf einer "
+          "Automation, Backups), rufe zuerst find_tools mit Stichworten auf, statt aufzugeben oder zu raten. "
+          "Fragen nach Problemen, Fehlern oder Warnungen: ha_get_error_log und ha_list_repairs. Fragen nach "
+          "Verlauf oder Uhrzeiten von Zustandswechseln: ha_get_history. "
+          "Uhrzeiten und Werte nur aus Werkzeug-Ergebnissen nennen, nie schätzen.")
 READ_ONLY_HINT = (" In diesem Chat sind nur lesende Tools freigegeben. Pläne, Anleitungen und Entwürfe (z. B. eine "
                   "Automation als YAML-Codeblock) darfst du trotzdem als Text schreiben; sie werden nur gespeichert, "
                   "nicht ausgeführt. Bittet der Nutzer darum, in Home Assistant tatsächlich etwas anzulegen, "
@@ -104,11 +110,14 @@ TOOL_TOPICS = (
       "ha_get_script", "ha_save_script", "ha_delete_script", "ha_run_script", "ha_validate_automation"}),
     (r"r[üu]ckg[äa]ngig|undo|[äa]nderung|zur[üu]ck(?:setz|nehm|hol|spiel)|vorher(?:ige)?|wiederherstell|redo",
      {"ha_list_changes", "ha_get_change", "ha_undo_change"}),
-    (r"warum|nicht (?:ausgel|gelaufen|funktion|geschaltet)|trace|ablauf|durchlauf|debug|fehlersuch",
+    (r"warum|nicht (?:ausgel|gelaufen|funktion|geschaltet)|gelaufen|ausgef[üu]hrt|trace|ablauf|durchlauf|debug|"
+     r"fehlersuch",
      {"ha_list_traces", "ha_get_trace", "ha_get_logbook", "ha_get_error_log"}),
-    (r"fehler|error|warnung|warning|\blog\b|protokoll|logbuch|was ist passiert|wer hat",
-     {"ha_get_error_log", "ha_get_logbook", "ha_list_repairs"}),
-    (r"verlauf|histor|gestern|letzte[nr]? (?:stunde|tag|woche)|seit wann|wann (?:war|wurde)",
+    (r"fehler|error|warnung|warning|\blog\b|protokoll|logbuch|was ist passiert|wer hat|problem|st[öo]rung|kaputt|"
+     r"k[üu]mmern",
+     {"ha_get_error_log", "ha_get_logbook", "ha_list_repairs", "ha_get_system_health"}),
+    (r"verlauf|histor|gestern|letzte[nr]? (?:stunde|tag|woche)|seit wann|wann (?:war|wurde)|entwickel|"
+     r"[üu]ber den tag|im lauf|heute nacht|heute fr[üu]h|uhrzeit",
      {"ha_get_history", "ha_get_logbook"}),
     (r"statisti|verbrauch|energie|kwh|durchschnitt|mittelwert|minimum|maximum",
      {"ha_get_statistics", "ha_list_statistic_ids", "ha_get_history"}),
@@ -123,6 +132,45 @@ TOOL_TOPICS = (
     (r"\bim\b|\bin der\b|raum|zimmer|küche|kuche|bad|flur|diele|garten|terrasse|keller|büro|buero",
      {"ha_list_area_entities", "ha_list_areas"}),
 )
+
+
+FIND_TOOLS = "find_tools"
+FIND_TOOLS_SPEC = {"type": "function", "function": {
+    "name": FIND_TOOLS,
+    "description": ("Weitere Werkzeuge suchen, wenn keines der angebotenen passt. Stichworte in Deutsch oder "
+                    "Englisch, z. B. 'Verlauf Temperatur', 'Automation Fehler', 'Backup'. Die gefundenen Werkzeuge "
+                    "stehen danach zur Verfügung."),
+    "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Stichworte"}},
+                   "required": ["query"]}}}
+SEARCH_STOPWORDS = frozenset(("der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "und", "oder", "ist",
+                              "war", "wie", "was", "wer", "mit", "von", "vom", "zum", "zur", "für", "mir", "mich",
+                              "ich", "bitte", "gerade", "heute", "alle", "the", "and", "for", "with", "what", "how"))
+UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
+
+def _search_words(text: str) -> list[str]:
+    words = re.findall(r"[a-zäöüß0-9]+", text.casefold())
+    return [w.translate(UMLAUTS) for w in words if len(w) > 2 and w not in SEARCH_STOPWORDS]
+
+
+def rank_tools(query: str, tools, limit: int = 6) -> list:
+    """Own lightweight ranking: German topic patterns (same as the preselection) plus word overlap with tool name
+    and description, rarer words weigh more; read tools win ties."""
+    words = _search_words(query or "")
+    if not words:
+        return []
+    topics = {name for pattern, names in TOOL_TOPICS if re.search(pattern, query, re.IGNORECASE) for name in names}
+    docs = {t.name: _search_words(t.name.replace("_", " ") + " " + (t.description or "")) for t in tools}
+
+    def hit(word, tokens):
+        return any(tok.startswith(word[:5]) or word.startswith(tok[:5]) for tok in tokens if len(tok) > 2)
+    weights = {w: math.log(1 + len(docs) / (1 + sum(hit(w, toks) for toks in docs.values()))) for w in words}
+    scored = []
+    for index, t in enumerate(tools):
+        score = (3.0 if t.name in topics else 0.0) + sum(weights[w] for w in words if hit(w, docs[t.name]))
+        if score > 0:
+            scored.append((-score, t.name in WRITE_TOOLS, index, t))
+    return [entry[3] for entry in sorted(scored, key=lambda e: e[:3])[:max(1, limit)]]
 
 
 def select_tool_names(prompt: str, available: set[str], *, allow_write: bool) -> set[str]:
@@ -253,15 +301,25 @@ NO_TOOL_ANSWER = ("Das Modell wollte ein Werkzeug nutzen, das für diese Anfrage
 
 async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, prompt: str,
                    *, allow_write: bool = False, approve: Approver | None = None,
-                   max_rounds: int = 4, history: list[dict] | None = None,
+                   max_rounds: int = 6, history: list[dict] | None = None,
                    on_event: EventSink | None = None) -> str:
     """Run a bounded Ollama tool loop. Mutations require per-call human approval (sync or async)."""
     listed = await session.list_tools()
     selected = select_tool_names(prompt, {tool.name for tool in listed.tools}, allow_write=allow_write)
-    allowed = {tool.name: tool for tool in listed.tools if tool.name in selected}
-    tools = [{"type": "function", "function": {
-        "name": tool.name, "description": tool.description or "", "parameters": tool.inputSchema}}
-        for tool in allowed.values()]
+    # every tool this chat may use at all; the preselection only decides what is offered up front
+    permitted = {tool.name: tool for tool in listed.tools
+                 if tool.name in (READ_TOOLS | WRITE_TOOLS if allow_write else READ_TOOLS)}
+    allowed = {name: tool for name, tool in permitted.items() if name in selected}
+
+    def spec(tool):
+        return {"type": "function", "function": {"name": tool.name, "description": tool.description or "",
+                                                 "parameters": tool.inputSchema}}
+    tools = [spec(tool) for tool in allowed.values()] + [FIND_TOOLS_SPEC]
+
+    def offer(tool):
+        if tool.name not in allowed:
+            allowed[tool.name] = tool
+            tools.insert(len(tools) - 1, spec(tool))
     system = SYSTEM if allow_write else SYSTEM + READ_ONLY_HINT
     messages = [{"role": "system", "content": system}, *sanitize_history(history or []),
                 {"role": "user", "content": prompt}]
@@ -278,17 +336,36 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
             if any(item["name"] in WRITE_TOOLS for item in requests) and not allow_write:
                 return WRITE_BLOCKED
             calls = [{"type": "function", "function": item} for item in requests
-                     if item["name"] in allowed and isinstance(item["arguments"], dict)]
+                     if (item["name"] in permitted or item["name"] == FIND_TOOLS)
+                     and isinstance(item["arguments"], dict)]
             if not calls:
                 return NO_TOOL_ANSWER
         if any(call.get("function", {}).get("name") in WRITE_TOOLS for call in calls) and not allow_write:
             return WRITE_BLOCKED
         if not calls:
-            return message.get("content", "")
+            return re.sub(r"\s*</?tool_call>\s*$", "", str(message.get("content", ""))).strip()
         messages.append({"role": "assistant", "content": "", "tool_calls": calls})
         for call in calls:
             func = call.get("function", {})
             name, args = func.get("name"), func.get("arguments", {})
+            if name == FIND_TOOLS:
+                # small models sometimes name the argument differently or send none: use any text, else the question
+                text = " ".join(str(v) for v in (args.values() if isinstance(args, dict) else []) if isinstance(v, str))
+                query = (text.strip() or prompt)[:200]
+                await _emit(on_event, {"type": "tool_call", "name": FIND_TOOLS, "arguments": {"query": query},
+                                       "write": False})
+                found = rank_tools(query, list(permitted.values())) or rank_tools(prompt, list(permitted.values()))
+                for tool in found:
+                    offer(tool)
+                result = ("Diese Werkzeuge stehen dir jetzt zur Verfügung:\n" + "\n".join(
+                    f"- {t.name}: {(t.description or '').split(chr(10))[0][:160]}" for t in found)
+                    if found else "Keine passenden Werkzeuge gefunden.")
+                await _emit(on_event, {"type": "tool_result", "name": FIND_TOOLS, "ok": bool(found),
+                                       "preview": result[:PREVIEW_CHARS]})
+                messages.append({"role": "tool", "tool_name": FIND_TOOLS, "content": result})
+                continue
+            if name in permitted and name not in allowed:
+                offer(permitted[name])  # a real, permitted tool the preselection did not offer
             if name not in allowed or not isinstance(args, dict):
                 result = "Tool unavailable or invalid arguments"
                 await _emit(on_event, {"type": "tool_result", "name": name or "unknown", "ok": False,

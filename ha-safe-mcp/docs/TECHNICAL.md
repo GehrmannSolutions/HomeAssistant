@@ -41,7 +41,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`diagnostics.py`](../src/ha_safe_mcp/diagnostics.py) | Read-only debugging: traces, system log, logbook, history, statistics, repairs, system health (WS subscription collected until `finish`), template rendering, condition tests; timestamps converted to HA's time zone |
 | [`remote.py`](../src/ha_safe_mcp/remote.py) | Remote MCP endpoint: client token store, permission caps, per-client stdio children, gateway server |
 | [`changes.py`](../src/ha_safe_mcp/changes.py) | Change journal: capture previous state, journaled writes, undo through the same gated operations |
-| [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop, CLI confirmation, web run/approval lifecycle |
+| [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop (keyword preselection, local `find_tools` search with German topic patterns and word overlap, on-demand loading of permitted tools by name), CLI confirmation, web run/approval lifecycle |
 | [`web.py`](../src/ha_safe_mcp/web.py), [`webui/`](../src/ha_safe_mcp/webui/index.html), [`access_auth.py`](../src/ha_safe_mcp/access_auth.py) | HTTP UI, bundled static frontend, optional Access JWT validation |
 | [`config_store.py`](../src/ha_safe_mcp/config_store.py), [`credentials.py`](../src/ha_safe_mcp/credentials.py), [`audit.py`](../src/ha_safe_mcp/audit.py), [`files.py`](../src/ha_safe_mcp/files.py) | Local settings, secrets, metadata logs and generated text files |
 

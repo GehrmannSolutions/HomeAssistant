@@ -66,7 +66,7 @@ async def test_read_tool_calls_travel_from_ollama_to_mcp_and_back():
         answer = await run_chat(session, http, "qwen2.5-coder:7b", "Ist das Licht an?")
     assert answer == "Das Licht ist aus."
     assert session.calls == [("ha_get_state", {"entity_id": "light.desk"})]
-    assert [t["function"]["name"] for t in requests[0]["tools"]] == ["ha_get_state"]
+    assert [t["function"]["name"] for t in requests[0]["tools"]] == ["ha_get_state", "find_tools"]
     assert requests[1]["messages"][-1] == {"role": "tool", "tool_name": "ha_get_state", "content": '{"state":"off"}'}
 
 
@@ -99,7 +99,7 @@ async def test_unknown_json_tool_request_cannot_escape_allowlist():
 async def test_write_tool_is_not_exposed_in_read_only_mode():
     def respond(request):
         tools = {tool["function"]["name"] for tool in json.loads(request.content)["tools"]}
-        assert tools == {"ha_get_state"}
+        assert tools - {"find_tools"} == {"ha_get_state"}
         return httpx.Response(200, json={"message": {"role": "assistant", "content": "Okay"}})
     session = FakeSession()
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:

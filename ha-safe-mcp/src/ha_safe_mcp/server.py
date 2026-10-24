@@ -106,13 +106,17 @@ class HAClient:
         if not isinstance(states, list):
             raise RuntimeError("Unexpected Home Assistant response")
         needle = query.casefold()
+        # German domain names ("Sonne", "Rollläden") find entities whose IDs and names are English (sun.sun)
+        from .domains import DOMAIN_INFO
+        label_domains = {d for d, (label, _) in DOMAIN_INFO.items() if len(needle) >= 3 and needle in label.casefold()}
         return [{"entity_id": state["entity_id"], "state": state.get("state", ""),
                  "friendly_name": str(state.get("attributes", {}).get("friendly_name", ""))}
                 for state in states if isinstance(state, dict) and isinstance(state.get("entity_id"), str)
                 and isinstance(state.get("attributes", {}), dict)
                 and (not domain or state["entity_id"].startswith(domain + "."))
                 and (needle in state["entity_id"].casefold()
-                     or needle in str(state["attributes"].get("friendly_name", "")).casefold())][:limit]
+                     or needle in str(state["attributes"].get("friendly_name", "")).casefold()
+                     or state["entity_id"].split(".", 1)[0] in label_domains)][:limit]
 
     async def get_state(self, entity_id: str) -> dict:
         if not ENTITY.fullmatch(entity_id):
