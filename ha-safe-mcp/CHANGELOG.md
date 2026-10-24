@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.25.0 – 2026-10-25
+
+- **Read-only ecosystem views**: `ha_list_addons`, `ha_get_system_info` (Supervisor installs), `ha_list_hacs_repositories`,
+  `ha_list_zigbee_devices` (availability, lqi/rssi, last seen; `problems_only`), `ha_list_thread_networks`.
+  Without Supervisor/HACS/ZHA the tools say so instead of failing. The `supervisor/api` proxy only allows GET of
+  `/addons`, `/core/info`, `/supervisor/info`, `/os/info`, `/host/info`. No addresses, host names or keys.
+- Verified read-only on prod (3 add-ons, healthy Supervisor, 6 HACS repositories, 11 Zigbee devices, 1 Thread
+  network) and on the dev HA (no Supervisor/HACS/ZHA).
+
 ## 0.24.1 – 2026-10-25
 
 - Weather forecast entries carry their `day` (today/tomorrow/weekday, in HA's time zone) and `now`; new `day`

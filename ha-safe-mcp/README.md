@@ -26,6 +26,7 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 - Actions are read back: the answer says whether each device really reached the requested state; service responses
   and custom events.
 - Weather forecast (daily, hourly) from Home Assistant's weather entities.
+- Read-only views of add-ons, system health, HACS, Zigbee devices and Thread networks.
 - Blueprints (import from URL), themes and dashboard resources.
 - Updates, configuration check, reload and restart (restart only after a passing check).
 - Calendars and to-do lists: read events and items, add, change, tick off, delete.

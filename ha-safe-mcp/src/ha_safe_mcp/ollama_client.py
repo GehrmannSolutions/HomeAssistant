@@ -28,7 +28,9 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_entity_registry", "ha_list_helper_types", "ha_list_calendars",
                         "ha_get_calendar_events", "ha_list_todo_lists", "ha_get_todo_items", "ha_list_updates",
                         "ha_get_release_notes", "ha_check_config", "ha_list_blueprints", "ha_list_themes",
-                        "ha_list_dashboard_resources", "ha_get_weather_forecast"})
+                        "ha_list_dashboard_resources", "ha_get_weather_forecast", "ha_list_addons",
+                        "ha_get_system_info", "ha_list_hacs_repositories", "ha_list_zigbee_devices",
+                        "ha_list_thread_networks"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -152,6 +154,11 @@ TOOL_TOPICS = (
     (r"template|jinja|bedingung|condition", {"ha_render_template", "ha_test_condition"}),
     (r"wo (?:wird|ist|kommt)|verwendet|benutzt|genutzt|vorkommt|referenz|abh[äa]ngig|umbenenn",
      {"ha_find_usages"}),
+    (r"add.?ons?\b|supervisor|speicherplatz|festplatte|disk|betriebssystem|home assistant os|systeminfo",
+     {"ha_list_addons", "ha_get_system_info"}),
+    (r"hacs|custom (?:integration|card|component)", {"ha_list_hacs_repositories"}),
+    (r"zigbee|\bzha\b|funk|empfang|signal|lqi|rssi|mesh", {"ha_list_zigbee_devices"}),
+    (r"thread|matter|border.?router", {"ha_list_thread_networks"}),
     (r"\bevent|ereignis|feuer|signal senden", {"ha_fire_event", "ha_get_automation", "ha_search_entities"}),
     (r"wetter|vorhersage|regen|schnee|sonnig|bew[öo]lkt|gewitter|forecast|\bwind",
      {"ha_get_weather_forecast"}),

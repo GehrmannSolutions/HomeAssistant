@@ -114,18 +114,18 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.24.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.25.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 56 | 56 | 0 |
-   | Steuern | 63 | 56 | 7 |
-   | Konfiguration ändern | 104 | 56 | 48 |
-   | Löschen | 123 | 56 | 67 |
+   | Nur lesen | 61 | 61 | 0 |
+   | Steuern | 68 | 61 | 7 |
+   | Konfiguration ändern | 109 | 61 | 48 |
+   | Löschen | 128 | 61 | 67 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (56)" and "write/delete
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (61)" and "write/delete
    tools (48)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
@@ -232,6 +232,17 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Add-ons, system, HACS, Zigbee and Thread (read-only)
+
+- `ha_list_addons` (state, version, pending update) and `ha_get_system_info` (Core, Supervisor and OS versions,
+  Supervisor health, board, disk usage) need a Supervisor install (HA OS / Supervised); without one they say so.
+  The Supervisor proxy is limited to these read endpoints.
+- `ha_list_hacs_repositories`: what is installed through HACS with installed/available version.
+- `ha_list_zigbee_devices`: ZHA devices with availability, link quality (`lqi`, weak below 80), `rssi`, last seen
+  and role; `problems_only: true` lists only unavailable or weak devices.
+- `ha_list_thread_networks`: Thread networks (name, channel, preferred, source).
+- No device addresses, IP addresses, host names, PAN IDs or network keys are returned.
 
 ### Switching results and weather
 

@@ -270,6 +270,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .system import HASystem
     from .customize import HACustomize
     from .weather import HAWeather
+    from .ecosystem import HAEcosystem
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -283,6 +284,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     system = HASystem(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     customize = HACustomize(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     weather = HAWeather(client)
+    ecosystem = HAEcosystem(client, admin.ws)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
@@ -501,6 +503,35 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         except (RuntimeError, ValueError) as exc:
             result["references_to_old_id"] = f"not checked: {exc}"
         return result
+
+    @tool()
+    async def ha_list_addons() -> list[dict]:
+        """Installed add-ons (Supervisor installs) with state (started/stopped), version and pending updates; empty
+        without a Supervisor."""
+        return await ecosystem.list_addons()
+
+    @tool()
+    async def ha_get_system_info() -> dict:
+        """Versions of Core, Supervisor and OS with pending updates, Supervisor health, board and disk usage
+        (Supervisor installs). No network details."""
+        return await ecosystem.system_info()
+
+    @tool()
+    async def ha_list_hacs_repositories(installed_only: bool = True) -> dict:
+        """Repositories installed through HACS (custom integrations, cards, themes) with installed/available version
+        and pending upgrades."""
+        return await ecosystem.list_hacs(installed_only)
+
+    @tool()
+    async def ha_list_zigbee_devices(problems_only: bool = False) -> dict:
+        """Zigbee (ZHA) devices with availability, link quality (lqi), rssi, last seen and role; counts of
+        unavailable and weak devices. problems_only=true lists only those. No device addresses."""
+        return await ecosystem.zigbee_devices(problems_only)
+
+    @tool()
+    async def ha_list_thread_networks() -> list[dict]:
+        """Thread networks known to Home Assistant (name, channel, preferred, source). No network keys or IDs."""
+        return await ecosystem.thread_networks()
 
     @tool()
     async def ha_get_weather_forecast(entity_id: str = "", type: str = "daily", limit: int = 10,
