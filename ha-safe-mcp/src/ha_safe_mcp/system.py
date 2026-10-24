@@ -14,9 +14,25 @@ Guardrails:
 """
 from __future__ import annotations
 
+import json
+import re
+
 from .server import ENTITY
 
 NOTES_MAX = 4000
+EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+EVENT_DATA_MAX = 4000
+# events Home Assistant emits itself: firing them by hand would fake system behaviour
+SYSTEM_EVENTS = frozenset({
+    "homeassistant_start", "homeassistant_started", "homeassistant_stop", "homeassistant_final_write",
+    "homeassistant_close", "core_config_updated", "call_service", "state_changed", "state_reported",
+    "service_registered", "service_removed", "component_loaded", "themes_updated", "panels_updated",
+    "lovelace_updated", "user_added", "user_updated", "user_removed", "entity_registry_updated",
+    "device_registry_updated", "area_registry_updated", "floor_registry_updated", "label_registry_updated",
+    "category_registry_updated", "config_entry_discovered", "data_entry_flow_progressed", "logbook_entry",
+    "automation_reloaded", "automation_triggered", "script_started", "scene_reloaded", "persistent_notifications_updated",
+    "recorder_5min_statistics_generated", "recorder_hourly_statistics_generated", "time_changed", "event_registry_updated",
+    "repairs_issue_registry_updated"})
 REMOTE_HINT = ("Home Assistant is restarting; it is usually back within a minute. Check with ha_get_overview or "
                "ha_check_config before the next change.")
 
@@ -112,6 +128,19 @@ class HASystem:
         service = "clear_skipped" if clear else "skip"
         await self.client._request("POST", f"/api/services/update/{service}", data={"entity_id": entity_id})
         return {"entity_id": entity_id, "skipped": not clear}
+
+    async def fire_event(self, event_type: str, event_data: dict | None = None) -> dict:
+        """Fire a custom event (automations with an event trigger react to it)."""
+        self._check_admin()
+        if not isinstance(event_type, str) or not EVENT_TYPE.fullmatch(event_type):
+            raise ValueError("event_type: lowercase letters, digits and underscores, e.g. 'doorbell_pressed'")
+        if event_type in SYSTEM_EVENTS:
+            raise ValueError(f"{event_type} is an event Home Assistant emits itself; it cannot be fired by hand")
+        data = event_data or {}
+        if not isinstance(data, dict) or len(json.dumps(data, default=str)) > EVENT_DATA_MAX:
+            raise ValueError(f"event data must be an object of at most {EVENT_DATA_MAX} characters as JSON")
+        await self.client._request("POST", f"/api/events/{event_type}", data=data)
+        return {"fired": event_type}
 
     # ------------------------------------------------------------------ top level
     async def install_update(self, entity_id: str, version: str | None = None, backup: bool = False) -> dict:

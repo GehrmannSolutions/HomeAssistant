@@ -3,6 +3,14 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.24.0 – 2026-10-25
+
+- **`ha_fire_event`** (admin write): custom events with optional data for automations with event triggers; events
+  HA emits itself are refused.
+- **`ha_call_service` `return_response`**: returns `service_response` of services that answer (capped).
+- Verified on the dev HA: an automation with an event trigger and event_data filter switched a helper only for the
+  matching event; `homeassistant_stop` refused; `todo.get_items` response returned.
+
 ## 0.23.0 – 2026-10-25
 
 - **`ha_call_service` reads the targets back** (about 3 s) and returns `states_after` with `confirmed` per entity

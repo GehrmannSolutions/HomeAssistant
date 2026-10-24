@@ -2,6 +2,7 @@
 
 import asyncio
 import functools
+import json
 import os
 import re
 import time
@@ -326,13 +327,21 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_call_service(domain: str, service: str, entity_id: str | list[str],
-                              service_data: dict | None = None) -> dict:
+                              service_data: dict | None = None, return_response: bool = False) -> dict:
         """Call an action (e.g. light.turn_on) for one entity_id or a list of up to 20 entity_ids of the same
         domain (e.g. all available lights of a room from ha_list_area_entities). Returns states_after: the targets
         read back after the call with confirmed true/false (false = expected state not reached; report that, do not
-        claim success). Disabled unless HA_ALLOW_WRITE=true; only configured domains allowed."""
-        await client.call_service(domain, service, entity_id, service_data)
-        return await read_back(client, domain, service, entity_id, service_data)
+        claim success). return_response=true returns the data of services that answer (e.g. todo.get_items).
+        Disabled unless HA_ALLOW_WRITE=true; only configured domains allowed."""
+        response = await client.call_service(domain, service, entity_id, service_data,
+                                             return_response=bool(return_response))
+        result = await read_back(client, domain, service, entity_id, service_data)
+        if return_response:
+            answer = response.get("service_response") if isinstance(response, dict) else None
+            text = json.dumps(answer, default=str)
+            result = {"service_response": answer if len(text) <= 8000 else text[:8000],
+                      **({"service_response_truncated": True} if len(text) > 8000 else {}), **result}
+        return result
 
     @tool()
     async def ha_rest_catalog() -> list[dict]:
@@ -554,6 +563,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         """Remove a dashboard resource (undo registers it again). Admin write and delete required."""
         return await journaled("ha_delete_dashboard_resource", "resource", resource_id,
                                lambda: customize.delete_resource(resource_id))
+
+    @tool()
+    async def ha_fire_event(event_type: str, event_data: dict | None = None) -> dict:
+        """Fire a custom event, e.g. 'doorbell_pressed' with event_data {"door": "front"}; automations with an
+        event trigger react to it. Events Home Assistant emits itself (state_changed, homeassistant_start, ...) are
+        refused. Admin write required."""
+        return await system.fire_event(event_type, event_data)
 
     @tool()
     async def ha_list_updates(pending_only: bool = True) -> list[dict]:

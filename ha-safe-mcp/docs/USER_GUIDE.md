@@ -114,19 +114,19 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.23.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.24.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
    | Nur lesen | 56 | 56 | 0 |
    | Steuern | 63 | 56 | 7 |
-   | Konfiguration ändern | 103 | 56 | 47 |
-   | Löschen | 122 | 56 | 66 |
+   | Konfiguration ändern | 104 | 56 | 48 |
+   | Löschen | 123 | 56 | 67 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
    *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (56)" and "write/delete
-   tools (47)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   tools (48)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -239,7 +239,11 @@ title/system options/disabled state. Each such tool result carries a `change_id`
   `confirmed` per entity: true when the expected state was reached (on/off, open(ing)/closed/closing,
   locked/unlocked, the requested HVAC mode, ...), false when not (slow, moving or offline device: the answer should
   say so instead of claiming success), `null` for actions without a single expected result (toggle, set values).
-  `all_confirmed` summarises them.
+  `all_confirmed` summarises them. With `return_response: true` the data of services that answer (for example
+  `todo.get_items`) comes back as `service_response`.
+- **`ha_fire_event`** (admin write) fires a custom event such as `doorbell_pressed` with optional `event_data`;
+  automations with an event trigger react to it. Events Home Assistant emits itself (`state_changed`,
+  `homeassistant_start`, `call_service`, ...) are refused so that nobody can fake system behaviour.
 - **`ha_get_weather_forecast`**: current weather and the forecast (`daily`, `hourly` or `twice_daily`) of a weather
   entity, read from HA's `weather.get_forecasts` service response (forecasts are no longer state attributes). Times
   are in HA's time zone. Read-only.

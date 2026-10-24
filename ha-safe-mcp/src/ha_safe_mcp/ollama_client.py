@@ -47,7 +47,7 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_update_todo_item", "ha_remove_todo_items", "ha_reload", "ha_skip_update",
                          "ha_install_update", "ha_restart", "ha_preview_blueprint", "ha_save_blueprint",
                          "ha_delete_blueprint", "ha_set_theme", "ha_add_dashboard_resource",
-                         "ha_delete_dashboard_resource"})
+                         "ha_delete_dashboard_resource", "ha_fire_event"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
                            "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
@@ -150,6 +150,7 @@ TOOL_TOPICS = (
     (r"template|jinja|bedingung|condition", {"ha_render_template", "ha_test_condition"}),
     (r"wo (?:wird|ist|kommt)|verwendet|benutzt|genutzt|vorkommt|referenz|abh[äa]ngig|umbenenn",
      {"ha_find_usages"}),
+    (r"\bevent|ereignis|feuer|signal senden", {"ha_fire_event", "ha_get_automation", "ha_search_entities"}),
     (r"wetter|vorhersage|regen|schnee|sonnig|bew[öo]lkt|gewitter|forecast|\bwind",
      {"ha_get_weather_forecast"}),
     (r"blueprint|vorlage f[üu]r automation|bauplan",
