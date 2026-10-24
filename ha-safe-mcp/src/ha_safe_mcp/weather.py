@@ -28,9 +28,12 @@ class HAWeather:
                 self._zone = timezone.utc
         return self._zone
 
-    async def forecast(self, entity_id: str = "", kind: str = "daily", limit: int = 10) -> dict:
+    async def forecast(self, entity_id: str = "", kind: str = "daily", limit: int = 10, day: str = "") -> dict:
         if kind not in KINDS:
             raise ValueError(f"type: one of {', '.join(KINDS)}")
+        if day and day not in ("today", "tomorrow") and not (isinstance(day, str) and len(day) == 10
+                                                             and day[4] == "-" and day[7] == "-"):
+            raise ValueError("day: 'today', 'tomorrow' or a date 'YYYY-MM-DD'")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 48:
             raise ValueError("limit: 1-48 entries")
         states = [s for s in await self.client._request("GET", "/api/states") or []
@@ -50,17 +53,31 @@ class HAWeather:
                                               data={"entity_id": entity_id, "type": kind})
         items = (((response or {}).get("service_response") or {}).get(entity_id) or {}).get("forecast") or []
         zone = await self._tz()
+        now = datetime.now(zone)
         forecast = []
-        for item in items[:limit]:
+        for item in items if day else items[:limit]:
             entry = {key: item[key] for key in FIELDS if isinstance(item, dict) and item.get(key) is not None}
             if isinstance(entry.get("datetime"), str):
                 try:
-                    entry["datetime"] = datetime.fromisoformat(entry["datetime"]).astimezone(zone).isoformat()
+                    moment = datetime.fromisoformat(entry["datetime"]).astimezone(zone)
                 except ValueError:
-                    pass
+                    moment = None
+                if moment is not None:
+                    entry["datetime"] = moment.isoformat()
+                    offset = (moment.date() - now.date()).days
+                    # small models mix up days (e.g. at 1 a.m.): name the day relative to now in HA's time zone
+                    entry["day"] = {0: "today", 1: "tomorrow"}.get(offset, f"{moment:%A} {moment.date()}")
+                    if day and day != entry["day"] and day != str(moment.date()):
+                        continue
+            elif day:
+                continue
             forecast.append(entry)
+        forecast = forecast[:limit]
         attributes = state.get("attributes") or {}
         current = {"condition": state.get("state"),
                    **{key: attributes[key] for key in CURRENT if attributes.get(key) is not None}}
-        return {"entity_id": entity_id, "name": attributes.get("friendly_name"), "type": kind, "current": current,
-                "forecast": forecast}
+        result = {"entity_id": entity_id, "name": attributes.get("friendly_name"), "type": kind,
+                  "now": now.isoformat(timespec="minutes"), "current": current, "forecast": forecast}
+        if day:
+            result["day"] = day
+        return result

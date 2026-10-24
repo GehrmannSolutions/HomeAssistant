@@ -3,6 +3,12 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.24.1 – 2026-10-25
+
+- Weather forecast entries carry their `day` (today/tomorrow/weekday, in HA's time zone) and `now`; new `day`
+  parameter returns only one day. Found in a chat test: at 1 a.m. qwen3-coder answered "morgen" with today's entry;
+  with `day` and a prompt hint it now picks tomorrow (verified against HA).
+
 ## 0.24.0 – 2026-10-25
 
 - **`ha_fire_event`** (admin write): custom events with optional data for automations with event triggers; events

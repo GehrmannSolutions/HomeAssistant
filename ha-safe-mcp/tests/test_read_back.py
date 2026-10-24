@@ -82,9 +82,9 @@ async def test_weather_forecast_from_the_service_response_in_local_time():
     assert dict(call.calls[0].request.url.params) == {"return_response": ""}
     assert json.loads(call.calls[0].request.content) == {"entity_id": "weather.home", "type": "daily"}
     assert result["entity_id"] == "weather.home" and result["current"]["condition"] == "cloudy"
-    assert result["forecast"] == [{"datetime": "2026-10-25T12:00:00+01:00", "condition": "rainy", "temperature": 9.5,
-                                   "templow": 4.0, "precipitation": 3.2, "precipitation_probability": 80,
-                                   "wind_speed": 20}]
+    entry = {k: v for k, v in result["forecast"][0].items() if k != "day"}
+    assert entry == {"datetime": "2026-10-25T12:00:00+01:00", "condition": "rainy", "temperature": 9.5,
+                     "templow": 4.0, "precipitation": 3.2, "precipitation_probability": 80, "wind_speed": 20}
     with pytest.raises(ValueError):
         await weather.forecast("weather.home", kind="weekly")
 
@@ -95,3 +95,36 @@ def test_weather_tool_is_read_only_and_offered():
     names = {t.name for t in asyncio.run(create_server(HAClient(URL, "t")).list_tools())}
     assert "ha_get_weather_forecast" in names & READ_TOOLS
     assert "ha_get_weather_forecast" in select_tool_names("Wie wird das Wetter morgen?", names, allow_write=False)
+
+
+async def test_forecast_entries_say_which_day_they_are(monkeypatch):
+    from datetime import datetime as real_datetime
+    from ha_safe_mcp import weather as weather_module
+
+    class Clock(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 10, 25, 1, 5, tzinfo=tz)  # 01:05 local time
+    monkeypatch.setattr(weather_module, "datetime", Clock)
+    weather = HAWeather(HAClient(URL, "t"))
+    days = [{"datetime": f"2026-10-{d}T11:00:00+00:00", "condition": "rainy", "temperature": 9} for d in (25, 26, 27)]
+    with respx.mock(base_url=URL) as router:
+        router.get("/api/states").mock(return_value=httpx.Response(200, json=[
+            {"entity_id": "weather.home", "state": "cloudy", "attributes": {}}]))
+        router.get("/api/config").mock(return_value=httpx.Response(200, json={"time_zone": "Europe/Berlin"}))
+        router.post("/api/services/weather/get_forecasts").mock(return_value=httpx.Response(200, json={
+            "service_response": {"weather.home": {"forecast": days}}}))
+        result = await weather.forecast()
+    assert [f["day"] for f in result["forecast"]] == ["today", "tomorrow", "Tuesday 2026-10-27"]
+    assert result["now"].startswith("2026-10-25T01:05")
+    with respx.mock(base_url=URL) as router:
+        router.get("/api/states").mock(return_value=httpx.Response(200, json=[
+            {"entity_id": "weather.home", "state": "cloudy", "attributes": {}}]))
+        router.post("/api/services/weather/get_forecasts").mock(return_value=httpx.Response(200, json={
+            "service_response": {"weather.home": {"forecast": days}}}))
+        tomorrow = await weather.forecast(day="tomorrow")
+        by_date = await weather.forecast(day="2026-10-27")
+    assert [f["datetime"][:10] for f in tomorrow["forecast"]] == ["2026-10-26"] and tomorrow["day"] == "tomorrow"
+    assert [f["day"] for f in by_date["forecast"]] == ["Tuesday 2026-10-27"]
+    with pytest.raises(ValueError, match="day"):
+        await weather.forecast(day="übermorgen")

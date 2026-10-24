@@ -503,10 +503,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return result
 
     @tool()
-    async def ha_get_weather_forecast(entity_id: str = "", type: str = "daily", limit: int = 10) -> dict:
+    async def ha_get_weather_forecast(entity_id: str = "", type: str = "daily", limit: int = 10,
+                                      day: str = "") -> dict:
         """Weather now and the forecast (type 'daily', 'hourly' or 'twice_daily') of a weather entity (default: the
-        first one); times in Home Assistant's time zone. Read-only."""
-        return await weather.forecast(entity_id, type, limit)
+        first one); times in Home Assistant's time zone, each entry labelled with its day ('today', 'tomorrow',
+        weekday). For a question about one day pass day='today', 'tomorrow' or 'YYYY-MM-DD'. Read-only."""
+        return await weather.forecast(entity_id, type, limit, day)
 
     @tool()
     async def ha_list_blueprints(domain: str = "automation") -> list[dict]:

@@ -246,7 +246,9 @@ title/system options/disabled state. Each such tool result carries a `change_id`
   `homeassistant_start`, `call_service`, ...) are refused so that nobody can fake system behaviour.
 - **`ha_get_weather_forecast`**: current weather and the forecast (`daily`, `hourly` or `twice_daily`) of a weather
   entity, read from HA's `weather.get_forecasts` service response (forecasts are no longer state attributes). Times
-  are in HA's time zone. Read-only.
+  are in HA's time zone and every entry carries its `day` (`today`, `tomorrow`, weekday + date); `day:
+  "tomorrow"` (or `today`, `YYYY-MM-DD`) returns only that day, which small models handle far more reliably than
+  picking from a list. Read-only.
 
 ### Blueprints, themes and dashboard resources
 
