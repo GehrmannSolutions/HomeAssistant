@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>HA Safe MCP</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/static/icon.svg" alt="" width="28" height="28">
+      <span>HA Safe MCP</span>
+    </div>
+    <nav class="tabs" aria-label="Bereiche" hidden>
+      <button type="button" class="tab" data-view="home">Übersicht</button>
+      <button type="button" class="tab" data-view="chat">Chat</button>
+      <button type="button" class="tab" data-view="settings">Einstellungen</button>
+    </nav>
+    <div class="mode-pill" id="mode-pill" hidden></div>
+  </header>
+
+  <main>
+    <section id="view-loading" class="view">
+      <p class="muted">Lade …</p>
+    </section>
+
+    <!-- First-run setup wizard -->
+    <section id="view-setup" class="view" hidden>
+      <div class="card wizard">
+        <h1>Ersteinrichtung</h1>
+        <ol class="steps" aria-label="Fortschritt">
+          <li data-step="1">Home Assistant</li>
+          <li data-step="2">Lokales Modell</li>
+          <li data-step="3">Sicherheit</li>
+          <li data-step="4">Fertig</li>
+        </ol>
+
+        <form id="step-1" class="step" data-step="1" autocomplete="off">
+          <p>Verbinde den MCP mit deiner Home-Assistant-Instanz. Den Token erstellst du in Home Assistant unter
+            <strong>Profil → Sicherheit → Langlebige Zugriffstoken</strong>.</p>
+          <label>Adresse von Home Assistant
+            <input name="ha_url" type="url" required value="http://127.0.0.1:8123" spellcheck="false">
+          </label>
+          <label>Langlebiger Zugriffstoken
+            <input name="token" type="password" autocomplete="new-password" spellcheck="false" placeholder="eyJ…">
+            <small class="muted" id="token-hint">Der Token wird nur lokal in <code>.env</code> (Rechte 600) gespeichert und nie angezeigt.</small>
+          </label>
+          <div class="actions">
+            <button type="submit" class="primary">Verbindung prüfen</button>
+          </div>
+          <div class="result" role="status" aria-live="polite"></div>
+        </form>
+
+        <form id="step-2" class="step" data-step="2" hidden>
+          <p>Wähle das lokale Modell, mit dem du chatten möchtest. Es läuft über Ollama auf diesem Rechner.</p>
+          <label>Adresse von Ollama
+            <input name="ollama_url" type="url" required value="http://127.0.0.1:11434" spellcheck="false">
+          </label>
+          <div class="actions">
+            <button type="button" class="secondary" data-action="load-models">Modelle laden</button>
+          </div>
+          <label>Modell
+            <select name="ollama_model" required></select>
+          </label>
+          <div class="result" role="status" aria-live="polite"></div>
+          <div class="actions">
+            <button type="button" class="ghost" data-action="back">Zurück</button>
+            <button type="submit" class="primary">Weiter</button>
+          </div>
+        </form>
+
+        <form id="step-3" class="step" data-step="3" hidden>
+          <p>Standard ist <strong>nur lesen</strong>. Schreibrechte kannst du jederzeit in den Einstellungen ändern;
+            im Chat musst du zusätzlich jede einzelne Aktion bestätigen.</p>
+          <div class="switches">
+            <label class="switch"><input type="checkbox" name="allow_write"> <span>Steuern erlauben</span>
+              <small class="muted">Dienste für einzelne Entitäten der erlaubten Domains (z. B. Licht an/aus).</small></label>
+            <label class="switch"><input type="checkbox" name="allow_admin_write"> <span>Konfiguration ändern erlauben</span>
+              <small class="muted">Automationen, Dashboards, Helfer, Registry. Braucht einen Admin-Token.</small></label>
+            <label class="switch"><input type="checkbox" name="allow_delete"> <span>Löschen erlauben</span>
+              <small class="muted">Automationen, Dashboards und Helfer entfernen.</small></label>
+          </div>
+          <label>Erlaubte Domains für Steuerbefehle
+            <input name="allowed_domains" value="light,switch,fan,climate,cover,media_player" spellcheck="false">
+          </label>
+          <div class="result" role="status" aria-live="polite"></div>
+          <div class="actions">
+            <button type="button" class="ghost" data-action="back">Zurück</button>
+            <button type="submit" class="primary">Speichern</button>
+          </div>
+        </form>
+
+        <div id="step-4" class="step" data-step="4" hidden>
+          <h2>Alles bereit</h2>
+          <p class="result ok" id="done-summary"></p>
+          <div class="actions">
+            <button type="button" class="primary" data-action="open-chat">Zum Chat</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Overview -->
+    <section id="view-home" class="view" hidden>
+      <div class="grid">
+        <div class="card">
+          <h2>Home Assistant</h2>
+          <dl class="facts" id="ha-facts"></dl>
+          <button type="button" class="secondary" data-action="recheck">Erneut prüfen</button>
+        </div>
+        <div class="card">
+          <h2>Lokales Modell</h2>
+          <dl class="facts" id="model-facts"></dl>
+        </div>
+        <div class="card">
+          <h2>Berechtigungen</h2>
+          <ul class="perm" id="perm-list"></ul>
+          <button type="button" class="ghost" data-view-link="settings">Ändern</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Loslegen</h2>
+        <div class="chips" id="start-chips"></div>
+      </div>
+    </section>
+
+    <!-- Full chat section -->
+    <section id="view-chat" class="view" hidden>
+      <div class="chat-shell" data-chat-root="main"></div>
+    </section>
+
+    <!-- Settings -->
+    <section id="view-settings" class="view" hidden>
+      <form class="card" id="settings-form" autocomplete="off">
+        <h2>Einstellungen</h2>
+        <label>Adresse von Home Assistant
+          <input name="ha_url" type="url" required spellcheck="false">
+        </label>
+        <label>Neuer Token <small class="muted">(leer lassen, um den gespeicherten zu behalten)</small>
+          <input name="token" type="password" autocomplete="new-password" spellcheck="false">
+        </label>
+        <label>Adresse von Ollama
+          <input name="ollama_url" type="url" required spellcheck="false">
+        </label>
+        <label>Modell
+          <select name="ollama_model" required></select>
+        </label>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" name="allow_write"> <span>Steuern erlauben</span></label>
+          <label class="switch"><input type="checkbox" name="allow_admin_write"> <span>Konfiguration ändern erlauben</span></label>
+          <label class="switch"><input type="checkbox" name="allow_delete"> <span>Löschen erlauben</span></label>
+        </div>
+        <label>Erlaubte Domains für Steuerbefehle
+          <input name="allowed_domains" spellcheck="false">
+        </label>
+        <div class="result" role="status" aria-live="polite"></div>
+        <div class="actions">
+          <button type="button" class="secondary" data-action="load-models">Modelle neu laden</button>
+          <button type="submit" class="primary">Prüfen und speichern</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <!-- Floating chat bubble -->
+  <div class="bubble" id="bubble" hidden>
+    <div class="bubble-panel" id="bubble-panel" role="dialog" aria-label="Schnell-Chat" hidden>
+      <div class="bubble-head">
+        <strong>Assistent</strong>
+        <div>
+          <button type="button" class="icon" data-action="expand" title="Im großen Chat öffnen" aria-label="Im großen Chat öffnen">⤢</button>
+          <button type="button" class="icon" data-action="close-bubble" title="Schließen" aria-label="Schließen">✕</button>
+        </div>
+      </div>
+      <div class="chat-shell compact" data-chat-root="bubble"></div>
+    </div>
+    <button type="button" class="bubble-button" id="bubble-button" aria-label="Chat öffnen" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm3 6.5a1.5 1.5 0 1 0 0 .01Zm5 0a1.5 1.5 0 1 0 0 .01Zm5 0a1.5 1.5 0 1 0 0 .01Z"/></svg>
+      <span class="badge" id="bubble-badge" hidden></span>
+    </button>
+  </div>
+
+  <template id="chat-template">
+    <div class="messages" aria-live="polite"></div>
+    <form class="composer">
+      <textarea name="message" rows="1" placeholder="Frag etwas zu deinem Zuhause …" maxlength="4000" required></textarea>
+      <div class="composer-row">
+        <label class="write-toggle" title="Erlaubt dem Modell Aktionen vorzuschlagen; jede Aktion musst du einzeln bestätigen">
+          <input type="checkbox" name="allow_write"> <span>Aktionen erlauben</span>
+        </label>
+        <span class="spacer"></span>
+        <button type="button" class="ghost small" data-action="clear">Neu</button>
+        <button type="button" class="secondary small" data-action="stop" hidden>Stopp</button>
+        <button type="submit" class="primary small">Senden</button>
+      </div>
+    </form>
+  </template>
+</body>
+</html>

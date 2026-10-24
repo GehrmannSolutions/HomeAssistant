@@ -4,7 +4,7 @@ Dieses Handbuch beschreibt **die Implementierung in diesem Repository**, nicht e
 
 ## 1. Zweck, Architektur und Grenzen
 
-`ha-safe-mcp` verbindet einen MCP-Client über **stdio** mit Home Assistant (HA). Es gibt einfache Zustands-/Dienst-Tools, einen **festen REST-Katalog** und typisierte Verwaltungs-Tools für Automationen, Storage-Dashboards, fünf Helper-Domains und Entity-Registry-Metadaten. REST läuft über HTTP(S), ausgewählte Verwaltung über HA-WebSocket. Der Server akzeptiert **keine beliebigen URLs oder WebSocket-Befehle**. Der REST-Katalog hat 20 Methoden/Routen; `ha_rest_catalog` zeigt die tatsächlich angebotenen Einträge und Berechtigungsklassen. Siehe [Server](../src/ha_safe_mcp/server.py), [REST-Gateway](../src/ha_safe_mcp/rest_api.py), [Verwaltung](../src/ha_safe_mcp/management.py) und die [offizielle REST-API](https://developers.home-assistant.io/docs/api/rest/) sowie [WebSocket-API](https://developers.home-assistant.io/docs/api/websocket/).
+`ha-safe-mcp` verbindet einen MCP-Client über **stdio** mit Home Assistant (HA). Es gibt einfache Zustands-/Dienst-Tools, einen **festen REST-Katalog** und typisierte Verwaltungs-Tools für Automationen, Storage-Dashboards, fünf Helper-Domains und Entity-Registry-Metadaten. Zusätzlich gibt es eine **lokale Weboberfläche** (`ha-mcp-ui`) mit Ersteinrichtung, Einstellungen und einem Chat mit dem lokalen Modell – als eigene Chat-Seite und als schwebende Chat-Bubble (Kapitel 7). REST läuft über HTTP(S), ausgewählte Verwaltung über HA-WebSocket. Der Server akzeptiert **keine beliebigen URLs oder WebSocket-Befehle**. Der REST-Katalog hat 20 Methoden/Routen; `ha_rest_catalog` zeigt die tatsächlich angebotenen Einträge und Berechtigungsklassen. Siehe [Server](../src/ha_safe_mcp/server.py), [REST-Gateway](../src/ha_safe_mcp/rest_api.py), [Verwaltung](../src/ha_safe_mcp/management.py) und die [offizielle REST-API](https://developers.home-assistant.io/docs/api/rest/) sowie [WebSocket-API](https://developers.home-assistant.io/docs/api/websocket/).
 
 **Nicht enthalten:** generische Integrations-/Config-Flow-Verwaltung, Dateizugriff/YAML-Editieren, beliebige HA-Komponenten, vollständige HA-Abdeckung oder eine Backup-Funktion. `ha_update_entity_registry` bearbeitet nur `name`, `area_id`, `icon` einer bestehenden Registry-Entität; es erstellt keine Entität. `ha_rest_write` auf `/api/states/<entity_id>` setzt einen Zustand, **keinen dauerhaft verwalteten Helper**. Der Token bleibt mächtig: MCP-Schalter begrenzen nur diesen Adapter, nicht HA selbst. Vertraue LLM-Vorschlägen nie ungeprüft. [README](../README.md) · [REST-Referenz](https://developers.home-assistant.io/docs/api/rest/).
 
@@ -48,6 +48,8 @@ HA_ALLOWED_DOMAINS=light,switch,fan,climate,cover,media_player
 
 > **Noch kein Token?** Nicht versuchen, den Platzhalter zu benutzen. Ohne gültiges `HA_TOKEN` ist der Server nicht verwendbar. Für einen reinen Installationscheck ist `.venv/bin/python -m pip show ha-safe-mcp` ohne HA-Zugriff möglich.
 
+> **Einfacher:** Statt `.env` von Hand zu bearbeiten, führt die Weboberfläche durch die Ersteinrichtung (Kapitel 7.1). Sie prüft Verbindung und Token, bevor sie speichert, und schreibt dieselbe `.env` mit Dateirechten `600`. Zusätzlich legt sie `OLLAMA_URL` und `OLLAMA_MODEL` ab; der MCP-Server ignoriert diese beiden Werte.
+
 ## 5. MCP-Client über stdio verbinden
 
 Ein Client, der eine `mcpServers`-Konfiguration unterstützt, kann **sinngemäß** so konfiguriert werden (Speicherort/Feldschema im jeweiligen Client nachschlagen):
@@ -78,9 +80,53 @@ Ein Client, der eine `mcpServers`-Konfiguration unterstützt, kann **sinngemäß
 
 `ha_rest_catalog` liefert `read`, `write`, `admin` oder `delete`; die Freigabe hängt von **Methode und Pfad**, nicht vom Toolnamen allein ab. `/api/services/...` über `ha_rest_write` wird über die **gleichen Einzelziel-/Domain-Prüfungen** wie `ha_call_service` geleitet. `ha_rest_query` ist keine Hintertür für andere POST-Routen. **Warnung:** `POST /api/template` kann Templates auswerten und `POST /api/config/core/check_config` führt eine HA-Konfigurationsprüfung aus; beide sind im Adapter als `read` klassifiziert, aber nicht mit einer Garantie auf null Ressourcen-/Nebeneffekte zu verwechseln. [REST-Gateway](../src/ha_safe_mcp/rest_api.py).
 
-## 7. Ollama: lokal fragen, nur bewusst schreiben
+## 7. Lokales Modell: Weboberfläche und Kommandozeile
 
-Optional Ollama gemäß [offizieller Ollama-Dokumentation](https://docs.ollama.com/) installieren/starten und ein toolfähiges Modell bereitstellen (voreingestellt `qwen2.5-coder:7b`):
+Optional Ollama gemäß [offizieller Ollama-Dokumentation](https://docs.ollama.com/) installieren/starten und ein toolfähiges Modell bereitstellen (voreingestellt `qwen2.5-coder:7b`). Mit dem Modell sprichst du entweder über die **Weboberfläche** (7.1–7.4) oder über die **Kommandozeile** (7.5). Beide nutzen dieselbe Tool-Auswahl, dieselben Server-Schalter und verlangen für **jede** Schreibaktion eine eigene Bestätigung.
+
+### 7.1 Weboberfläche starten und Ersteinrichtung
+
+```bash
+cd /home/user/projects/ha-mcp-local
+.venv/bin/ha-mcp-ui            # dann http://127.0.0.1:8765/ im Browser öffnen
+```
+
+Optionen: `--port` (Standard `8765`), `--host` (Standard `127.0.0.1`), `--env-file` (Standard: `.env` im Projekt). Ohne gültigen Token startet die Oberfläche im Assistenten **Ersteinrichtung** mit vier Schritten:
+
+1. **Home Assistant:** Adresse und langlebigen Token eintragen, **Verbindung prüfen**. Geprüft wird rein lesend (`/api/`, `/api/config`, WebSocket `auth/current_user`). Angezeigt werden HA-Version, Name des Zuhauses und der Benutzer, dem der Token gehört. Bei falschem Token erscheint „Token wurde von Home Assistant abgelehnt (HTTP 401)“, und es wird nichts gespeichert.
+2. **Lokales Modell:** Ollama-Adresse prüfen; die installierten Modelle werden mit Größe angezeigt. Modelle ohne Tool-Unterstützung sind nicht wählbar.
+3. **Sicherheit:** Standard ist **nur lesen**. „Konfiguration ändern“ setzt „Steuern“ voraus und „Löschen“ setzt „Konfiguration ändern“ voraus. „Konfiguration ändern“ lässt sich nur speichern, wenn der Token zu einem HA-Admin gehört.
+4. **Fertig:** Die Einstellungen stehen in `.env` (Rechte `600`). Der Token wird danach **nie wieder angezeigt**, auch nicht in den Einstellungen.
+
+Unter **Einstellungen** lässt sich alles später ändern. Ein leeres Token-Feld behält den gespeicherten Token, gilt aber nur für **dieselbe** HA-Adresse; bei neuer Adresse muss der Token neu eingegeben werden. Jedes Speichern prüft die Verbindung erneut. Die Oberfläche selbst übernimmt geänderte Einstellungen sofort für die nächste Chat-Anfrage. Ein **separat laufender** MCP-Client (Kapitel 5) liest `.env` dagegen nur beim Start und muss neu gestartet werden.
+
+### 7.2 Chat-Seite und Chat-Bubble
+
+- **Chat** (Reiter oben): großer Chat mit Verlauf, Startvorschlägen und eingeklappten Zeilen für jeden Tool-Aufruf (Argumente und gekürztes Ergebnis zum Aufklappen).
+- **Chat-Bubble** (runder Button unten rechts auf Übersicht und Einstellungen): kleiner Schnell-Chat mit **demselben Verlauf**. ⤢ öffnet den großen Chat, ✕ oder `Esc` schließt die Bubble. Ein Zähler auf dem Button meldet neue Antworten, `!` eine offene Freigabe.
+- `Enter` sendet, `Shift+Enter` erzeugt einen Zeilenumbruch. **Stopp** bricht eine laufende Anfrage ab, **Neu** leert den Verlauf. Es läuft immer nur **eine** Anfrage zur Zeit.
+- Der Verlauf liegt im Browser (`localStorage`). Die letzten zwölf Nachrichten gehen als Kontext an das Modell, aber nur Text: keine Tool-Ergebnisse und keine Systemanweisungen.
+
+### 7.3 Aktionen freigeben
+
+Ein Modell darf nur dann Schreib-Tools vorschlagen, wenn **beides** gilt: „Steuern erlauben“ ist in den Einstellungen aktiv **und** im Chat ist das Häkchen **Aktionen erlauben** gesetzt. Dann erscheint vor jeder Schreibaktion eine Karte **Freigabe erforderlich** mit Tool-Name und vollständigen JSON-Argumenten:
+
+- **Ausführen** gibt genau diesen einen Aufruf frei. Jede Freigabe gilt einmal; ein zweiter Klick oder eine gefälschte Anfrage wird abgewiesen.
+- **Ablehnen** führt nichts aus; der Chat meldet „Schreibaktion nicht freigegeben – diese Aktion wurde nicht ausgeführt.“
+- Ohne Entscheidung verfällt die Freigabe nach **120 Sekunden** als Ablehnung. **Stopp** lehnt offene Freigaben ebenfalls ab.
+
+Wie beim `JA` im CLI gilt: Die Freigabe bestätigt den **angezeigten Payload**, keine allgemeine Erlaubnis. Entity-ID und Dienst vor dem Klick prüfen; ein Modell kann IDs erfinden.
+
+### 7.4 Sicherheit der Weboberfläche
+
+- Bindet standardmäßig nur an `127.0.0.1` und nimmt nur Verbindungen von diesem Rechner an. Fremde `Host`-Header (DNS-Rebinding) beantwortet sie mit 400.
+- Jede ändernde Anfrage braucht einen eigenen Header und darf nur von der eigenen Seite kommen. Fremde Webseiten können also weder Einstellungen ändern noch Aktionen freigeben.
+- Eine strikte Content-Security-Policy erlaubt keine fremden Skripte; die Seite darf nicht in Frames eingebettet werden.
+- `--host` mit einer Nicht-Loopback-Adresse verweigert den Start. Nur `--allow-remote` hebt das auf, und das ist nur hinter eigener Authentifizierung (z. B. Reverse Proxy mit Login) vertretbar: Die Oberfläche hat **keine eigene Benutzeranmeldung**, und wer sie erreicht, kann im Rahmen der Schalter dein Zuhause steuern.
+
+### 7.5 Kommandozeile
+
+Die Kommandozeile ist die Alternative ohne Browser:
 
 ```bash
 ollama pull qwen2.5-coder:7b
@@ -251,6 +297,11 @@ Nach einem Write mit dem passenden Lesetool prüfen; eine erfolgreiche Tool-Rüc
 | `route/method not in documented REST catalog`, `unsupported query parameter` | Erst `ha_rest_catalog`; echte Pfadstruktur und route-spezifische Parameter prüfen, keine freie URL übergeben. [REST-Katalog](../src/ha_safe_mcp/rest_api.py). |
 | Automation/Dashboard/Helper wird abgelehnt | Validierung/HA-Fehler prüfen, vorhandene ID von Collection-ID/URL-Pfad unterscheiden, nur Storage-Dashboard verwenden; Core-Verwaltungs-APIs können sich zwischen HA-Versionen ändern. [Verwaltung](../src/ha_safe_mcp/management.py). |
 | Ollama bietet kein gewünschtes Tool an oder beendet ohne Antwort | Thema oder **exakten Toolnamen** im Prompt nennen; Modell mit Tool-Unterstützung prüfen, bei komplexen Aufgaben MCP-Client direkt benutzen. `--allow-write` nur bewusst einsetzen. [Ollama-Client](../src/ha_safe_mcp/ollama_client.py). |
+| Weboberfläche: „Ungültiger Host“ (400) oder „Nur lokal erreichbar“ (403) | Über `http://127.0.0.1:8765/` oder `http://localhost:8765/` aufrufen, nicht über Hostnamen oder IP im LAN. [Weboberfläche](../src/ha_safe_mcp/web.py). |
+| Weboberfläche: „Ollama ist nicht erreichbar“ | Läuft der Ollama-Dienst, stimmt die Adresse in den Einstellungen? Ist das gewählte Modell installiert (`ollama list`)? |
+| Weboberfläche: Häkchen „Aktionen erlauben“ ist ausgegraut | In den Einstellungen zuerst „Steuern erlauben“ aktivieren und speichern. |
+| Weboberfläche: „Für 'Konfiguration ändern' braucht der Token einen Admin-Benutzer“ | Token eines HA-Admins verwenden oder ohne Konfigurationsrechte speichern. |
+| Modell antwortet aus dem Verlauf statt aktuell nachzusehen | Kleine Modelle verlassen sich manchmal auf frühere Antworten. **Neu** starten oder ausdrücklich „prüfe den aktuellen Zustand“ schreiben. |
 
 ## 11. FAQ
 

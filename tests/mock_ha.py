@@ -1,9 +1,14 @@
-"""Small test double for the documented HA REST endpoints. Never use as real HA."""
+"""Small test double for the documented HA REST endpoints. Never use as real HA.
+
+MOCK_HA_HOST / MOCK_HA_PORT / MOCK_HA_TOKEN override the container defaults for local runs.
+"""
 import json
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 STATES = [{"entity_id": "light.desk", "state": "off", "attributes": {"friendly_name": "Desk Lamp"}},
           {"entity_id": "sensor.temperature", "state": "21", "attributes": {"friendly_name": "Temperature"}}]
+TOKEN = os.environ.get("MOCK_HA_TOKEN", "test-token")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -16,7 +21,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def _auth(self):
-        if self.headers.get("Authorization") != "Bearer test-token":
+        if self.headers.get("Authorization") != f"Bearer {TOKEN}":
             self._respond(401, {"message": "Unauthorized"})
             return False
         return True
@@ -24,8 +29,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._auth():
             return
+        if self.path == "/api/":
+            return self._respond(200, {"message": "API running."})
         if self.path == "/api/config":
-            return self._respond(200, {"version": "test-double"})
+            return self._respond(200, {"version": "test-double", "location_name": "Testhaus"})
         if self.path == "/api/states":
             return self._respond(200, STATES)
         if self.path.startswith("/api/states/"):
@@ -40,8 +47,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/services/light/turn_on":
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            for state in STATES:
+                if state["entity_id"] == body["entity_id"]:
+                    state["state"] = "on"
             return self._respond(200, [{"entity_id": body["entity_id"], "state": "on"}])
         self._respond(404, {"message": "Not found"})
 
 
-HTTPServer(("0.0.0.0", 8123), Handler).serve_forever()
+HTTPServer((os.environ.get("MOCK_HA_HOST", "0.0.0.0"), int(os.environ.get("MOCK_HA_PORT", "8123"))),
+           Handler).serve_forever()

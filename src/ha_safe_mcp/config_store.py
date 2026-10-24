@@ -1,0 +1,176 @@
+"""Persist web-UI settings in the project's local .env (atomic, mode 0600, token never echoed)."""
+
+import os
+import re
+import tempfile
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from dotenv import dotenv_values
+
+PLACEHOLDER_TOKEN = "YOUR_HOME_ASSISTANT_LONG_LIVED_ACCESS_TOKEN"
+DEFAULT_DOMAINS = ("light", "switch", "fan", "climate", "cover", "media_player")
+DOMAIN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+TOKEN_CHARS = re.compile(r"^[A-Za-z0-9._~+/=-]{20,4096}$")
+ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_ALLOW_DELETE",
+            "HA_ALLOWED_DOMAINS", "OLLAMA_URL", "OLLAMA_MODEL")
+
+
+class SetupError(ValueError):
+    """User-facing validation error; messages are German and never contain secrets."""
+
+
+def normalize_url(raw: str, label: str) -> str:
+    parsed = urlsplit(str(raw or "").strip())
+    if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path not in {"", "/"} or parsed.query or parsed.fragment):
+        raise SetupError(f"{label}-Adresse muss eine einfache http(s)-Adresse ohne Pfad und Zugangsdaten sein")
+    try:
+        parsed.port
+    except ValueError:
+        raise SetupError(f"{label}-Adresse hat einen ungültigen Port") from None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def validate_token(token: str) -> str:
+    if not TOKEN_CHARS.fullmatch(token):
+        raise SetupError("Token ist ungültig: erwartet wird ein langlebiger Home-Assistant-Zugriffstoken")
+    return token
+
+
+@dataclass(frozen=True)
+class Settings:
+    ha_url: str = "http://127.0.0.1:8123"
+    ha_token: str = field(default="", repr=False)
+    allow_write: bool = False
+    allow_admin_write: bool = False
+    allow_delete: bool = False
+    allowed_domains: tuple[str, ...] = DEFAULT_DOMAINS
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5-coder:7b"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.ha_token) and self.ha_token != PLACEHOLDER_TOKEN
+
+    def public(self) -> dict:
+        return {"ha_url": self.ha_url, "token_set": self.configured, "allow_write": self.allow_write,
+                "allow_admin_write": self.allow_admin_write, "allow_delete": self.allow_delete,
+                "allowed_domains": list(self.allowed_domains), "ollama_url": self.ollama_url,
+                "ollama_model": self.ollama_model}
+
+    def mcp_env(self) -> dict[str, str]:
+        """Exactly the variables the MCP server reads; nothing else reaches the child process."""
+        flag = lambda value: "true" if value else "false"  # noqa: E731
+        return {"HA_URL": self.ha_url, "HA_TOKEN": self.ha_token, "HA_ALLOW_WRITE": flag(self.allow_write),
+                "HA_ALLOW_ADMIN_WRITE": flag(self.allow_admin_write), "HA_ALLOW_DELETE": flag(self.allow_delete),
+                "HA_ALLOWED_DOMAINS": ",".join(self.allowed_domains)}
+
+
+def _flag(value) -> bool:
+    if not isinstance(value, bool):
+        raise SetupError("Schalter müssen true oder false sein")
+    return value
+
+
+def resolve_token(current: Settings, ha_url: str, token: str) -> str:
+    """A blank token keeps the stored one only for the URL it was issued for."""
+    url = normalize_url(ha_url, "Home-Assistant")
+    if token:
+        return validate_token(token)
+    if current.configured and url == current.ha_url:
+        return current.ha_token
+    raise SetupError("Für eine neue Home-Assistant-Adresse bitte den Token erneut eingeben")
+
+
+def merge_settings(current: Settings, data: dict) -> Settings:
+    if not isinstance(data, dict):
+        raise SetupError("Ungültige Eingabe")
+    ha_url = normalize_url(data.get("ha_url", current.ha_url), "Home-Assistant")
+    token = resolve_token(current, ha_url, str(data.get("token") or "").strip())
+    ollama_url = normalize_url(data.get("ollama_url", current.ollama_url), "Ollama")
+    model = str(data.get("ollama_model", current.ollama_model)).strip()
+    if not MODEL.fullmatch(model):
+        raise SetupError("Modellname ist ungültig")
+    raw_domains = data.get("allowed_domains", list(current.allowed_domains))
+    if isinstance(raw_domains, str):
+        raw_domains = raw_domains.split(",")
+    if not isinstance(raw_domains, list):
+        raise SetupError("Domain-Liste ist ungültig")
+    domains = tuple(dict.fromkeys(str(item).strip() for item in raw_domains if str(item).strip()))
+    if any(not DOMAIN.fullmatch(item) for item in domains):
+        raise SetupError("Domain-Liste enthält ungültige Einträge")
+    allow_write = _flag(data.get("allow_write", current.allow_write))
+    allow_admin = _flag(data.get("allow_admin_write", current.allow_admin_write))
+    allow_delete = _flag(data.get("allow_delete", current.allow_delete))
+    if allow_admin and not allow_write:
+        raise SetupError("Konfigurationsänderungen setzen 'Steuern erlauben' voraus")
+    if allow_delete and not allow_admin:
+        raise SetupError("Löschen setzt 'Konfiguration ändern erlauben' voraus")
+    return replace(current, ha_url=ha_url, ha_token=token, ollama_url=ollama_url, ollama_model=model,
+                   allowed_domains=domains, allow_write=allow_write, allow_admin_write=allow_admin,
+                   allow_delete=allow_delete)
+
+
+def _as_bool(value) -> bool:
+    return str(value or "").strip().lower() == "true"
+
+
+class SettingsStore:
+    """Owns the .env file. Writes are atomic; unrelated lines and comments survive."""
+
+    def __init__(self, path: Path):
+        self.path = Path(path)
+
+    def load(self) -> Settings:
+        if not self.path.exists():
+            return Settings()
+        values = dotenv_values(self.path)
+        defaults = Settings()
+        token = (values.get("HA_TOKEN") or "").strip()
+        domains = tuple(item.strip() for item in (values.get("HA_ALLOWED_DOMAINS") or "").split(",") if item.strip())
+        return Settings(ha_url=(values.get("HA_URL") or defaults.ha_url).strip().rstrip("/"),
+                        ha_token="" if token == PLACEHOLDER_TOKEN else token,
+                        allow_write=_as_bool(values.get("HA_ALLOW_WRITE")),
+                        allow_admin_write=_as_bool(values.get("HA_ALLOW_ADMIN_WRITE")),
+                        allow_delete=_as_bool(values.get("HA_ALLOW_DELETE")),
+                        allowed_domains=domains or defaults.allowed_domains,
+                        ollama_url=(values.get("OLLAMA_URL") or defaults.ollama_url).strip().rstrip("/"),
+                        ollama_model=(values.get("OLLAMA_MODEL") or defaults.ollama_model).strip())
+
+    def save(self, settings: Settings) -> Settings:
+        if not settings.configured:
+            raise SetupError("Ohne Token kann nicht gespeichert werden")
+        flag = lambda value: "true" if value else "false"  # noqa: E731
+        values = {"HA_URL": settings.ha_url, "HA_TOKEN": settings.ha_token,
+                  "HA_ALLOW_WRITE": flag(settings.allow_write),
+                  "HA_ALLOW_ADMIN_WRITE": flag(settings.allow_admin_write),
+                  "HA_ALLOW_DELETE": flag(settings.allow_delete),
+                  "HA_ALLOWED_DOMAINS": ",".join(settings.allowed_domains),
+                  "OLLAMA_URL": settings.ollama_url, "OLLAMA_MODEL": settings.ollama_model}
+        if any("\n" in value or "\r" in value for value in values.values()):
+            raise SetupError("Ungültige Zeichen in den Einstellungen")
+        lines, written = [], set()
+        if self.path.exists():
+            for line in self.path.read_text(encoding="utf-8").splitlines():
+                key = line.split("=", 1)[0].strip()
+                if key in values:
+                    if key not in written:
+                        lines.append(f"{key}={values[key]}")
+                        written.add(key)
+                    continue
+                lines.append(line)
+        lines.extend(f"{key}={values[key]}" for key in ENV_KEYS if key not in written)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".env.", suffix=".tmp", dir=self.path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write("\n".join(lines) + "\n")
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, self.path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+        return self.load()

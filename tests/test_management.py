@@ -193,3 +193,21 @@ async def test_websocket_rejects_arbitrary_types_and_reserved_fields():
         await ws.command("auth/revoke", {})
     with pytest.raises(ValueError, match="reserved"):
         await ws.command("validate_config", {"id": 99})
+
+
+@pytest.mark.asyncio
+async def test_current_user_reports_only_name_and_admin_flags():
+    async def handler(ws):
+        await ws.send(json.dumps({"type": "auth_required"}))
+        await ws.recv()
+        await ws.send(json.dumps({"type": "auth_ok"}))
+        assert json.loads(await ws.recv())["type"] == "auth/current_user"
+        await ws.send(json.dumps({"id": 1, "type": "result", "success": True, "result": {
+            "id": "abc123", "name": "Alex", "is_owner": True, "is_admin": True,
+            "credentials": [{"auth_provider_type": "homeassistant"}], "mfa_modules": []}}))
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        admin = HAAdmin(HAClient(f"http://127.0.0.1:{port}", "secret"))
+        user = await admin.current_user()
+    assert user == {"name": "Alex", "is_owner": True, "is_admin": True}

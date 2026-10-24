@@ -2,7 +2,7 @@
 
 ## 1. Geltungsbereich und Grenzen
 
-Diese Dokumentation beschreibt **den implementierten Stand** in `src/ha_safe_mcp/`, nicht alle Fähigkeiten von Home Assistant (HA). Der Prozess ist ein lokaler MCP-Server über **stdio**, kein HTTP-Server und kein allgemeiner Proxy. Er bietet einen festen Katalog von REST-Routen, ausgewählte Core-Konfigurationsendpunkte und eine eng begrenzte Menge von Core-/Integrations-WebSocket-Kommandos. `ha_rest_catalog` beschreibt ausschließlich den **im Repository implementierten** Katalog: selbst wenn die aktuelle offizielle REST-Dokumentation weitere Routen oder Query-Parameter nennt, werden diese dadurch nicht automatisch freigeschaltet. Versionsabhängigkeit gilt besonders für die Verwaltungs-APIs. Eine erfolgreiche Konfigurationsoperation beweist weder eine Geräteaktion noch die Ausführung einer Automation.
+Diese Dokumentation beschreibt **den implementierten Stand** in `src/ha_safe_mcp/`, nicht alle Fähigkeiten von Home Assistant (HA). Der MCP-Server ist ein lokaler Prozess über **stdio**, kein HTTP-Server und kein allgemeiner Proxy. Getrennt davon gibt es die lokale Weboberfläche `ha-mcp-ui` (§ 8.1). Sie ist ein HTTP-Server auf Loopback, aber **kein** MCP-Endpunkt: Für jede Chat-Anfrage startet sie selbst einen stdio-MCP-Kindprozess. Er bietet einen festen Katalog von REST-Routen, ausgewählte Core-Konfigurationsendpunkte und eine eng begrenzte Menge von Core-/Integrations-WebSocket-Kommandos. `ha_rest_catalog` beschreibt ausschließlich den **im Repository implementierten** Katalog: selbst wenn die aktuelle offizielle REST-Dokumentation weitere Routen oder Query-Parameter nennt, werden diese dadurch nicht automatisch freigeschaltet. Versionsabhängigkeit gilt besonders für die Verwaltungs-APIs. Eine erfolgreiche Konfigurationsoperation beweist weder eine Geräteaktion noch die Ausführung einer Automation.
 
 Begriffe: **read** bedeutet keine vom Adapter beabsichtigte persistente Änderung; ein als read behandelter HTTP-`POST` kann HA-seitig dennoch Admin-Rechte oder rechenintensive Auswertung verlangen. **write** erlaubt nur explizit begrenzte Service-Aufrufe; **admin** umfasst administrative REST- und Konfigurationsänderungen; **delete** verlangt zusätzlich eine separate Löschfreigabe. Die HA-eigenen Benutzerrechte gelten immer zusätzlich zu diesen Adapterklassen.
 
@@ -11,6 +11,9 @@ Begriffe: **read** bedeutet keine vom Adapter beabsichtigte persistente Änderun
 ```mermaid
 flowchart LR
     U[Benutzer] --> C[MCP-Client oder ha-ollama-chat]
+    U -->|Browser, nur 127.0.0.1| W[ha-mcp-ui: web.py]
+    W -->|liest/schreibt 0600| E[.env]
+    W -->|startet pro Chat-Anfrage| C
     C <-->|MCP stdio: JSON-RPC| S[FastMCP: server.py]
     C -. Ollama-Variante: /api/chat .-> O[Lokaler Ollama-Server]
     S --> HC[HAClient: State, Services]
@@ -28,6 +31,7 @@ flowchart LR
 2. `HAClient` liest Zustände/Dienste und sendet eingeschränkte Service-POSTs. `RestGateway` prüft zuerst Methode, vollständigen Pfad, Berechtigung, Query und Body; Service-POSTs delegiert es an `HAClient.call_service`.
 3. `HAAdmin` kapselt Automationen (Core-Konfigurations-HTTP plus WS-Validierung), Dashboards, Helper und Entity Registry (Core-WebSocket). `HAWebSocket` baut für jeden Befehl eine neue Verbindung auf, erwartet `auth_required`, authentifiziert mit dem HA-Token, sendet genau einen Befehl mit `id=1` und erwartet dessen `result`.
 4. Optional fragt `ha-ollama-chat` zunächst die MCP-Toolliste ab, reicht eine thematisch gefilterte Auswahl als Ollama-Funktionsschema weiter, prüft Toolantworten und schickt Ergebnisse an das Modell zurück. **Der HA-Token geht an HA und den lokalen MCP-Kindprozess, nicht als Funktionsschema an Ollama**; Toolergebnisse können allerdings sensible HA-Daten enthalten und gelangen zum konfigurierten Ollama-Endpunkt.
+5. `ha-mcp-ui` führt dieselbe Schleife (`run_chat`) in einem Hintergrund-Task aus. Der Browser fragt Ereignisse per Long-Polling ab, und Schreib-Tools warten auf eine Freigabe aus dem Browser statt auf `JA` im Terminal (§ 8.1).
 
 ### 2.1 Komponenten- und Dateikarte
 
@@ -37,10 +41,16 @@ flowchart LR
 | [`src/ha_safe_mcp/rest_api.py`](../src/ha_safe_mcp/rest_api.py) | 20 implementierte Methode/Pfad-Muster, Query-Allowlist, Berechtigungsklassen, begrenzte Antwortverarbeitung |
 | [`src/ha_safe_mcp/management.py`](../src/ha_safe_mcp/management.py) | WS-Transport, feste Kommando-Typen, typisierte Automation-/Dashboard-/Helper-/Registry-Operationen und Rücklesungen |
 | [`src/ha_safe_mcp/ollama_client.py`](../src/ha_safe_mcp/ollama_client.py) | CLI, Tool-Routing, begrenzte Ollama-Schleife, Freigabe pro Write |
-| [`pyproject.toml`](../pyproject.toml) | Python `>=3.11`, Abhängigkeiten und `ha-safe-mcp`/`ha-ollama-chat`-Entrypoints; pytest-Konfiguration |
+| [`src/ha_safe_mcp/web.py`](../src/ha_safe_mcp/web.py) | Weboberfläche: Starlette-App, Loopback-/Host-/CSRF-Schutz, Setup-Prüfungen, Chat-Endpunkte, `ha-mcp-ui`-Einstiegspunkt |
+| [`src/ha_safe_mcp/config_store.py`](../src/ha_safe_mcp/config_store.py) | Validierung und atomares Schreiben der `.env` (Rechte 0600), Token-Wiederverwendung nur für dieselbe URL |
+| [`src/ha_safe_mcp/chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Hintergrund-Chatläufe, geordnete Ereignisse, einmalige Freigaben mit Timeout, Abbruch, maskierte Fehlermeldungen |
+| [`src/ha_safe_mcp/webui/`](../src/ha_safe_mcp/webui/index.html) | statisches Frontend (HTML/CSS/JS ohne Framework, ohne Inline-Skripte) |
+| [`src/ha_safe_mcp/__main__.py`](../src/ha_safe_mcp/__main__.py) | `python -m ha_safe_mcp` startet den stdio-Server (genutzt für Kindprozesse) |
+| [`pyproject.toml`](../pyproject.toml) | Python `>=3.11`, Abhängigkeiten, Entrypoints `ha-safe-mcp`/`ha-ollama-chat`/`ha-mcp-ui`, Paketdaten der Web-UI; pytest-Konfiguration |
 | [`Dockerfile`](../Dockerfile), [`compose.test.yaml`](../compose.test.yaml) | schlankes Python-Image für stdio; separater REST-Testdouble auf Host-Port 18123 |
 | [`.env.example`](../.env.example), [`README.md`](../README.md) | Konfigurationsvorlage und Kurzüberblick |
 | [`tests/test_server.py`](../tests/test_server.py), [`tests/test_rest_api.py`](../tests/test_rest_api.py), [`tests/test_management.py`](../tests/test_management.py), [`tests/test_ollama_client.py`](../tests/test_ollama_client.py) | Unit-/Mock-/WS-Tests |
+| [`tests/test_config_store.py`](../tests/test_config_store.py), [`tests/test_chat_runs.py`](../tests/test_chat_runs.py), [`tests/test_web.py`](../tests/test_web.py) | Einstellungen, Chatläufe/Freigaben, HTTP-API der Weboberfläche inkl. Schutzmechanismen |
 | [`tests/mock_ha.py`](../tests/mock_ha.py), [`tests/docker_smoke.py`](../tests/docker_smoke.py), [`tests/ha_core_smoke.py`](../tests/ha_core_smoke.py) | REST-Testdouble, Docker-MCP-End-to-End, **destruktiver Onboarding-Smoke nur für frischen Wegwerf-Core** |
 
 ## 3. MCP-Tool-Referenz
@@ -119,11 +129,11 @@ Die Mengen `READ_TYPES`, `WRITE_TYPES`, `DELETE_TYPES` in [`management.py`](../s
 
 | Klasse | exakt erlaubte `type`-Werte |
 |---|---|
-| READ | `validate_config`, `lovelace/config`, `lovelace/dashboards/list`, `config/entity_registry/list` sowie `input_boolean/list`, `input_number/list`, `input_select/list`, `input_text/list`, `input_datetime/list` |
+| READ | `validate_config`, `lovelace/config`, `lovelace/dashboards/list`, `config/entity_registry/list`, `auth/current_user` sowie `input_boolean/list`, `input_number/list`, `input_select/list`, `input_text/list`, `input_datetime/list` |
 | WRITE | `lovelace/config/save`, `lovelace/dashboards/create`, `lovelace/dashboards/update`, `config/entity_registry/update` sowie je `input_boolean`, `input_number`, `input_select`, `input_text`, `input_datetime` die Suffixe `/create` und `/update` |
 | DELETE | `lovelace/config/delete`, `lovelace/dashboards/delete`, `config/entity_registry/remove` sowie je Helper-Domain das Suffix `/delete` |
 
-`lovelace/config/delete` und `config/entity_registry/remove` stehen **transportseitig** in der Allowlist, werden aber von keinem veröffentlichten MCP-Tool aufgerufen; insbesondere existiert kein MCP-Registry-Delete. Neue WS-Kommandos nicht allein durch `READ_TYPES`/`WRITE_TYPES` verfügbar machen: sie brauchen ein typisiertes API, Validierung, Berechtigungstests und Core-Integrationstest. Eine WS-Nachricht darf im Payload weder `id`, `type` noch `access_token` überschreiben; JSON-kodierter Payload maximal 65.536 Bytes. Empfangslimit pro WS-Nachricht 2.000.000 Bytes, Connect-Timeout 10 s, gesamter Austausch 20 s. Für HTTP(S) wird WS(S) derselben Authority benutzt. Keine Subscriptions oder automatischen Wiederholungen.
+`lovelace/config/delete` und `config/entity_registry/remove` stehen **transportseitig** in der Allowlist, werden aber von keinem veröffentlichten MCP-Tool aufgerufen; insbesondere existiert kein MCP-Registry-Delete. `auth/current_user` nutzt nur die Ersteinrichtung der Weboberfläche über `HAAdmin.current_user()`; zurückgegeben werden ausschließlich `name`, `is_owner` und `is_admin`, keine IDs und keine MFA-Details. Ein MCP-Tool dafür gibt es nicht. Neue WS-Kommandos nicht allein durch `READ_TYPES`/`WRITE_TYPES` verfügbar machen: sie brauchen ein typisiertes API, Validierung, Berechtigungstests und Core-Integrationstest. Eine WS-Nachricht darf im Payload weder `id`, `type` noch `access_token` überschreiben; JSON-kodierter Payload maximal 65.536 Bytes. Empfangslimit pro WS-Nachricht 2.000.000 Bytes, Connect-Timeout 10 s, gesamter Austausch 20 s. Für HTTP(S) wird WS(S) derselben Authority benutzt. Keine Subscriptions oder automatischen Wiederholungen.
 
 ### 5.1 Eingabevalidierung nach Objekttyp
 
@@ -182,9 +192,46 @@ HTTP-Statusfehler werden ohne Response-Body als `RuntimeError("Home Assistant re
 
 ## 8. Ollama-Modellrouting
 
-`ha-ollama-chat` nimmt einen Prompt sowie optional `--model` (Standard `qwen2.5-coder:7b`), `--ollama-url` (Standard `http://127.0.0.1:11434`) und `--allow-write`. `mcp_parameters()` startet das lokale `.venv/bin/ha-safe-mcp` mit Projekt-`cwd` und reicht nur vorhandene `HA_URL`, `HA_TOKEN`, `HA_ALLOW_WRITE`, `HA_ALLOW_ADMIN_WRITE`, `HA_ALLOW_DELETE`, `HA_ALLOWED_DOMAINS` als explizites Kindprozess-Environment weiter; `.env` kann über das Projekt-`cwd` vom Server nachgeladen werden. Andere Variablen (z. B. GitHub-PAT) werden nicht absichtlich weitergereicht. Das ist kein allgemeiner Container-/Secrets-Isolationsmechanismus.
+`ha-ollama-chat` nimmt einen Prompt sowie optional `--model` (Standard `qwen2.5-coder:7b`), `--ollama-url` (Standard `http://127.0.0.1:11434`) und `--allow-write`. `mcp_parameters()` startet über `mcp_parameters_for(env)` den Server als `<aktueller Python> -m ha_safe_mcp` mit Projekt-`cwd` und reicht nur vorhandene `HA_URL`, `HA_TOKEN`, `HA_ALLOW_WRITE`, `HA_ALLOW_ADMIN_WRITE`, `HA_ALLOW_DELETE`, `HA_ALLOWED_DOMAINS` als explizites Kindprozess-Environment weiter; `.env` kann über das Projekt-`cwd` vom Server nachgeladen werden. Die Weboberfläche übergibt dagegen **alle sechs** Werte aus `Settings.mcp_env()`; explizit gesetzte Variablen haben bei `python-dotenv` Vorrang vor der `.env`. Andere Variablen (z. B. GitHub-PAT) werden nicht absichtlich weitergereicht. Das ist kein allgemeiner Container-/Secrets-Isolationsmechanismus.
 
 `select_tool_names(prompt, available, allow_write=...)` beginnt mit `ha_search_entities` und `ha_get_state`, ergänzt Regex-Themen (Automation, Dashboard, Helper, Registry, REST/History/Template/Event, Schalten/Service) und ausdrücklich im Prompt genannte Toolnamen. Es bildet die Schnittmenge mit tatsächlich gelisteten Tools und `READ_TOOLS`, bei `--allow-write` zusätzlich `WRITE_TOOLS`. Diese Schlüsselwortheuristik kann passende Tools **auslassen** oder unpassende anbieten; expliziten Toolnamen verwenden. Die lesende `ha_rest_query` kann read-POSTs aufrufen, nicht beliebige Mutationen. Das Modell erhält eine Ollama-`/api/chat`-Anfrage mit Tool-Schemas und `stream: false`; höchstens vier Schleifenrunden, pro Tool-Text höchstens 6000 Zeichen, HTTP-Timeout 180 s. Neben nativen `tool_calls` wird ein alleinstehendes JSON-Objekt `{"name": ..., "arguments": {...}}` im Modelltext als Tool-Vorschlag akzeptiert, aber nur für ausgewählte Namen; nicht freigegebene Schreibvorschläge werden abgelehnt. Bei `WRITE_TOOLS` zeigt die CLI Name und Payload und verlangt wortwörtlich `JA` **pro** Aufruf. Bei erreichten vier Runden kommt ein Fehler statt einer angeblich verifizierten Antwort. Modellantworten sind keine verlässlichen HA-Messwerte; aktuelle Zustände immer durch Toolresultate absichern.
+
+`run_chat(..., history=None, on_event=None)` nimmt außerdem einen Verlauf und einen Ereignis-Callback an. `sanitize_history` lässt nur `user`/`assistant`-Nachrichten mit Text zu (sonst `ValueError`), kürzt jede auf 4000 Zeichen und behält die letzten zwölf; System- und Tool-Rollen aus dem Client sind ausgeschlossen. `approve` darf synchron oder `async` sein; nur ein Rückgabewert, der **identisch `True`** ist, gibt frei. `on_event` erhält `thinking` (pro Runde), `tool_call` (`name`, `arguments`, `write`) und `tool_result` (`name`, `ok`, `preview` mit höchstens 300 Zeichen).
+
+### 8.1 Weboberfläche `ha-mcp-ui`
+
+**Start:** `ha-mcp-ui [--host 127.0.0.1] [--port 8765] [--env-file PFAD] [--allow-remote]`. Ohne `--env-file` wird die `.env` im Projekt verwendet. `guard_bind_host` beendet den Start bei einer Nicht-Loopback-Adresse ohne `--allow-remote`. Uvicorn läuft ohne Proxy-Header-Auswertung und ohne `Server`-Header.
+
+**Schutzschicht `LocalOnlyGuard` (ASGI, vor jeder Route):**
+
+| Prüfung | Antwort bei Verstoß | Zweck |
+|---|---|---|
+| `Host`-Header ist `localhost`, `127.0.0.1` oder `::1` (mit `--allow-remote` zusätzlich der gebundene Host) | 400 | DNS-Rebinding |
+| Gegenstelle ist Loopback (entfällt mit `--allow-remote`) | 403 | kein Zugriff aus dem LAN |
+| Bei jeder Methode außer GET/HEAD: Header `X-HA-MCP-UI: 1`, und ein vorhandener `Origin` ist exakt `<scheme>://<host>` | 403 | CSRF: einfache Cross-Site-Formulare können keinen eigenen Header setzen, fremde Fetches scheitern am Origin bzw. am CORS-Preflight |
+
+Alle Antworten tragen `Content-Security-Policy` (`default-src 'self'`, keine Inline-Skripte, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` und `Cache-Control: no-store`. Request-Bodys sind auf 64 KiB begrenzt, Chatnachrichten auf 4000 Zeichen.
+
+**HTTP-API** (alle JSON; Fehler als `{"error": "<deutscher Text>"}`):
+
+| Methode und Pfad | Wirkung |
+|---|---|
+| `GET /api/status` | `configured`, `settings` (öffentliche Sicht mit `token_set` statt Token), `chat_busy` |
+| `POST /api/setup/test-ha` | `{ha_url, token}`; ein leerer Token nutzt den gespeicherten, aber nur für dieselbe URL. Prüft nur lesend und speichert nichts |
+| `POST /api/setup/test-ollama` | `{ollama_url}`; liefert Version und Modelle mit `size_gb` und `tools` (aus `/api/show` → `capabilities`) |
+| `POST /api/setup`, `POST /api/settings` | validieren (`merge_settings`), HA-Verbindung prüfen, „Konfiguration ändern“ nur bei `is_admin`, dann atomar speichern. Bei fehlgeschlagener Prüfung wird nichts geschrieben |
+| `POST /api/chat` | `{message, history, allow_write}` → `{run_id}`. 409 vor der Einrichtung oder wenn bereits eine Anfrage läuft; `allow_write` nur, wenn „Steuern“ gespeichert ist |
+| `GET /api/chat/{run_id}/events?after=N&wait=S` | Long-Polling (`wait` ≤ 25 s): Ereignisse mit `seq` > `after` |
+| `POST /api/chat/{run_id}/approve` | `{approval_id, approved}`; 404, wenn die Freigabe nicht oder nicht mehr offen ist (einmalig) |
+| `POST /api/chat/{run_id}/cancel` | bricht den Lauf ab und lehnt offene Freigaben ab |
+
+**Ereignisse eines Laufs** (`chat_runs.py`): `thinking`, `tool_call`, `tool_result`, `approval_required` (`approval_id`, `name`, `arguments`, `timeout`), `approval_resolved` (`approved`, `reason` = `user` oder `timeout`), `answer`, `error` (maskierter deutscher Text, nie die Rohmeldung), zuletzt immer `done` (`status` = `ok`, `error` oder `cancelled`). Pro Lauf werden höchstens 500 Ereignisse gehalten, insgesamt die letzten 20 Läufe. Freigaben verfallen nach 120 s als Ablehnung. Ein Abbruch kann eine schwebende Freigabe nicht mehr in eine Ausführung verwandeln: Nach dem Warten wird das Abbruch-Flag geprüft, bevor die Schleife weiterläuft.
+
+**Einstellungsdatei** (`config_store.py`): `SettingsStore.save` schreibt über eine temporäre Datei im selben Verzeichnis, setzt 0600 und ersetzt atomar. Fremde Zeilen und Kommentare bleiben erhalten; doppelte verwaltete Schlüssel werden auf einen reduziert. Zusätzliche Schlüssel `OLLAMA_URL` und `OLLAMA_MODEL` liest nur die Oberfläche. Validierung: URLs wie `HA_URL` (§ 5.1), Token nur `[A-Za-z0-9._~+/=-]{20,4096}` (das schließt Zeilenumbrüche und damit `.env`-Injektion aus), Modellname `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`, Domains `^[a-z][a-z0-9_]{0,63}$`, Schalter nur echte Booleans in der Reihenfolge Steuern → Konfiguration → Löschen. Die Platzhalter-Zeichenkette aus `.env.example` gilt als „nicht eingerichtet“.
+
+**Frontend:** `webui/index.html`, `app.css`, `app.js` ohne Framework und ohne externe Ressourcen. Dynamischer Text geht ausschließlich über `textContent`; Modellantworten kennen nur Codeblöcke, Inline-Code und Fettschrift. Chat-Seite und Bubble rendern denselben Zustand; Verlauf und laufende `run_id` liegen in `localStorage` (Schlüssel `ha-mcp-chat-v1`, ohne Token). Nach einem Neuladen setzt der Browser das Long-Polling eines laufenden Laufs fort; offene Freigaben aus früheren Seitenaufrufen werden als „nicht mehr offen“ angezeigt.
+
+**Grenzen:** keine eigene Benutzeranmeldung (Vertrauensgrenze ist der lokale Rechner), keine Persistenz von Läufen über einen Neustart, keine parallelen Läufe, kein Streaming von Modell-Tokens (Ollama läuft mit `stream: false`), kein Audit-Log der Freigaben außerhalb der laufenden Prozesse.
 
 ## 9. Laufzeit, Docker und Testschichten
 
@@ -212,7 +259,18 @@ TEST_ALLOW_WRITE=true .venv/bin/python tests/docker_smoke.py
 sudo docker compose -f compose.test.yaml down
 ```
 
-Unit-Tests decken Default-Write-Deny, Domain-/Target-Prüfung, Statusfilter, kompakte Listen, Kataloggröße 20, Traversal/Query/Body, Bild-Base64, WS-Allowlist/Auth/Fehlermaskierung, Admin-Rücklesungen und Ollama-Routing/Bestätigung ab (`pytest`, `respx`, `FakeWS`, lokaler WS-Testserver). `compose.test.yaml` veröffentlicht **nur** den REST-Testdouble `tests/mock_ha.py` an Host-`127.0.0.1:18123`; `docker_smoke.py` startet das MCP-Image per `sudo -n docker run --network host -i` und prüft stdio-Initialisierung, Listen/Lesen und mit `TEST_ALLOW_WRITE=true` einen erlaubten Service. Der Testdouble implementiert nur wenige REST-Routen; er testet keine reale HA-Core-Managementsemantik. `sudo -n` setzt passwortfreies sudo für Docker voraus; andernfalls Docker-Berechtigung/Startweg bewusst anpassen, **nicht** gegen Produktiv-HA ausweichen.
+Unit-Tests decken Default-Write-Deny, Domain-/Target-Prüfung, Statusfilter, kompakte Listen, Kataloggröße 20, Traversal/Query/Body, Bild-Base64, WS-Allowlist/Auth/Fehlermaskierung, Admin-Rücklesungen und Ollama-Routing/Bestätigung ab (`pytest`, `respx`, `FakeWS`, lokaler WS-Testserver).
+Die Tests der Weboberfläche laufen über `httpx.ASGITransport` gegen die echte Starlette-App mit gefälschten Verbindungsprüfungen und einem gefälschten Chat-Runner: Loopback-, Host-, Origin- und Header-Schutz, Ersteinrichtung ohne Speichern bei Fehlschlag, Token nie in Antworten, Admin-Pflicht für „Konfiguration ändern“, Freigabe einmalig und nicht fälschbar, Abbruch und Busy-Zustand.
+
+**Manueller Ende-zu-Ende-Test der Weboberfläche** (ohne echtes HA, verändert die echte `.env` nicht):
+
+```bash
+MOCK_HA_HOST=127.0.0.1 MOCK_HA_PORT=18123 MOCK_HA_TOKEN=<beliebiger-Testwert-ab-20-Zeichen> .venv/bin/python tests/mock_ha.py &
+.venv/bin/ha-mcp-ui --port 18765 --env-file /tmp/ha-ui-test.env
+# Browser: http://127.0.0.1:18765/ → HA-Adresse http://127.0.0.1:18123 und den Testwert als Token
+```
+
+Damit liefen am 2026-10-24 die Ersteinrichtung, der Lese-Chat (`qwen2.5-coder:7b` → `ha_search_entities` → Test-Double), die Freigabe von `ha_call_service` aus der Bubble mit anschließender Zustandsänderung sowie die Ablehnung ohne Zustandsänderung erfolgreich. `compose.test.yaml` veröffentlicht **nur** den REST-Testdouble `tests/mock_ha.py` an Host-`127.0.0.1:18123`; `docker_smoke.py` startet das MCP-Image per `sudo -n docker run --network host -i` und prüft stdio-Initialisierung, Listen/Lesen und mit `TEST_ALLOW_WRITE=true` einen erlaubten Service. Der Testdouble implementiert nur wenige REST-Routen; er testet keine reale HA-Core-Managementsemantik. `sudo -n` setzt passwortfreies sudo für Docker voraus; andernfalls Docker-Berechtigung/Startweg bewusst anpassen, **nicht** gegen Produktiv-HA ausweichen.
 
 ### 9.3 Echte Core-Integration: ausschließlich Wegwerf-Instanz
 

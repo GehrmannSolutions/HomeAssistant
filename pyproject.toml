@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-safe-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Minimal safety-first Home Assistant MCP server"
 requires-python = ">=3.11"
-dependencies = ["mcp>=1.9,<2", "httpx>=0.27,<1", "python-dotenv>=1,<2", "websockets>=13,<17"]
+dependencies = ["mcp>=1.9,<2", "httpx>=0.27,<1", "python-dotenv>=1,<2", "websockets>=13,<17",
+                "starlette>=0.40,<2", "uvicorn>=0.30,<1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "respx>=0.22,<1"]
@@ -15,9 +16,13 @@ test = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "respx>=0.22,<1"]
 [project.scripts]
 ha-safe-mcp = "ha_safe_mcp.server:main"
 ha-ollama-chat = "ha_safe_mcp.ollama_client:main"
+ha-mcp-ui = "ha_safe_mcp.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+ha_safe_mcp = ["webui/*.html", "webui/*.js", "webui/*.css", "webui/*.svg"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

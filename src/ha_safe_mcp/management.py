@@ -14,7 +14,8 @@ from .server import HAClient
 
 HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime"})
 READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboards/list",
-                        "config/entity_registry/list"}) | frozenset(f"{domain}/list" for domain in HELPERS)
+                        "config/entity_registry/list", "auth/current_user"}) | frozenset(
+                            f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create",
                          "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
@@ -84,6 +85,14 @@ class HAAdmin:
         self._check_write()
         if not self.allow_delete:
             raise ValueError("delete disabled")
+
+    async def current_user(self) -> dict:
+        """Who owns the token, reduced to what the setup check needs (no IDs, no MFA details)."""
+        user = await self.ws.command("auth/current_user")
+        if not isinstance(user, dict):
+            raise RuntimeError("Unexpected Home Assistant response")
+        return {"name": str(user.get("name") or ""), "is_owner": user.get("is_owner") is True,
+                "is_admin": user.get("is_admin") is True}
 
     async def automation_validate(self, config: dict):
         if not isinstance(config, dict):

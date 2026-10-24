@@ -1,6 +1,16 @@
 # ha-safe-mcp
 
-Eigenständiger Home-Assistant-MCP-Server (stdio) mit explizitem REST-Katalog und typisierten Verwaltungs-Tools. Nutzt die [offizielle REST-Referenz](https://developers.home-assistant.io/docs/api/rest/) und ausgewählte Konfigurations-APIs aus [Home Assistant Core](https://github.com/home-assistant/core). Kein unbeschränkter HTTP-/WebSocket-Proxy.
+Eigenständiger Home-Assistant-MCP-Server (stdio) mit explizitem REST-Katalog und typisierten Verwaltungs-Tools. Nutzt die [offizielle REST-Referenz](https://developers.home-assistant.io/docs/api/rest/) und ausgewählte Konfigurations-APIs aus [Home Assistant Core](https://github.com/home-assistant/core). Kein unbeschränkter HTTP-/WebSocket-Proxy. Dazu gibt es eine lokale **Weboberfläche** mit Ersteinrichtung und einem Chat mit dem lokalen Modell.
+
+## Schnellstart mit Weboberfläche
+
+```bash
+cd /home/user/projects/ha-mcp-local
+.venv/bin/python -m pip install -e '.[test]'
+.venv/bin/ha-mcp-ui            # http://127.0.0.1:8765/
+```
+
+Die **Ersteinrichtung** fragt nacheinander die Home-Assistant-Adresse mit Token (wird vor dem Speichern geprüft), das lokale Ollama-Modell und die Sicherheitsstufe ab; Standard ist „nur lesen“. Danach gibt es eine **Chat-Seite** und eine **Chat-Bubble** unten rechts, beide mit demselben Verlauf. Schreibaktionen erscheinen als Freigabe-Karte und werden erst nach **Ausführen** ausgeführt, jede einzeln. Die Oberfläche lauscht nur auf `127.0.0.1` und ist gegen DNS-Rebinding und CSRF geschützt. Details: [Userguide Kapitel 7](docs/USERGUIDE.md#7-lokales-modell-weboberfläche-und-kommandozeile).
 
 ## Dokumentation
 
@@ -32,7 +42,7 @@ Automation-CRUD nutzt `/api/config/automation/config/{id}`; Dashboard- und Helpe
 - `HA_ALLOW_WRITE=true`: Dienste für einzelne Entitäten in `HA_ALLOWED_DOMAINS` und gewöhnliche REST-Schreibaktionen freigeben.
 - Zusätzlich `HA_ALLOW_ADMIN_WRITE=true`: Automationen, Dashboards, Helper, Registry-Updates sowie administrative REST-Schreibaktionen. Der HA-Token muss Admin-Rechte haben.
 - Zusätzlich `HA_ALLOW_DELETE=true`: Löschwerkzeuge/-routen freigeben. Die beiden anderen Schalter bleiben erforderlich.
-- **Ollama-Client zusätzlich:** `--allow-write` und manuelles `JA` **pro Tool-Aufruf**. Andere MCP-Clients müssen eigene menschliche Freigaben durchsetzen; Server-Schalter allein stellen keine Nutzerbestätigung dar.
+- **Ollama-Client zusätzlich:** `--allow-write` und manuelles `JA` **pro Tool-Aufruf**; in der Weboberfläche entsprechend „Aktionen erlauben“ und **Ausführen** auf der Freigabe-Karte. Andere MCP-Clients müssen eigene menschliche Freigaben durchsetzen; Server-Schalter allein stellen keine Nutzerbestätigung dar.
 
 `ha_call_service` beschränkt Ziel-Domains standardmäßig auf `light,switch,fan,climate,cover,media_player`, erfordert eine konkrete Einzel-Entität und verbietet zusätzliche Targets. Der explizite REST-Katalog hat dagegen eigene Berechtigungsklassen und kein willkürliches URL-Schema. Ein HA-Admin-Token besitzt trotzdem weitreichende Rechte; diese Adapter-Checks ersetzen **keine** Home-Assistant-Autorisierung. Der stdio-Server darf nicht ungeschützt ans Netzwerk. Token und Response-Bodies werden in Fehlern nicht ausgegeben.
 
