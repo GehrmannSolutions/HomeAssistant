@@ -108,6 +108,29 @@ In **Chat**, enabling **Steuern erlauben** in settings is not enough: tick **Akt
 
 Under **Einstellungen**, each level has a separate **ohne Freigabe ausführen** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Aktionen erlauben** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `JA` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
 
+### Two layers of permissions: server level and client settings
+
+A remote client is limited twice:
+
+1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
+   instance switches. Tools above the level are not even listed for the client. Number of tools a client sees:
+
+   | Level | Tools listed | marked read-only | marked write/delete |
+   |---|---|---|---|
+   | Nur lesen | 26 | 26 | 0 |
+   | Steuern | 29 | 26 | 3 |
+   | Konfiguration ändern | 56 | 26 | 30 |
+   | Löschen | 66 | 26 | 40 |
+
+2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
+   this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (26)" and "write/delete
+   tools (30)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+
+The client setting only protects that client. Anyone else holding the same token is limited by the server level
+alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
+to require a confirmation, e.g. *Ask* instead of *Blocked*).
+
 ### Domains: what the allowed list means and how to choose it
 
 A **domain** is the part of an entity ID before the dot: `light` in `light.living_room`, `lock` in
