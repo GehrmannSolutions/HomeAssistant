@@ -28,12 +28,15 @@ Die **Ersteinrichtung** fragt nacheinander die Home-Assistant-Adresse mit Token 
 | Dashboards | `ha_list_dashboards`, `ha_get_dashboard` | `ha_create_dashboard`, `ha_save_dashboard` (bisherige Konfiguration im Ergebnis), `ha_update_dashboard` | `ha_delete_dashboard` |
 | Persistente Helper | `ha_list_helpers` | `ha_create_helper`, `ha_update_helper` | `ha_delete_helper` |
 | Entity Registry | `ha_list_entity_registry` | `ha_update_entity_registry` (Name/Bereich/Icon) | — |
+| Integrationen | `ha_list_integrations`, `ha_list_integration_types`, `ha_list_discovered`, `ha_list_credentials` | `ha_start_integration_setup`, `ha_integration_setup_step`, `ha_abort_integration_setup`, `ha_reload_integration` | `ha_delete_integration` |
 
 Der REST-Katalog umfasst **20 Methoden/Routen der offiziellen REST-Referenz**, darunter Konfiguration, Zustände, Events, Dienste, History, Logbook, Fehlerprotokoll, Kamera, Template, Konfigurationsprüfung und Intent. Nur deklarierte Routen, Methoden und Query-Parameter sind zugelassen; unbekannte Pfade/Traversal werden vor Netzwerkzugriff abgelehnt. Kamerabilder werden Base64-kodiert zurückgegeben; Antwortgröße maximal 2 MB. `POST /api/states/{entity_id}` setzt nur einen Zustand und erstellt **keine dauerhaft verwaltete Entität**.
 
 Automation-CRUD nutzt `/api/config/automation/config/{id}`; Dashboard- und Helper-CRUD nutzen Home-Assistant-Core-WebSocket-Befehle. Unterstützte Helper: `input_boolean`, `input_number`, `input_select`, `input_text`, `input_datetime`. Die Entity Registry erstellt **keine** Entitäten – dafür die jeweilige Helper-Collection beziehungsweise Integration nutzen. Die Verwaltungsbefehle sind Core-spezifisch und können sich zwischen HA-Versionen ändern; `tests/ha_core_smoke.py` prüft die Kernpfade gegen ein echtes isoliertes Core-Image.
 
-**Nicht implementiert:** Allgemeine Integrations-/Config-Flow-Verwaltung, beliebige Komponenten- und WebSocket-Befehle, YAML-/Dateibearbeitung und Backups. Damit ist dies eine geprüfte Grundlage für Plan/Build/Run, **nicht** eine vollständige Abbildung sämtlicher HA-Funktionen. Änderungen an Automationen stoßen laut Core einen asynchronen Reload an: erfolgreiche Konfigurations-Rücklesung beweist noch nicht, dass die Automation bereits ausgeführt wurde.
+**Integrationen** werden über dieselben Config-Flow-Routen eingerichtet wie in der HA-Oberfläche (`/api/config/config_entries/...`). Passwörter, Tokens und PINs nimmt der MCP nur als Verweis auf die lokale **Zugangsdatenablage** an (`{"$credential": "<alias>", "field": "<feld>"}`). Sie wird in der Weboberfläche unter **Zugangsdaten** gepflegt, liegt verschlüsselt in `~/.config/ha-safe-mcp/credentials/` und gibt Werte nie an Browser oder Modell zurück. Der MCP **durchsucht das Netzwerk nicht selbst**: `ha_list_discovered` zeigt nur, was Home Assistant selbst gefunden hat.
+
+**Nicht implementiert:** Options-/Reconfigure-Flows, beliebige Komponenten- und WebSocket-Befehle, YAML-/Dateibearbeitung und Backups. Damit ist dies eine geprüfte Grundlage für Plan/Build/Run, **nicht** eine vollständige Abbildung sämtlicher HA-Funktionen. Änderungen an Automationen stoßen laut Core einen asynchronen Reload an: erfolgreiche Konfigurations-Rücklesung beweist noch nicht, dass die Automation bereits ausgeführt wurde.
 
 ## Sicherheitsfreigaben
 

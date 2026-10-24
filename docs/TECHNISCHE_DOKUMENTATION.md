@@ -84,6 +84,23 @@ Signaturen sind die tatsächlichen `@server.tool()`-Funktionsdefinitionen aus `c
 | `ha_delete_dashboard(dashboard_id: str) -> None` | WS-Löschen nach Collection-ID mit Listenprüfung; delete |
 | `ha_list_entity_registry() -> list[dict]` | WS-Registry-Liste; read |
 | `ha_update_entity_registry(entity_id: str, changes: dict) -> dict` | WS-Update von `name`, `area_id`, `icon` mit Feldvergleich; admin; **keine Entity-Erstellung** |
+| `ha_list_integrations(domain: str = "") -> list[dict]` | `GET /api/config/config_entries/entry[?domain=]`, reduziert auf `entry_id`, `domain`, `title`, `state`, `source`, `disabled_by`, `reason`; read |
+| `ha_list_integration_types(query: str = "") -> list[str]` | `GET /api/config/config_entries/flow_handlers`, gefiltert, höchstens 100; read |
+| `ha_list_discovered() -> list[dict]` | WS `config_entries/flow/progress` (nur nicht vom Nutzer gestartete Flows, z. B. zeroconf); read; **kein eigener Netzwerkscan** |
+| `ha_list_credentials() -> list[dict]` | lokale Zugangsdatenablage: Alias, Bezeichnung, Feldnamen; **nie Werte**; keine HA-Anfrage |
+| `ha_start_integration_setup(handler: str, show_advanced_options: bool = False) -> dict` | `POST /api/config/config_entries/flow`; admin; Ergebnis reduziert (Formular, `flow_id`) |
+| `ha_integration_setup_step(flow_id: FlowId, data: dict \| None = None) -> dict` | `POST /api/config/config_entries/flow/<flow_id>`; admin; Geheimfelder nur als `$credential`-Verweis; Werte werden erst hier aufgelöst und aus jedem Ergebnis entfernt |
+| `ha_abort_integration_setup(flow_id: FlowId) -> dict` | `DELETE /api/config/config_entries/flow/<flow_id>`; admin |
+| `ha_reload_integration(entry_id: EntryId) -> dict` | `POST /api/config/config_entries/entry/<entry_id>/reload`; admin |
+| `ha_delete_integration(entry_id: EntryId) -> dict` | `DELETE /api/config/config_entries/entry/<entry_id>`; delete |
+
+### 3.1 Integrationen und Zugangsdatenablage
+
+Quelle der Routen: `homeassistant/components/config/config_entries.py` und `homeassistant/helpers/data_entry_flow.py` im offiziellen Core-Repository; Flow-Start, -Schritt und Entry-Löschen verlangen in HA selbst einen Admin-Benutzer. `FlowId` akzeptiert die 32-stellige Hex-Form älterer Releases und die 26-stellige ULID aktueller Releases (im Dev-HA beobachtet); `EntryId` 20–40 alphanumerische Zeichen. Beides wird vor jeder Anfrage geprüft, Pfad-Traversal ist dadurch ausgeschlossen.
+
+**Geheimfelder.** Felder, deren Name `pass`, `secret`, `token`, `api_key`, `pin`, `auth`, `credential` oder `private` enthält, werden nur als `{"$credential": "<alias>", "field": "<feld>"}` angenommen; Klartext wird vor dem Netzwerkzugriff abgelehnt. `integrations.py` löst den Verweis unmittelbar vor `POST` auf, ersetzt danach jedes Vorkommen des Werts in Ergebnis und Fehlertext durch `[credential:<alias>.<feld>]` und entfernt `default`/`suggested_value` von Geheimfeldern im zurückgegebenen `data_schema`. Harmlose Defaults (z. B. Port 80) bleiben sichtbar, damit das Modell keine Werte erfindet. Flow-Schritte haben 90 s Timeout, weil Geräte-Handshakes länger dauern als die üblichen 15 s.
+
+**Zugangsdatenablage** (`credentials.py`). Fernet-verschlüsselt in `$XDG_CONFIG_HOME/ha-safe-mcp/credentials/` (Standard `~/.config/…`), Ordner 0700, `store.key` und `store.bin` 0600, atomar geschrieben. Der Schlüssel liegt neben den Daten: Das schützt vor versehentlicher Offenlegung (Backups, Screenshots, `cat`, Commits), nicht vor jemandem mit Shell-Zugriff auf diesen Benutzer. Die Weboberfläche verwaltet die Ablage über `GET/POST /api/credentials` und `DELETE /api/credentials/<alias>` (gleiche Host-, Peer-, Header-, Origin- und Access-Prüfungen wie alle anderen Routen); keine Route gibt Werte zurück, leere Felder beim Ändern behalten den gespeicherten Wert. Der MCP-Kindprozess erhält nur `HA_CREDENTIALS_DIR`, nicht die Werte. `POST /api/chat` lehnt Nachrichten (und Nutzer-Verlauf) mit Mustern wie `pw:`, `Passwort ist …`, `password=…`, `token:` ab, bevor das Modell sie sieht; die Oberfläche übernimmt abgelehnte Nachrichten nicht in den gespeicherten Verlauf.
 
 Das `ha_rest_*`-Ergebnis hat bei normalen Antworten `{"status": HTTP-Code, "content_type": MIME-Typ, "data": ...}`; Bildantworten haben statt `data` das Feld `data_base64`. Service-POSTs erhalten einen synthetischen Wrapper mit `status: 200` und `content_type: application/json`, weil sie über `HAClient.call_service` laufen. Direkte Tools geben die jeweiligen HA-Daten ohne diesen Wrapper zurück. MCP-Toolfehler werden vom SDK als Tool-Fehler gemeldet, nicht als bestätigte Zustandsänderung.
 

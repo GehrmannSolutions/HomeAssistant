@@ -73,10 +73,10 @@ Ein Client, der eine `mcpServers`-Konfiguration unterstützt, kann **sinngemäß
 
 | Operationen | Benötigte Server-Schalter | Zusätzlich |
 |---|---|---|
-| `ha_search_entities`, `ha_get_state`, `ha_list_services`, `ha_rest_catalog`, `ha_rest_query` (nur GET, bzw. POST auf `/api/template` oder `/api/config/core/check_config`), `ha_validate_automation`, `ha_get_automation`, `ha_list_dashboards`, `ha_get_dashboard`, `ha_list_helpers`, `ha_list_entity_registry` | keine | gültiger HA-Token; HA-Berechtigung für jeweiligen Endpunkt |
+| `ha_search_entities`, `ha_get_state`, `ha_list_services`, `ha_rest_catalog`, `ha_rest_query` (nur GET, bzw. POST auf `/api/template` oder `/api/config/core/check_config`), `ha_validate_automation`, `ha_get_automation`, `ha_list_dashboards`, `ha_get_dashboard`, `ha_list_helpers`, `ha_list_entity_registry`, `ha_list_integrations`, `ha_list_integration_types`, `ha_list_discovered`, `ha_list_credentials` | keine | gültiger HA-Token; HA-Berechtigung für jeweiligen Endpunkt |
 | `ha_call_service`; `ha_rest_write` mit REST-Klasse `write` | `HA_ALLOW_WRITE=true` | passende `HA_ALLOWED_DOMAINS`, vorhandenes Einzelziel, HA-Rechte |
-| `ha_save_automation`, `ha_create_dashboard`, `ha_save_dashboard`, `ha_update_dashboard`, `ha_create_helper`, `ha_update_helper`, `ha_update_entity_registry`; `ha_rest_write` mit REST-Klasse `admin` | `HA_ALLOW_WRITE=true` **und** `HA_ALLOW_ADMIN_WRITE=true` | HA-Admin-Token |
-| `ha_delete_automation`, `ha_delete_dashboard`, `ha_delete_helper`, `ha_rest_delete` | alle obigen **und** `HA_ALLOW_DELETE=true` | HA-Admin-Token; REST-DELETE betrifft nur katalogisierte States-Route |
+| `ha_save_automation`, `ha_create_dashboard`, `ha_save_dashboard`, `ha_update_dashboard`, `ha_create_helper`, `ha_update_helper`, `ha_update_entity_registry`, `ha_start_integration_setup`, `ha_integration_setup_step`, `ha_abort_integration_setup`, `ha_reload_integration`; `ha_rest_write` mit REST-Klasse `admin` | `HA_ALLOW_WRITE=true` **und** `HA_ALLOW_ADMIN_WRITE=true` | HA-Admin-Token |
+| `ha_delete_automation`, `ha_delete_dashboard`, `ha_delete_helper`, `ha_delete_integration`, `ha_rest_delete` | alle obigen **und** `HA_ALLOW_DELETE=true` | HA-Admin-Token; REST-DELETE betrifft nur katalogisierte States-Route |
 
 `ha_rest_catalog` liefert `read`, `write`, `admin` oder `delete`; die Freigabe hängt von **Methode und Pfad**, nicht vom Toolnamen allein ab. `/api/services/...` über `ha_rest_write` wird über die **gleichen Einzelziel-/Domain-Prüfungen** wie `ha_call_service` geleitet. `ha_rest_query` ist keine Hintertür für andere POST-Routen. **Warnung:** `POST /api/template` kann Templates auswerten und `POST /api/config/core/check_config` führt eine HA-Konfigurationsprüfung aus; beide sind im Adapter als `read` klassifiziert, aber nicht mit einer Garantie auf null Ressourcen-/Nebeneffekte zu verwechseln. [REST-Gateway](../src/ha_safe_mcp/rest_api.py).
 
@@ -246,6 +246,19 @@ Für Updates eine **vollständige Konfiguration mit `name`** liefern und vorhand
   ```
 
 Erlaubte Felder: `name`, `area_id`, `icon`; keine neue Entity-ID, keine Serviceaktion, kein Registry-Delete-Tool. Vorherigen Namen und gegebenenfalls Bereich/Icon dokumentieren. [Verwaltung](../src/ha_safe_mcp/management.py) · [HA Entity Registry](https://developers.home-assistant.io/docs/entity_registry_index/).
+
+### 8.6a Integration hinzufügen (z. B. Shelly) mit Zugangsdaten
+
+1. **Zugangsdaten anlegen** (nur nötig, wenn das Gerät ein Passwort hat): Weboberfläche → **Zugangsdaten** → Alias, z. B. `shelly_login`, und Passwort eintragen → **Speichern**. Der Wert liegt verschlüsselt in `~/.config/ha-safe-mcp/credentials/` (Ordner 0700, Dateien 0600) und wird nie wieder angezeigt; in der Liste stehen nur Alias, Bezeichnung und Feldnamen.
+2. **Im Chat** mit gesetztem Häkchen „Aktionen erlauben“, z. B.: „Füge den Shelly mit der IP 192.168.1.50 hinzu, Zugangsdaten shelly_login“. Das Modell nutzt dann nacheinander:
+   - `ha_start_integration_setup` mit `{"handler":"shelly"}` → liefert Formular (`data_schema`) und `flow_id`
+   - `ha_integration_setup_step` mit `{"flow_id":"<aus dem Ergebnis>","data":{"host":"192.168.1.50"}}`
+   - fragt das Gerät nach einem Passwort: `ha_integration_setup_step` mit `{"flow_id":"<…>","data":{"password":{"$credential":"shelly_login","field":"password"}}}`
+   - kann die Einrichtung nicht abgeschlossen werden: `ha_abort_integration_setup` mit `{"flow_id":"<…>"}`
+   Jeder dieser Schritte erscheint als eigene Freigabe-Karte. Auf der Karte siehst du nur den Verweis, nie das Passwort.
+3. **Prüfen:** „Welche Integrationen gibt es?“ (`ha_list_integrations`); Entfernen bei Bedarf mit `ha_delete_integration` und der `entry_id` aus der Liste (braucht „Löschen erlauben“).
+
+**Wichtig:** Der MCP **durchsucht das Netzwerk nicht selbst**. „Suche im Netzwerk“ heißt hier: `ha_list_discovered` zeigt, was Home Assistant selbst gefunden hat (zeroconf/DHCP/SSDP) und was auf Bestätigung wartet; für die Bestätigung ruft das Modell `ha_integration_setup_step` mit `{}` auf. Läuft HA in einem Docker-Container ohne Host-Netzwerk (wie `ha-mcp-dev`), findet HA dort keine Geräte – dann die IP angeben. Passwörter im Chat-Text lehnt die Oberfläche ab, bevor sie beim Modell oder im Verlauf landen.
 
 ### 8.7 REST-Katalog: ausdrücklich erlaubte Methoden und Routen
 

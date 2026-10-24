@@ -340,3 +340,50 @@ async def test_read_tool_arguments_are_left_to_the_server_to_coerce():
                                  base_url="http://ollama:11434") as http:
         await run_chat(session, http, "small", "Suche Licht")
     assert session.calls == [("ha_search_entities", {"query": "licht", "limit": "10"})]
+
+
+@pytest.mark.parametrize("prompt", ["Füge meinen Shelly hinzu", "Welche Integrationen gibt es?",
+                                    "Richte die Integration hue ein", "Welche Geräte wurden gefunden?"])
+def test_integration_prompts_select_integration_tools(prompt):
+    names = {"ha_search_entities", "ha_get_state", "ha_list_integrations", "ha_list_integration_types",
+             "ha_list_discovered", "ha_list_credentials", "ha_start_integration_setup", "ha_integration_setup_step",
+             "ha_abort_integration_setup", "ha_reload_integration", "ha_delete_integration"}
+    read = select_tool_names(prompt, names, allow_write=False)
+    write = select_tool_names(prompt, names, allow_write=True)
+    assert {"ha_list_integrations", "ha_list_discovered", "ha_list_credentials"} <= read
+    assert "ha_start_integration_setup" not in read
+    assert {"ha_start_integration_setup", "ha_integration_setup_step", "ha_abort_integration_setup"} <= write
+
+
+def test_system_prompt_states_what_the_tools_cannot_do():
+    from ha_safe_mcp.ollama_client import SYSTEM
+    lowered = SYSTEM.lower()
+    assert "netzwerk" in lowered and "passw" in lowered
+
+
+@pytest.mark.asyncio
+async def test_several_json_tool_requests_in_content_are_all_dispatched():
+    """qwen2.5-coder:7b answered the Shelly prompt with two concatenated JSON calls as plain text."""
+    content = '{\n  "name": "ha_get_state",\n  "arguments": {"entity_id": "light.desk"}\n}\n{\n  "name": "ha_get_state",\n  "arguments": {"entity_id": "light.kitchen"}\n}'
+    responses = iter([
+        {"message": {"role": "assistant", "content": content}},
+        {"message": {"role": "assistant", "content": "Beide Lichter sind aus."}},
+    ])
+    session = FakeSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
+                                 base_url="http://ollama:11434") as http:
+        answer = await run_chat(session, http, "small", "Status der Lichter")
+    assert answer == "Beide Lichter sind aus."
+    assert session.calls == [("ha_get_state", {"entity_id": "light.desk"}), ("ha_get_state", {"entity_id": "light.kitchen"})]
+
+
+@pytest.mark.asyncio
+async def test_raw_tool_json_never_reaches_the_user_as_an_answer():
+    content = '{"name": "ha_not_offered", "arguments": {}}'
+    responses = iter([{"message": {"role": "assistant", "content": content}}])
+    session = FakeSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
+                                 base_url="http://ollama:11434") as http:
+        answer = await run_chat(session, http, "small", "status")
+    assert "ha_not_offered" not in answer and "{" not in answer
+    assert session.calls == []

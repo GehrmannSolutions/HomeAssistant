@@ -17,6 +17,20 @@ HelperId = Annotated[str, Field(
     pattern=r"^[a-z][a-z0-9_]{0,63}$",
     description="Collection ID from ha_list_helpers (field 'id', lowercase, e.g. 'guest_mode'); "
                 "not the display name and not the entity_id")]
+FlowId = Annotated[str, Field(
+    pattern=r"^(?:[0-9a-f]{32}|[0-9A-HJKMNP-TV-Z]{26})$",
+    description="flow_id copied exactly from the previous ha_start_integration_setup/ha_integration_setup_step "
+                "result or from ha_list_discovered")]
+EntryId = Annotated[str, Field(
+    pattern=r"^[0-9A-Za-z]{20,40}$",
+    description="entry_id from ha_list_integrations; not the title and not the domain")]
+
+
+def credential_store_from_env():
+    from pathlib import Path
+    from .credentials import CredentialStore
+    directory = os.getenv("HA_CREDENTIALS_DIR")
+    return CredentialStore(Path(directory)) if directory else CredentialStore()
 
 
 class HAClient:
@@ -32,9 +46,9 @@ class HAClient:
         self.allow_write = allow_write
         self.allowed_domains = allowed_domains
 
-    async def _request(self, method: str, path: str, *, data: dict | None = None):
+    async def _request(self, method: str, path: str, *, data: dict | None = None, timeout: float = 15):
         try:
-            async with httpx.AsyncClient(base_url=self.url, timeout=15, trust_env=False,
+            async with httpx.AsyncClient(base_url=self.url, timeout=timeout, trust_env=False,
                                          headers={"Authorization": f"Bearer {self.token}"}) as client:
                 response = await client.request(method, path, json=data)
                 response.raise_for_status()
@@ -99,12 +113,15 @@ class HAClient:
 
 
 def create_server(client: HAClient, *, allow_admin_write: bool = False,
-                  allow_delete: bool = False) -> FastMCP:
+                  allow_delete: bool = False, credentials=None) -> FastMCP:
     from .rest_api import RestGateway
     from .management import HAAdmin
+    from .integrations import HAIntegrations
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    integrations = HAIntegrations(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
+                                  credentials=credentials or credential_store_from_env())
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
 
     @server.tool()
@@ -231,6 +248,57 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_update_entity_registry(entity_id: str, changes: dict) -> dict:
         """Edit entity name, area or icon; does not create an entity. Admin write required."""
         return await admin.entity_registry_update(entity_id, changes)
+
+    @server.tool()
+    async def ha_list_integrations(domain: str = "") -> list[dict]:
+        """List configured integrations (config entries) with entry_id, domain, title and state."""
+        return await integrations.list_entries(domain)
+
+    @server.tool()
+    async def ha_list_integration_types(query: str = "") -> list[str]:
+        """List integration domains that can be set up through the UI flow, filtered by query (e.g. 'shelly')."""
+        return await integrations.list_handlers(query)
+
+    @server.tool()
+    async def ha_list_discovered() -> list[dict]:
+        """List devices Home Assistant itself discovered on its network (zeroconf/dhcp/ssdp/...) that wait
+        for confirmation. This tool does not scan the network; an empty list means HA found nothing."""
+        return await integrations.discovered_flows()
+
+    @server.tool()
+    async def ha_list_credentials() -> list[dict]:
+        """List stored credential aliases and their field names (never values) for setup steps."""
+        return integrations.credential_aliases()
+
+    @server.tool()
+    async def ha_start_integration_setup(handler: str, show_advanced_options: bool = False) -> dict:
+        """Start adding an integration (e.g. handler 'shelly'); returns the first form (data_schema) with a
+        flow_id. Admin write required."""
+        return await integrations.start_flow(handler, show_advanced_options)
+
+    @server.tool()
+    async def ha_integration_setup_step(flow_id: FlowId, data: dict | None = None) -> dict:
+        """Submit one form step of a setup flow, field names from data_schema; keep shown defaults unless the
+        user said otherwise. Secret fields (password, token, api_key, pin) must be credential references:
+        {"$credential": "<alias>", "field": "<field>"} from ha_list_credentials; plain secret values are rejected.
+        For discovered devices send {} to confirm. If the setup cannot be finished, call
+        ha_abort_integration_setup. Admin write required."""
+        return await integrations.flow_step(flow_id, data)
+
+    @server.tool()
+    async def ha_abort_integration_setup(flow_id: FlowId) -> dict:
+        """Abort a running setup flow. Admin write required."""
+        return await integrations.abort_flow(flow_id)
+
+    @server.tool()
+    async def ha_reload_integration(entry_id: EntryId) -> dict:
+        """Reload a configured integration by entry_id. Admin write required."""
+        return await integrations.reload_entry(entry_id)
+
+    @server.tool()
+    async def ha_delete_integration(entry_id: EntryId) -> dict:
+        """Remove a configured integration and its devices by entry_id. Admin write and delete required."""
+        return await integrations.delete_entry(entry_id)
 
     return server
 

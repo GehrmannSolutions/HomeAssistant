@@ -110,3 +110,24 @@ def test_helper_id_schema_tells_the_model_the_exact_id_format():
         jsonschema.validate("testschalter", prop)
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate("Testschalter", prop)
+
+
+INTEGRATION_TOOLS = {"ha_list_integrations", "ha_list_integration_types", "ha_list_discovered", "ha_list_credentials",
+                     "ha_start_integration_setup", "ha_integration_setup_step", "ha_abort_integration_setup",
+                     "ha_reload_integration", "ha_delete_integration"}
+
+
+def test_integration_tools_are_registered_and_describe_their_limits():
+    import asyncio
+    tools = {tool.name: tool for tool in asyncio.run(create_server(HAClient("http://ha:8123", "secret")).list_tools())}
+    assert INTEGRATION_TOOLS <= tools.keys()
+    assert "netzwerk" in tools["ha_list_discovered"].description.lower() or "network" in tools["ha_list_discovered"].description.lower()
+    assert "$credential" in tools["ha_integration_setup_step"].description
+    flow_id = tools["ha_integration_setup_step"].inputSchema["properties"]["flow_id"]
+    assert flow_id.get("pattern") == "^(?:[0-9a-f]{32}|[0-9A-HJKMNP-TV-Z]{26})$"
+
+
+def test_server_uses_the_credential_dir_from_the_environment(tmp_path, monkeypatch):
+    from ha_safe_mcp import server as server_module
+    monkeypatch.setenv("HA_CREDENTIALS_DIR", str(tmp_path / "creds"))
+    assert server_module.credential_store_from_env().directory == tmp_path / "creds"

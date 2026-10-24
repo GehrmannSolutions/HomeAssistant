@@ -14,7 +14,8 @@ from .server import HAClient
 
 HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime"})
 READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboards/list",
-                        "config/entity_registry/list", "auth/current_user"}) | frozenset(
+                        "config/entity_registry/list", "auth/current_user",
+                        "config_entries/flow/progress"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create",
                          "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
