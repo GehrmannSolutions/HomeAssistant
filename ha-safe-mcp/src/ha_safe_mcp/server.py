@@ -77,7 +77,8 @@ class HAClient:
         except Exception:  # noqa: BLE001 - auditing is best effort by design
             pass
 
-    async def _request(self, method: str, path: str, *, data: dict | None = None, timeout: float = 15):
+    async def _request(self, method: str, path: str, *, data: dict | None = None, timeout: float = 15,
+                       as_text: bool = False):
         started, status, error = time.monotonic(), None, None
         try:
             async with httpx.AsyncClient(base_url=self.url, timeout=timeout, trust_env=False,
@@ -85,7 +86,7 @@ class HAClient:
                 response = await client.request(method, path, json=data)
                 status = response.status_code
                 response.raise_for_status()
-                return response.json()
+                return response.text if as_text else response.json()
         except httpx.HTTPStatusError as exc:
             error = "HTTPStatusError"
             raise RuntimeError(f"Home Assistant returned HTTP {exc.response.status_code}") from None
@@ -202,6 +203,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .registry import HARegistry
     from .scenes import HAScenes
     from .changes import Changes, journal_from_env
+    from .diagnostics import HADiagnostics
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -211,6 +213,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     registry = HARegistry(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
+    diagnostics = HADiagnostics(client, admin.ws)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
                       integrations=integrations)
 
@@ -593,6 +596,75 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_backup(backup_id: BackupId) -> dict:
         """Delete one backup by backup_id from ha_list_backups. Admin write and delete required."""
         return await backups.delete_backup(backup_id)
+
+    @tool()
+    async def ha_list_traces(domain: str = "automation", item: str = "", limit: int = 20) -> list[dict]:
+        """Recent runs (traces) of automations or scripts, newest first: run_id, state, error, last_step, trigger.
+        domain 'automation' or 'script'; item = entity_id (e.g. 'automation.morning_light') or empty for all.
+        Use it to find out why an automation did or did not run; then ha_get_trace for details."""
+        return await diagnostics.list_traces(domain, item, limit)
+
+    @tool()
+    async def ha_get_trace(domain: str, item: str, run_id: str, include_config: bool = False) -> dict:
+        """Steps of one automation/script run from ha_list_traces: each step's path, error, result and changed
+        variables (shortened). include_config=true adds the configuration as it was at that run."""
+        return await diagnostics.get_trace(domain, item, run_id, include_config)
+
+    @tool()
+    async def ha_get_error_log(level: str = "", query: str = "", limit: int = 30) -> list[dict]:
+        """Home Assistant's error/warning log (system log), newest first, deduplicated with count. Filter by
+        level ('ERROR', 'WARNING', ...) and/or text (integration name, message). Needs an HA admin user."""
+        return await diagnostics.error_log(level, query, limit)
+
+    @tool()
+    async def ha_get_logbook(entity_id: str = "", hours: float = 24, start: str = "", end: str = "",
+                             limit: int = 100) -> list[dict]:
+        """Logbook: what happened and what caused it (state changes, automation triggers, service calls) in the
+        last `hours` (or start/end ISO time), optionally for entity_id (comma list allowed); oldest first, last
+        `limit` entries."""
+        return await diagnostics.logbook(entity_id, hours, start, end, limit)
+
+    @tool()
+    async def ha_get_history(entity_ids: list[str], hours: float = 24, start: str = "", end: str = "",
+                             max_points: int = 200) -> dict:
+        """State history of 1-10 entities over the last `hours` (or start/end ISO time): per entity the state
+        changes with time (in Home Assistant's time zone), newest `max_points` kept. For long periods of numeric
+        sensors prefer ha_get_statistics."""
+        return await diagnostics.history(entity_ids, hours, start, end, max_points)
+
+    @tool()
+    async def ha_get_statistics(statistic_ids: list[str], hours: float = 24, start: str = "", end: str = "",
+                                period: str = "hour", types: list[str] | None = None, max_points: int = 200) -> dict:
+        """Long-term statistics (energy, temperatures, ...) aggregated per period ('5minute', 'hour', 'day',
+        'week', 'month'); types any of mean, min, max, sum, state, change. IDs from ha_list_statistic_ids."""
+        return await diagnostics.statistics(statistic_ids, hours, start, end, period, types, max_points)
+
+    @tool()
+    async def ha_list_statistic_ids(query: str = "", limit: int = 100) -> list[dict]:
+        """Which entities have long-term statistics, with unit and whether they have sum (meters) or mean."""
+        return await diagnostics.list_statistic_ids(query, limit)
+
+    @tool()
+    async def ha_list_repairs(include_ignored: bool = False) -> list[dict]:
+        """Open repair issues Home Assistant reports (Settings → Repairs): domain, issue_id, severity, fixable."""
+        return await diagnostics.repairs(include_ignored)
+
+    @tool()
+    async def ha_get_system_health() -> dict:
+        """System health per component (version, installation type, database, cloud reachability, ...)."""
+        return await diagnostics.system_health()
+
+    @tool()
+    async def ha_render_template(template: str, variables: dict | None = None) -> dict:
+        """Render a Jinja template against the live state, e.g. \"{{ states('sun.sun') }}\" or
+        \"{{ states.light | selectattr('state','eq','on') | list | count }}\". Read-only; needs an HA admin user."""
+        return await diagnostics.render_template(template, variables)
+
+    @tool()
+    async def ha_test_condition(condition: dict | list, variables: dict | None = None) -> dict:
+        """Test an automation condition right now without saving anything, e.g. {"condition": "state",
+        "entity_id": "light.hallway", "state": "on"} or {"condition": "time", "after": "22:00:00"}."""
+        return await diagnostics.test_condition(condition, variables)
 
     @tool()
     async def ha_list_changes(kind: str = "", target: str = "", limit: int = 20) -> list[dict]:

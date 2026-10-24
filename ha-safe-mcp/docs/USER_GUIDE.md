@@ -232,6 +232,25 @@ title/system options/disabled state. Each such tool result carries a `change_id`
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
 
+### Debug: why did something (not) happen?
+
+All of these are read-only (some need an HA admin user, like the HA UI pages they mirror):
+
+- **Automation or script runs:** `ha_list_traces` `{"domain":"automation","item":"automation.example"}` lists the
+  recent runs with state, error and last step; `ha_get_trace` with a `run_id` shows each step (trigger,
+  conditions, actions) with its result or error. `include_config:true` adds the configuration of that run.
+- **What happened and why:** `ha_get_logbook` `{"entity_id":"light.example","hours":6}` (who or what changed it,
+  e.g. which automation or service); `ha_get_history` `{"entity_ids":["sensor.example"],"hours":24}` for the state
+  changes; `ha_get_statistics` (IDs from `ha_list_statistic_ids`) for long periods of numeric sensors, aggregated
+  per `5minute`, `hour`, `day`, `week` or `month`.
+- **Errors and health:** `ha_get_error_log` (filter by `level` or text, e.g. an integration name),
+  `ha_list_repairs`, `ha_get_system_health`.
+- **Try before saving:** `ha_render_template` renders a Jinja template against the live state;
+  `ha_test_condition` evaluates an automation condition right now.
+
+Times in these results are converted to the time zone configured in Home Assistant. Long results are cut to the
+newest entries (`limit`, `max_points`).
+
 ### Back up before changing configuration
 
 Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Zugangsdaten**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—delete backups; a download streams from HA and is not retained by MCP. **Restore is not provided here**: use HA's own **Settings → System → Backups** workflow. `ha_delete_backup` uses a listed `backup_id` and is not a restore/rollback mechanism.

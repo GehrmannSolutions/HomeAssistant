@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.15.0 – 2026-10-25
+
+- **Debugging tools** (all read-only): `ha_list_traces`, `ha_get_trace` (automation/script runs step by step),
+  `ha_get_error_log` (system log, filter by level/text), `ha_get_logbook`, `ha_get_history`, `ha_get_statistics`,
+  `ha_list_statistic_ids`, `ha_list_repairs`, `ha_get_system_health`, `ha_render_template`, `ha_test_condition`.
+  Results are reduced and capped; timestamps are shown in HA's configured time zone (small models misread UTC).
+  The chat offers them for questions like "warum", "Verlauf", "Fehler", "Verbrauch", "Template".
+- WebSocket transport can collect subscription events (system health); REST helper can return text.
+
 ## 0.14.0 – 2026-10-25
 
 - **Domain pickers**: Einstellungen, MCP-Clients and the OAuth consent page list the domains the connected HA

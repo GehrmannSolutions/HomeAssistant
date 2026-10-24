@@ -18,7 +18,11 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         "config/entity_registry/list", "auth/current_user",
                         "config_entries/flow/progress", "backup/info", "backup/agents/info",
                         "config/area_registry/list", "config/floor_registry/list",
-                        "config/device_registry/list", "config_entries/get_single"}) | frozenset(
+                        "config/device_registry/list", "config_entries/get_single",
+                        # debugging (read-only; some need an HA admin user)
+                        "trace/list", "trace/get", "system_log/list", "recorder/statistics_during_period",
+                        "recorder/list_statistic_ids", "repairs/list_issues", "system_health/info",
+                        "test_condition"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
                          "config/area_registry/create", "config/area_registry/update",
@@ -37,7 +41,9 @@ class HAWebSocket:
         self.allow_admin_write = allow_admin_write
         self.allow_delete = allow_delete
 
-    async def command(self, command_type: str, payload: dict | None = None):
+    async def command(self, command_type: str, payload: dict | None = None, *, collect_events=None):
+        """Send one command. With ``collect_events`` (a callable returning True to stop), keep reading the
+        subscription's events after the result for up to 10 s and return {"result": ..., "events": [...]}."""
         if command_type not in READ_TYPES | WRITE_TYPES | DELETE_TYPES:
             raise ValueError("websocket command not allowed")
         if command_type in WRITE_TYPES | DELETE_TYPES and (not self.client.allow_write or not self.allow_admin_write):
@@ -72,7 +78,21 @@ class HAWebSocket:
                         safe_code = code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,60}", code) else "unknown"
                         error = "WebSocketError"
                         raise RuntimeError(f"Home Assistant WebSocket error: {safe_code}")
-                    return response.get("result")
+                    if collect_events is None:
+                        return response.get("result")
+                    events = []
+                    try:
+                        async with asyncio.timeout(10):
+                            while True:
+                                message = json.loads(await ws.recv())
+                                if message.get("type") != "event" or message.get("id") != 1:
+                                    continue
+                                events.append(message.get("event"))
+                                if collect_events(message.get("event")) or len(events) >= 500:
+                                    break
+                    except TimeoutError:
+                        pass
+                    return {"result": response.get("result"), "events": events}
         except (OSError, TimeoutError, WebSocketException, json.JSONDecodeError) as exc:
             error = type(exc).__name__
             raise RuntimeError(f"Home Assistant WebSocket request failed ({type(exc).__name__})") from None
