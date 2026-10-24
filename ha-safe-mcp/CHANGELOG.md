@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.19.0 – 2026-10-25
+
+- **Helpers**: `ha_create_helper` also creates `input_button`, `counter`, `timer` and `schedule`;
+  `ha_list_helper_types` lists storage and config-flow helper types (template, group, utility_meter, derivative,
+  ...) with the existing config-flow helpers and how to create them.
+- Setup flows: menus are answered with `{"next_step_id": ...}` (documented in the tool); an entry created by a flow
+  (helper or integration) is journaled and undo removes it again.
+- Chat preselection knows helper words (Zähler, Timer, Zeitplan, Template, Gruppe, Verbrauchszähler, ...).
+- Tool counts per remote level updated in the user guide.
+
 ## 0.18.0 – 2026-10-25
 
 - **Labels**: `ha_list_labels` (with usage), `ha_get_label` (members), `ha_create_label`, `ha_update_label`,

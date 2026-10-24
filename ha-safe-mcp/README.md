@@ -23,6 +23,8 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 - Separate gates for control, admin changes, and deletion; CLI/UI per-call confirmation by default. Other MCP clients must implement their own human approval.
 - Remote MCP endpoint `/mcp` (Streamable HTTP) for Claude Code, Codex, ChatGPT, Claude and other clients: bearer token or OAuth 2.1 login (consent page behind your UI login), one permission level per client, capped by the instance switches.
 - Deep search ("where is this entity used?") and a system overview.
+- Helpers: input helpers, buttons, counters, timers, schedules, and config-flow helpers (template, group, utility
+  meter, derivative, ...).
 - Labels, categories and zones; entity aliases, labels, categories, hiding and entity ID renames.
 - Debugging: automation/script traces, error log, logbook, history, long-term statistics, repairs, system health, template and condition tests.
 - Change journal with undo: every configuration change keeps its previous state locally (30 days) and can be undone (and redone) from the chat or the UI's **Änderungen** tab.

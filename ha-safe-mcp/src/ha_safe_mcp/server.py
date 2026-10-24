@@ -229,6 +229,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
         return changes.with_change(result, change_id)
 
+    def journal_created(tool_name: str, result: dict) -> dict:
+        entry_id = (result.get("entry") or {}).get("entry_id") if isinstance(result, dict) else None
+        if result.get("type") == "create_entry" and isinstance(entry_id, str):
+            return {**result, "change_id": changes.record_created("integration", entry_id, tool_name)}
+        return result
+
     async def dashboard_url(dashboard_id: str) -> str:
         found = next((d for d in await admin.dashboard_list() if d.get("id") == dashboard_id), None)
         if found is None:
@@ -332,14 +338,27 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_list_helpers(domain: str) -> list[dict]:
-        """List storage helpers; domain: input_boolean, input_number, input_select, input_text, input_datetime."""
+        """List storage helpers of one domain: input_boolean, input_number, input_select, input_text,
+        input_datetime, input_button, counter, timer, schedule. Config-flow helpers: ha_list_helper_types."""
         return await admin.helper_list(domain)
 
     @tool()
     async def ha_create_helper(domain: str, config: dict) -> dict:
-        """Create a persistent helper entity and verify it appears in list. Admin write required."""
+        """Create a storage helper and verify it appears in the list. domain and config: input_boolean {name},
+        input_number {name, min, max, step?, mode?}, input_select {name, options}, input_text {name},
+        input_datetime {name, has_date, has_time}, input_button {name}, counter {name, initial?, step?, minimum?,
+        maximum?}, timer {name, duration 'HH:MM:SS'}, schedule {name, monday..sunday: [{from, to}]}; icon optional.
+        Template, group, utility meter and other helpers are config flows (ha_list_helper_types). Admin write
+        required."""
         return await journaled("ha_create_helper", "helper", None, lambda: admin.helper_create(domain, config),
                                target_from=lambda result: f"{domain}/{result['id']}")
+
+    @tool()
+    async def ha_list_helper_types() -> dict:
+        """Which helper types exist and how to create them: storage helpers (ha_create_helper) and config-flow
+        helpers such as template, group, utility_meter, derivative, threshold, tod (setup flow), plus the existing
+        config-flow helpers with entry_id."""
+        return await integrations.list_helper_types()
 
     @tool()
     async def ha_update_helper(domain: str, helper_id: HelperId, config: dict) -> dict:
@@ -516,18 +535,21 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_start_integration_setup(handler: str, show_advanced_options: bool = False) -> dict:
-        """Start adding an integration (e.g. handler 'shelly'); returns the first form (data_schema) with a
-        flow_id. Admin write required."""
-        return await integrations.start_flow(handler, show_advanced_options)
+        """Start adding an integration (e.g. handler 'shelly') or a config-flow helper (e.g. 'template', 'group',
+        'utility_meter', 'derivative'; see ha_list_helper_types); returns the first form (data_schema) or a menu
+        (menu_options) with a flow_id. Admin write required."""
+        return journal_created("ha_start_integration_setup", await integrations.start_flow(handler,
+                                                                                           show_advanced_options))
 
     @tool()
     async def ha_integration_setup_step(flow_id: FlowId, data: dict | None = None) -> dict:
         """Submit one form step of a setup flow, field names from data_schema; keep shown defaults unless the
         user said otherwise. Secret fields (password, token, api_key, pin) must be credential references:
         {"$credential": "<alias>", "field": "<field>"} from ha_list_credentials; plain secret values are rejected.
-        For discovered devices send {} to confirm. If the setup cannot be finished, call
-        ha_abort_integration_setup. Admin write required."""
-        return await integrations.flow_step(flow_id, data)
+        For discovered devices send {} to confirm. For a menu (type 'menu') send {"next_step_id": "<one of
+        menu_options>"}. If the setup cannot be finished, call ha_abort_integration_setup. A created entry is
+        journaled (undo removes it). Admin write required."""
+        return journal_created("ha_integration_setup_step", await integrations.flow_step(flow_id, data))
 
     @tool()
     async def ha_abort_integration_setup(flow_id: FlowId) -> dict:

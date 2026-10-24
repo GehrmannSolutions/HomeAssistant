@@ -104,6 +104,23 @@ class HAIntegrations:
         needle = str(query or "").casefold().strip()
         return sorted(h for h in handlers if isinstance(h, str) and needle in h.casefold())[:MAX_HANDLERS]
 
+    async def list_helper_types(self) -> dict:
+        """Helper types: storage helpers (ha_create_helper) and config-flow helpers (setup flow), plus the existing
+        config-flow helper entries."""
+        from .management import HELPERS
+        handlers = await self.client._request("GET", "/api/config/config_entries/flow_handlers?type=helper")
+        if not isinstance(handlers, list):
+            raise RuntimeError("Unexpected Home Assistant response")
+        flow_types = sorted(h for h in handlers if isinstance(h, str))
+        existing = [{key: entry.get(key) for key in ("entry_id", "domain", "title", "state")}
+                    for entry in await self.list_entries() if entry.get("domain") in flow_types]
+        return {"storage": sorted(HELPERS), "config_flow": flow_types, "existing_config_flow_helpers": existing,
+                "how_to": ("storage helpers: ha_create_helper(domain, config). Config-flow helpers (e.g. template, "
+                           "group, utility_meter, derivative, threshold, tod): ha_start_integration_setup(handler="
+                           "type); a result of type 'menu' lists menu_options, answer it with "
+                           "ha_integration_setup_step(data={'next_step_id': '<option>'}); then fill the form fields "
+                           "from data_schema. Change later with ha_start_integration_options(entry_id).")}
+
     async def discovered_flows(self) -> list[dict]:
         flows = await self.ws.command("config_entries/flow/progress")
         result = []

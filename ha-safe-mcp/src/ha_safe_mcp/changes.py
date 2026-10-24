@@ -231,6 +231,10 @@ class Changes:
         change_id = self.journal.record(kind=kind, target=final or "", before=before, tool=tool, undoes=undoes)
         return result, change_id
 
+    def record_created(self, kind: str, target: str, tool: str) -> str:
+        """Journal something that did not exist before (e.g. a config entry created by a setup flow)."""
+        return self.journal.record(kind=kind, target=target, before=None, tool=tool)
+
     @staticmethod
     def with_change(result, change_id: str):
         """Tool result plus the change ID the model or user can pass to ha_undo_change."""
@@ -304,6 +308,9 @@ class Changes:
                 return await a.helper_update(domain, helper_id, before), target
             created = await a.helper_create(domain, before)
             return created, f"{domain}/{created['id']}"
+        if kind == "integration" and before is None:
+            # created by a setup flow: undo removes the entry again (a config entry cannot be recreated by undo)
+            return await self.integrations.delete_entry(target), target
         if kind in ("entity", "device", "integration") and not before:
             raise ValueError("nothing stored to restore for this change")
         if kind == "entity":

@@ -13,7 +13,9 @@ from websockets.exceptions import WebSocketException
 
 from .server import HAClient
 
-HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime"})
+# storage-collection helpers ({domain}/list|create|update|delete); config-flow helpers go through integrations.py
+HELPERS = frozenset({"input_boolean", "input_number", "input_select", "input_text", "input_datetime", "input_button",
+                     "counter", "timer", "schedule"})
 READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboards/list",
                         "config/entity_registry/list", "auth/current_user",
                         "config_entries/flow/progress", "backup/info", "backup/agents/info",

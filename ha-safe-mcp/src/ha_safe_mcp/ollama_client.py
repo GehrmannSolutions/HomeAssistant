@@ -25,7 +25,7 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_history", "ha_get_statistics", "ha_list_statistic_ids", "ha_list_repairs",
                         "ha_get_system_health", "ha_render_template", "ha_test_condition", "ha_find_usages",
                         "ha_get_overview", "ha_list_labels", "ha_get_label", "ha_list_categories", "ha_list_zones",
-                        "ha_get_entity_registry"})
+                        "ha_get_entity_registry", "ha_list_helper_types"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -98,7 +98,14 @@ EventSink = Callable[[dict], object]
 TOOL_TOPICS = (
     (r"automat|automatis|trigger|ausl[oö]s", {"ha_validate_automation", "ha_get_automation", "ha_save_automation", "ha_delete_automation"}),
     (r"dashboard|lovelace|ansicht|karte", {"ha_list_dashboards", "ha_get_dashboard", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard", "ha_delete_dashboard"}),
-    (r"helper|helfer|input_(?:boolean|number|select|text|datetime)(?![.\w])", {"ha_list_helpers", "ha_create_helper", "ha_update_helper", "ha_delete_helper"}),
+    (r"helper|helfer|input_(?:boolean|number|select|text|datetime|button)(?![.\w])|z[äa]hler|counter|\btimer|"
+     r"stoppuhr|countdown|zeitplan|schedule|taster",
+     {"ha_list_helpers", "ha_create_helper", "ha_update_helper", "ha_delete_helper", "ha_list_helper_types"}),
+    (r"template|vorlage|gruppe|group|utility|verbrauchsz[äa]hler|ableitung|derivat|schwellwert|threshold|"
+     r"tageszeit|min.?max|mittelwert|trend|thermostat|hygrostat|als (?:licht|schalter)|switch_as_x",
+     {"ha_list_helper_types", "ha_start_integration_setup", "ha_integration_setup_step",
+      "ha_abort_integration_setup", "ha_start_integration_options", "ha_integration_options_step",
+      "ha_list_integrations", "ha_search_entities"}),
     (r"registry|registr|area|bereich|raum|r[äa]ume|zimmer|etage|stockwerk|geschoss|floor|ger[äa]t|device|zuordn",
      {"ha_list_entity_registry", "ha_update_entity_registry", "ha_list_areas", "ha_list_floors", "ha_list_devices",
       "ha_create_area", "ha_update_area", "ha_delete_area", "ha_create_floor", "ha_update_floor", "ha_delete_floor",

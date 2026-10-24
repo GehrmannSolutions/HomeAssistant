@@ -114,18 +114,18 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.18.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.19.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 44 | 44 | 0 |
-   | Steuern | 47 | 44 | 3 |
-   | Konfiguration ändern | 81 | 44 | 37 |
-   | Löschen | 94 | 44 | 50 |
+   | Nur lesen | 45 | 45 | 0 |
+   | Steuern | 48 | 45 | 3 |
+   | Konfiguration ändern | 82 | 45 | 37 |
+   | Löschen | 95 | 45 | 50 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (44)" and "write/delete
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (45)" and "write/delete
    tools (37)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
@@ -232,6 +232,21 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Helpers: counters, timers, schedules, templates, groups, meters
+
+`ha_list_helper_types` shows which helper types this Home Assistant offers and how to create them:
+
+- **Storage helpers** with `ha_create_helper`: `input_boolean`, `input_number`, `input_select`, `input_text`,
+  `input_datetime`, `input_button`, `counter` (`initial`, `step`, `minimum`, `maximum`), `timer` (`duration`
+  `"HH:MM:SS"`) and `schedule` (`monday` ... `sunday`: lists of `{"from": "07:00:00", "to": "16:00:00"}`).
+- **Config-flow helpers** such as `template`, `group`, `utility_meter`, `derivative`, `threshold`, `tod`,
+  `min_max`, `statistics`, `trend`, `switch_as_x`, `generic_thermostat`: start with `ha_start_integration_setup`
+  (handler = the type). Some types answer with a menu (e.g. template: sensor, binary_sensor, switch, ...); pick one
+  with `ha_integration_setup_step` `{"next_step_id": "sensor"}`, then fill the form fields from `data_schema`. Change
+  them later with `ha_start_integration_options` (the entry_id is in the result and in `ha_list_helper_types`).
+- A helper (or integration) created by a setup flow is journaled: undo removes the entry again. This cannot be
+  redone; create it again instead.
 
 ### Organise: labels, categories, zones, entity names
 

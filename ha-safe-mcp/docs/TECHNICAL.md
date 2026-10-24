@@ -32,7 +32,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`server.py`](../src/ha_safe_mcp/server.py), [`__main__.py`](../src/ha_safe_mcp/__main__.py) | FastMCP registration, stdio entry point, `HAClient`, service-target checks, tool audit wrapper |
 | [`rest_api.py`](../src/ha_safe_mcp/rest_api.py) | Method/path/query catalog, permission classes, response handling |
 | [`management.py`](../src/ha_safe_mcp/management.py) | Authenticated allowlisted WS transport; typed automation, dashboard, helper and entity-registry operations |
-| [`integrations.py`](../src/ha_safe_mcp/integrations.py) | Config-entry HTTP flows and typed WS entry settings; credential-reference resolution and result reduction |
+| [`integrations.py`](../src/ha_safe_mcp/integrations.py) | Config-entry HTTP flows and typed WS entry settings; credential-reference resolution and result reduction; helper types (`flow_handlers?type=helper`), entries created by a flow are journaled |
 | [`scenes.py`](../src/ha_safe_mcp/scenes.py) | Scene/script config HTTP, prechecks, read-back and service invocation |
 | [`registry.py`](../src/ha_safe_mcp/registry.py) | Area/floor/device WS operations and area-entity view |
 | [`backups.py`](../src/ha_safe_mcp/backups.py) | HA backup WS operations and allowlisted streaming download |
