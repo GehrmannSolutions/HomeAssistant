@@ -97,3 +97,16 @@ def test_mcp_tools_are_registered():
     import asyncio
     names = {tool.name for tool in asyncio.run(server.list_tools())}
     assert {"ha_search_entities", "ha_get_state", "ha_list_services", "ha_call_service", "ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete", "ha_validate_automation", "ha_get_automation", "ha_save_automation", "ha_delete_automation", "ha_list_dashboards", "ha_get_dashboard", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard", "ha_delete_dashboard", "ha_list_helpers", "ha_create_helper", "ha_update_helper", "ha_delete_helper", "ha_list_entity_registry", "ha_update_entity_registry"} <= names
+
+
+def test_helper_id_schema_tells_the_model_the_exact_id_format():
+    """A small model passed the display name 'Testschalter' as helper_id; the schema must say what an ID is."""
+    import asyncio
+    import jsonschema
+    tools = {tool.name: tool for tool in asyncio.run(create_server(HAClient("http://ha:8123", "secret")).list_tools())}
+    for name in ("ha_update_helper", "ha_delete_helper"):
+        prop = tools[name].inputSchema["properties"]["helper_id"]
+        assert "ha_list_helpers" in prop.get("description", ""), name
+        jsonschema.validate("testschalter", prop)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate("Testschalter", prop)

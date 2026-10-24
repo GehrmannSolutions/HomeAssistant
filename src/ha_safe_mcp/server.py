@@ -2,15 +2,21 @@
 
 import os
 import re
+from typing import Annotated
 from urllib.parse import urlsplit
 
 import httpx
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 ENTITY = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
 DEFAULT_DOMAINS = frozenset({"light", "switch", "fan", "climate", "cover", "media_player"})
+HelperId = Annotated[str, Field(
+    pattern=r"^[a-z][a-z0-9_]{0,63}$",
+    description="Collection ID from ha_list_helpers (field 'id', lowercase, e.g. 'guest_mode'); "
+                "not the display name and not the entity_id")]
 
 
 class HAClient:
@@ -197,13 +203,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await admin.helper_create(domain, config)
 
     @server.tool()
-    async def ha_update_helper(domain: str, helper_id: str, config: dict) -> dict:
+    async def ha_update_helper(domain: str, helper_id: HelperId, config: dict) -> dict:
         """Update a storage helper by collection ID and read back. Admin write required."""
         return await admin.helper_update(domain, helper_id, config)
 
     @server.tool()
-    async def ha_delete_helper(domain: str, helper_id: str) -> None:
-        """Delete a storage helper; requires admin write and delete opt-ins."""
+    async def ha_delete_helper(domain: str, helper_id: HelperId) -> None:
+        """Delete a storage helper by collection ID; requires admin write and delete opt-ins."""
         return await admin.helper_delete(domain, helper_id)
 
     @server.tool()

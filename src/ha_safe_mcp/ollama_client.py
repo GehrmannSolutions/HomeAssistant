@@ -10,6 +10,7 @@ import sys
 from collections.abc import Awaitable, Callable
 
 import httpx
+import jsonschema
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -96,6 +97,20 @@ def _tool_text(outcome) -> str:
     return json.dumps(structured, ensure_ascii=False)
 
 
+def _schema_problem(tool, args: dict) -> str | None:
+    """Check a proposed write against the tool's own schema before an approval card is shown.
+    Reads go straight to the server, whose Pydantic validation coerces types (e.g. "10" -> 10)."""
+    try:
+        jsonschema.validate(args, tool.inputSchema or {"type": "object"})
+    except jsonschema.ValidationError as exc:
+        where = ".".join(str(part) for part in exc.absolute_path) or "Argumente"
+        return (f"Ungültige Argumente, nichts ausgeführt: '{where}' {exc.message}. "
+                "Prüfe das Schema und rufe das Tool mit korrigierten Werten erneut auf.")
+    except jsonschema.SchemaError:
+        return None
+    return None
+
+
 async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, prompt: str,
                    *, allow_write: bool = False, approve: Approver | None = None,
                    max_rounds: int = 4, history: list[dict] | None = None,
@@ -139,6 +154,10 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
                 result = "Tool unavailable or invalid arguments"
                 await _emit(on_event, {"type": "tool_result", "name": name or "unknown", "ok": False,
                                        "preview": result})
+            elif name in WRITE_TOOLS and (problem := _schema_problem(allowed[name], args)) is not None:
+                result = problem
+                await _emit(on_event, {"type": "tool_result", "name": name, "ok": False,
+                                       "preview": result[:PREVIEW_CHARS]})
             else:
                 is_write = name in WRITE_TOOLS
                 await _emit(on_event, {"type": "tool_call", "name": name, "arguments": args, "write": is_write})

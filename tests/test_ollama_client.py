@@ -263,3 +263,80 @@ async def test_empty_tool_results_reach_the_model_as_success(tool_name, expected
     assert tool_message["role"] == "tool" and tool_message["tool_name"] == tool_name
     assert tool_message["content"].strip(), "empty tool output reached the model"
     assert expected in tool_message["content"] and "error" not in tool_message["content"].lower()
+
+
+class SchemaSession(FakeSession):
+    """Exposes a write tool whose schema only accepts lowercase helper IDs."""
+
+    async def list_tools(self):
+        return SimpleNamespace(tools=[
+            SimpleNamespace(name="ha_list_helpers", description="List helpers", inputSchema={
+                "type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}),
+            SimpleNamespace(name="ha_delete_helper", description="Delete helper", inputSchema={
+                "type": "object", "required": ["domain", "helper_id"], "properties": {
+                    "domain": {"type": "string"},
+                    "helper_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}}),
+        ])
+
+    async def call_tool(self, name, arguments):
+        self.calls.append((name, arguments))
+        if name == "ha_list_helpers":
+            return SimpleNamespace(isError=False, structuredContent=None, content=[
+                SimpleNamespace(type="text", text='{"id": "testschalter", "name": "Testschalter"}')])
+        return SimpleNamespace(isError=False, structuredContent={"result": None}, content=[])
+
+
+@pytest.mark.asyncio
+async def test_schema_invalid_write_is_returned_to_the_model_without_an_approval_card():
+    """The model sent the display name as helper_id; that must not reach the user as an approval card."""
+    proposals = iter([
+        {"name": "ha_delete_helper", "arguments": {"domain": "input_boolean", "helper_id": "Testschalter"}},
+        {"name": "ha_delete_helper", "arguments": {"domain": "input_boolean", "helper_id": "testschalter"}},
+    ])
+    seen = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        seen.append(body["messages"])
+        proposal = next(proposals, None)
+        if proposal is None:
+            return httpx.Response(200, json={"message": {"role": "assistant", "content": "Gelöscht."}})
+        return httpx.Response(200, json={"message": {"role": "assistant", "content": "",
+                                                     "tool_calls": [{"type": "function", "function": proposal}]}})
+
+    asked, events = [], []
+
+    async def approve(name, args):
+        asked.append((name, args))
+        return True
+
+    session = SchemaSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
+        answer = await run_chat(session, http, "small", "Lösche den Helfer Testschalter", allow_write=True,
+                                approve=approve, on_event=events.append)
+    assert answer == "Gelöscht."
+    assert asked == [("ha_delete_helper", {"domain": "input_boolean", "helper_id": "testschalter"})]
+    assert session.calls == asked
+    rejected = seen[1][-1]
+    assert rejected["role"] == "tool" and "helper_id" in rejected["content"]
+    assert [e for e in events if e["type"] == "tool_result"][0]["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_read_tool_arguments_are_left_to_the_server_to_coerce():
+    """Pydantic on the server turns limit "10" into 10; a strict client-side check must not block reads."""
+    class LaxSession(FakeSession):
+        async def list_tools(self):
+            return SimpleNamespace(tools=[SimpleNamespace(name="ha_search_entities", description="Search", inputSchema={
+                "type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}})])
+
+    responses = iter([
+        {"message": {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
+            "name": "ha_search_entities", "arguments": {"query": "licht", "limit": "10"}}}]}},
+        {"message": {"role": "assistant", "content": "fertig"}},
+    ])
+    session = LaxSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
+                                 base_url="http://ollama:11434") as http:
+        await run_chat(session, http, "small", "Suche Licht")
+    assert session.calls == [("ha_search_entities", {"query": "licht", "limit": "10"})]
