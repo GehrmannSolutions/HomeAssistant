@@ -1,0 +1,37 @@
+# ha-safe-mcp
+
+A self-hosted, safety-first [Model Context Protocol](https://modelcontextprotocol.io/) bridge to Home Assistant. Use it with a local MCP client over **stdio**, or use the optional loopback-only browser UI and a local Ollama model. It is not an unrestricted REST/WebSocket proxy. All write operations are **disabled by default**; enabling them is a deliberate choice on **your own** Home Assistant instance.
+
+## Get started
+
+Requires Python 3.11+, an existing Home Assistant instance, and a Home Assistant long-lived access token. Ollama is needed only for the included chat UI/CLI, not for a generic MCP client.
+
+```bash
+# From the root of a clone of this repository:
+cd ha-safe-mcp
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/ha-mcp-ui  # visit http://127.0.0.1:8765/ on the same machine
+```
+
+The UI wizard tests your Home Assistant address and token before saving them. Configure a local, tool-capable Ollama model for chat; if using an external MCP client, Ollama is unnecessary. The UI is in German at present; the documentation is in English. **Do not expose port 8765 to your network or the internet.** The UI has no built-in account login. See the full [installation guide](docs/INSTALL.md) for a headless MCP setup, a read-only first test, and deployment options.
+
+## What it does
+
+- Read states, discover entities and services; discover entities in a room; call allowed services on one or up to 20 entities of the same domain.
+- A **fixed, documented REST route catalog** plus typed tools for automations, dashboards, helpers, registry metadata, areas/floors/devices, scenes/scripts, integration config flows and settings, and Home Assistant backups.
+- Separate gates for control, admin changes, and deletion; CLI/UI per-call confirmation by default. Other MCP clients must implement their own human approval.
+- UI credential store for integration secrets (referenced by alias), saved plans/code blocks (not executed), metadata-only request log, backup download.
+- No backup restore, arbitrary HA YAML editing, generic network discovery, arbitrary WebSocket commands, or unbounded API proxy.
+
+## Documentation
+
+| Document | Audience |
+|---|---|
+| [Installation](docs/INSTALL.md) | Prerequisites, token handling, local setup, MCP clients, UI/CLI, tests |
+| [User guide](docs/USER_GUIDE.md) | Common read/control/build workflows and troubleshooting |
+| [Technical documentation](docs/TECHNICAL.md) | Architecture, trust boundaries, APIs, local data, developer workflow |
+| [Tool reference](docs/TOOLS.md) | Generated from the registered MCP tool schemas |
+| [Changelog](CHANGELOG.md) | Release history (historical entries may remain in German) |
+
+See [CONTRIBUTING.md](../CONTRIBUTING.md) to contribute and [LICENSE](LICENSE) for MIT reuse. Changes to HA Core's internal management interfaces can break specific administrative tools; test against a disposable HA Core before relying on them.

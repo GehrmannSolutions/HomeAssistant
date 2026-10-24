@@ -19,7 +19,7 @@ def clock(moment):
 
 
 @pytest.mark.parametrize("path, expected", [
-    ("/api/states/person.alex", "/api/states/{entity_id}"),
+    ("/api/states/person.example_user", "/api/states/{entity_id}"),
     ("/api/states/light.wohnzimmer?x=1", "/api/states/{entity_id}"),
     ("/api/services/light/turn_on?return_response", "/api/services/light/turn_on"),
     ("/api/config/automation/config/garten_licht", "/api/config/automation/config/{id}"),
@@ -35,24 +35,24 @@ def test_routes_are_reduced_to_templates_without_personal_identifiers(path, expe
 def test_records_are_metadata_only_and_files_are_private(tmp_path):
     log = AuditLog(tmp_path / "audit", now=clock(NOW))
     log.record(kind="ha", tool="ha_get_state", channel="rest", method="GET",
-               route="/api/states/person.alex", status=200, ok=True, ms=12.3456)
+               route="/api/states/person.example_user", status=200, ok=True, ms=12.3456)
     [entry] = log.entries()
     assert entry == {"ts": "2026-10-24T12:00:00Z", "kind": "ha", "tool": "ha_get_state", "channel": "rest",
                      "method": "GET", "route": "/api/states/{entity_id}", "status": 200, "ok": True, "ms": 12}
     assert stat.S_IMODE((tmp_path / "audit").stat().st_mode) == 0o700
     [path] = (tmp_path / "audit").iterdir()
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert "alex" not in path.read_text()
+    assert "example_user" not in path.read_text()
 
 
 def test_unknown_fields_and_free_text_are_dropped(tmp_path):
     log = AuditLog(tmp_path / "audit", now=clock(NOW))
     log.record(kind="ha", tool="ha_call_service", channel="rest", method="POST", route="/api/services/light/turn_on",
-               status=200, ok=True, ms=1, body={"entity_id": "light.x"}, prompt="Schalte Alex' Licht")
-    log.record(kind="tool", tool="ha_get_state", ok=False, ms=3, error="RuntimeError: person.alex not found")
+               status=200, ok=True, ms=1, body={"entity_id": "light.x"}, prompt="Schalte Alex Licht")
+    log.record(kind="tool", tool="ha_get_state", ok=False, ms=3, error="RuntimeError: person.example_user not found")
     entries = log.entries()
     assert all("body" not in entry and "prompt" not in entry for entry in entries)
-    assert entries[0]["error"] == "RuntimeError" and "alex" not in json.dumps(entries)
+    assert entries[0]["error"] == "RuntimeError" and "example_user" not in json.dumps(entries)
 
 
 def test_entries_older_than_30_days_are_purged(tmp_path):
@@ -89,9 +89,9 @@ async def test_ha_client_logs_each_request_with_tool_name_and_status(tmp_path):
     token = current_tool.set("ha_get_state")
     try:
         with respx.mock(base_url=URL) as router:
-            router.get("/api/states/person.alex").mock(return_value=httpx.Response(200, json={"state": "home"}))
+            router.get("/api/states/person.example_user").mock(return_value=httpx.Response(200, json={"state": "home"}))
             router.get("/api/states/person.nobody").mock(return_value=httpx.Response(404))
-            await client.get_state("person.alex")
+            await client.get_state("person.example_user")
             with pytest.raises(RuntimeError):
                 await client.get_state("person.nobody")
     finally:
@@ -133,10 +133,10 @@ async def test_rest_gateway_requests_are_logged_as_templates(tmp_path):
     with respx.mock(base_url=URL) as router:
         router.get("/api/history/period/2026-10-24T00:00:00Z").mock(return_value=httpx.Response(200, json=[]))
         await gateway.request("GET", "/api/history/period/2026-10-24T00:00:00Z",
-                              query={"filter_entity_id": "person.alex"})
+                              query={"filter_entity_id": "person.example_user"})
     [entry] = log.entries()
     assert entry["route"] == "/api/history/period/{id}" and entry["status"] == 200
-    assert "alex" not in json.dumps(entry)
+    assert "example_user" not in json.dumps(entry)
 
 
 def test_mcp_server_reads_audit_settings_from_the_environment(tmp_path, monkeypatch):

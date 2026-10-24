@@ -111,7 +111,7 @@ async def test_create_entry_result_is_reduced_to_the_new_entry(tmp_path):
                "result": {"entry_id": ENTRY, "domain": "shelly", "title": "Plug S", "state": "loaded", "source": "user"}}
     with respx.mock(base_url=URL) as router:
         router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=created))
-        result = await make(tmp_path).flow_step(FLOW, {"host": "192.168.1.50"})
+        result = await make(tmp_path).flow_step(FLOW, {"host": "192.0.2.50"})
     assert result == {"type": "create_entry", "flow_id": FLOW, "handler": "shelly", "title": "Plug S",
                       "entry": {"entry_id": ENTRY, "domain": "shelly", "title": "Plug S", "state": "loaded", "source": "user"}}
 

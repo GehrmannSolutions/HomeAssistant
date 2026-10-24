@@ -40,7 +40,7 @@ def default_directory() -> Path:
 
 
 def route_template(route: str) -> str:
-    """'/api/states/person.alex?x' -> '/api/states/{entity_id}'; WS command types stay as they are."""
+    """'/api/states/person.example_user?x' -> '/api/states/{entity_id}'; WS command types stay as they are."""
     route = route.split("?", 1)[0]
     if not route.startswith("/"):
         return route if WS_TYPE.fullmatch(route) else "{ws}"

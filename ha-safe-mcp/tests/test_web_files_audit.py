@@ -101,14 +101,14 @@ async def test_ordinary_answers_are_not_stored(tmp_path):
 async def test_audit_log_is_listed_and_can_be_cleared(tmp_path):
     app, _, audit = make(tmp_path)
     audit.record(kind="ha", tool="ha_get_state", channel="rest", method="GET",
-                 route="/api/states/person.alex", status=200, ok=True, ms=5)
+                 route="/api/states/person.example_user", status=200, ok=True, ms=5)
     async with client(app) as http:
         listed = (await http.get("/api/audit")).json()
         forged = await http.delete("/api/audit", headers={"Origin": "http://evil.example", "X-HA-MCP-UI": "1"})
         cleared = await http.delete("/api/audit", headers=HEADERS)
         after = (await http.get("/api/audit")).json()
     assert listed["retention_days"] == 30 and listed["entries"][0]["route"] == "/api/states/{entity_id}"
-    assert "alex" not in str(listed)
+    assert "example_user" not in str(listed)
     assert forged.status_code == 403
     assert cleared.json() == {"deleted": 1} and after["entries"] == []
 

@@ -2,14 +2,18 @@
 import asyncio
 import json
 import os
+import shlex
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 
 async def main():
+    docker = shlex.split(os.getenv("DOCKER_COMMAND", "docker"))
+    if not docker:
+        raise ValueError("DOCKER_COMMAND must name a Docker CLI")
     params = StdioServerParameters(
-        command="sudo", args=["-n", "docker", "run", "--rm", "-i", "--network", "host",
+        command=docker[0], args=[*docker[1:], "run", "--rm", "-i", "--network", "host",
                               "-e", "HA_URL=http://127.0.0.1:18123", "-e", "HA_TOKEN=test-token",
                               "-e", f"HA_ALLOW_WRITE={os.getenv('TEST_ALLOW_WRITE', 'false')}", "ha-safe-mcp:local"])
     async with stdio_client(params) as (read, write):

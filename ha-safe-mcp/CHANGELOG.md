@@ -1,7 +1,16 @@
 # Changelog
 
-Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
-vor 1.0 können sich Tool-Signaturen noch ändern.
+This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
+Historical entries below remain in German.
+
+## Unreleased
+
+- Moved the installable project, tests and Docker files into `ha-safe-mcp/`; added English community install,
+  user and technical documentation, a generated tool reference and an MIT license at repository root.
+- The stdio server now loads `.env` **only from its current working directory**, not from a parent directory;
+  point MCP clients at the correct installation directory. Existing UI deployments with an explicit `--env-file`
+  retain that path.
+- Docker smoke test uses `docker` by default; set `DOCKER_COMMAND='sudo -n docker'` if needed.
 
 ## 0.10.0 – 2026-10-24
 

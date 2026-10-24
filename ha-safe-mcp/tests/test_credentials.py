@@ -86,11 +86,11 @@ def test_references_resolve_only_top_level_values(tmp_path):
     store = make(tmp_path)
     store.save("shelly_admin", "Shelly", {"username": "admin", "password": SECRET})
     resolved, used = resolve_refs(store, {
-        "host": "10.0.0.5",
+        "host": "192.0.2.5",
         "password": {"$credential": "shelly_admin", "field": "password"},
         "username": {"$credential": "shelly_admin", "field": "username"},
     })
-    assert resolved == {"host": "10.0.0.5", "password": SECRET, "username": "admin"}
+    assert resolved == {"host": "192.0.2.5", "password": SECRET, "username": "admin"}
     assert used == {SECRET: "shelly_admin.password", "admin": "shelly_admin.username"}
 
 

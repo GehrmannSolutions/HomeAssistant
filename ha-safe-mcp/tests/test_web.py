@@ -11,11 +11,11 @@ from ha_safe_mcp.web import create_app, guard_bind_host
 
 
 async def test_access_origin_rejects_missing_and_invalid_assertions(tmp_path):
-    app = create_app(SettingsStore(tmp_path / '.env'), allowed_hosts={'mcp.example.com'},
-                     public_origin='https://mcp.example.com',
+    app = create_app(SettingsStore(tmp_path / '.env'), allowed_hosts={'ha-mcp.example.com'},
+                     public_origin='https://ha-mcp.example.com',
                      access_verifier=lambda token: token == 'verified-only-for-test')
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('127.0.0.1', 50000)),
-                                base_url='http://mcp.example.com') as http:
+                                base_url='http://ha-mcp.example.com') as http:
         for path in ('/', '/api/status', '/static/app.js'):
             assert (await http.get(path)).status_code == 403
             assert (await http.get(path, headers={'Cf-Access-Jwt-Assertion': 'forged'})).status_code == 403
@@ -23,19 +23,19 @@ async def test_access_origin_rejects_missing_and_invalid_assertions(tmp_path):
         assert response.status_code == 200
         wrong_origin = await http.post('/api/setup/test-ollama', headers={
             'Cf-Access-Jwt-Assertion': 'verified-only-for-test', 'X-HA-MCP-UI': '1',
-            'Origin': 'http://mcp.example.com'}, json={'ollama_url': 'http://127.0.0.1:11434'})
+            'Origin': 'http://ha-mcp.example.com'}, json={'ollama_url': 'http://127.0.0.1:11434'})
         assert wrong_origin.status_code == 403
         correct_origin = await http.post('/api/setup/test-ollama', headers={
             'Cf-Access-Jwt-Assertion': 'verified-only-for-test', 'X-HA-MCP-UI': '1',
-            'Origin': 'https://mcp.example.com'}, json={'ollama_url': 'http://127.0.0.1:11434'})
+            'Origin': 'https://ha-mcp.example.com'}, json={'ollama_url': 'http://127.0.0.1:11434'})
         assert correct_origin.status_code == 200
 
 
 async def test_access_origin_still_rejects_non_loopback_peer_and_unknown_host(tmp_path):
-    app = create_app(SettingsStore(tmp_path / '.env'), allowed_hosts={'mcp.example.com'},
-                     public_origin='https://mcp.example.com', access_verifier=lambda _: True)
+    app = create_app(SettingsStore(tmp_path / '.env'), allowed_hosts={'ha-mcp.example.com'},
+                     public_origin='https://ha-mcp.example.com', access_verifier=lambda _: True)
     for host, peer, expected in [('evil.example', ('127.0.0.1', 4000), 400),
-                                 ('mcp.example.com', ('192.168.1.50', 4000), 403)]:
+                                 ('ha-mcp.example.com', ('192.0.2.50', 4000), 403)]:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=peer),
                                     base_url=f'http://{host}') as http:
             response = await http.get('/', headers={'Cf-Access-Jwt-Assertion': 'valid'})
@@ -47,7 +47,7 @@ def test_public_cli_refuses_missing_access_configuration(tmp_path, monkeypatch):
     from ha_safe_mcp.web import main
     monkeypatch.setenv('CF_ACCESS_AUD', '')
     monkeypatch.setenv('CF_ACCESS_TEAM_DOMAIN', '')
-    monkeypatch.setattr(sys, 'argv', ['ha-mcp-ui', '--public-host', 'mcp.example.com',
+    monkeypatch.setattr(sys, 'argv', ['ha-mcp-ui', '--public-host', 'ha-mcp.example.com',
                                      '--env-file', str(tmp_path / '.env')])
     with pytest.raises(SystemExit, match='CF_ACCESS_AUD'):
         main()
@@ -63,12 +63,12 @@ def test_public_cli_uses_loopback_and_requires_access(tmp_path, monkeypatch):
     monkeypatch.setenv('CF_ACCESS_AUD', 'test-audience')
     monkeypatch.setenv('CF_ACCESS_TEAM_DOMAIN', 'https://team.cloudflareaccess.com')
     monkeypatch.setattr(uvicorn, 'run', capture)
-    monkeypatch.setattr(sys, 'argv', ['ha-mcp-ui', '--public-host', 'mcp.example.com',
+    monkeypatch.setattr(sys, 'argv', ['ha-mcp-ui', '--public-host', 'ha-mcp.example.com',
                                      '--env-file', str(tmp_path / '.env')])
     main()
     assert args['host'] == '127.0.0.1'
     assert args['app'].access_verifier.audience == 'test-audience'
-    assert args['app'].public_origin == 'https://mcp.example.com'
+    assert args['app'].public_origin == 'https://ha-mcp.example.com'
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.test-token-value.signature_part"
 HEADERS = {"X-HA-MCP-UI": "1", "Origin": "http://127.0.0.1:8765"}
@@ -469,7 +469,7 @@ async def test_read_only_instance_refuses_every_write_switch_and_says_so(tmp_pat
 
 def test_read_only_store_ignores_write_switches_edited_into_the_env_file(tmp_path):
     path = tmp_path / ".env"
-    path.write_text("HA_URL=http://10.0.0.2:8123\nHA_TOKEN=" + TOKEN + "\nHA_ALLOW_WRITE=true\n"
+    path.write_text("HA_URL=http://192.0.2.2:8123\nHA_TOKEN=" + TOKEN + "\nHA_ALLOW_WRITE=true\n"
                     "HA_ALLOW_ADMIN_WRITE=true\nHA_ALLOW_DELETE=true\n")
     settings = SettingsStore(path, read_only=True).load()
     assert (settings.allow_write, settings.allow_admin_write, settings.allow_delete) == (False, False, False)
@@ -512,7 +512,7 @@ async def test_control_only_instance_allows_steering_but_never_config_or_delete(
 
 def test_control_only_store_ignores_config_and_delete_switches_in_the_env_file(tmp_path):
     path = tmp_path / ".env"
-    path.write_text("HA_URL=http://10.0.0.2:8123\nHA_TOKEN=" + TOKEN + "\nHA_ALLOW_WRITE=true\n"
+    path.write_text("HA_URL=http://192.0.2.2:8123\nHA_TOKEN=" + TOKEN + "\nHA_ALLOW_WRITE=true\n"
                     "HA_ALLOW_ADMIN_WRITE=true\nHA_ALLOW_DELETE=true\n")
     env = SettingsStore(path, max_level="control").load().mcp_env()
     assert env["HA_ALLOW_WRITE"] == "true"

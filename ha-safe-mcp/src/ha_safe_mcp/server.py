@@ -4,6 +4,7 @@ import functools
 import os
 import re
 import time
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -558,7 +559,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
 
 def main():
-    load_dotenv()
+    # Read only the selected instance's settings, never walk parent directories for .env.
+    load_dotenv(dotenv_path=Path.cwd() / ".env")
     from .audit import audit_from_env
     domains = frozenset(x.strip() for x in os.getenv("HA_ALLOWED_DOMAINS", ",".join(sorted(DEFAULT_DOMAINS))).split(",") if x.strip())
     client = HAClient(os.getenv("HA_URL", "http://127.0.0.1:8123"), os.getenv("HA_TOKEN", ""),

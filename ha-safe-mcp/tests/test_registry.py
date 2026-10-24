@@ -6,10 +6,10 @@ import pytest
 from ha_safe_mcp.registry import HARegistry
 from ha_safe_mcp.server import HAClient
 
-DEVICE = {"id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "name": "Shelly Plug", "name_by_user": None,
+DEVICE = {"id": "00000000000000000000000000000001", "name": "Shelly Plug", "name_by_user": None,
           "manufacturer": "Shelly", "model": "Plug S", "area_id": None, "disabled_by": None, "entry_type": None,
-          "config_entries": ["01M5NHB2W16NRS2JGCSBJVTCY9"], "via_device_id": None, "labels": [],
-          "serial_number": "SER-123456", "connections": [["mac", "aa:bb:cc:dd:ee:ff"]],
+          "config_entries": ["00000000000000000000000000"], "via_device_id": None, "labels": [],
+          "serial_number": "SER-123456", "connections": [["mac", "example-mac-not-real"]],
           "identifiers": [["shelly", "aabbccddeeff"]], "configuration_url": "http://192.0.2.10"}
 
 
@@ -77,7 +77,7 @@ async def test_device_list_never_returns_serials_macs_or_urls():
     assert device == {"device_id": DEVICE["id"], "name": "Shelly Plug", "name_by_user": None, "manufacturer": "Shelly",
                       "model": "Plug S", "area_id": None, "disabled_by": None, "entry_type": None, "labels": []}
     text = json.dumps(device)
-    assert "SER-123456" not in text and "aa:bb" not in text and "192.0.2.10" not in text
+    assert "SER-123456" not in text and "example-mac-not-real" not in text and "192.0.2.10" not in text
 
 
 async def test_device_list_filters_by_area_and_text():

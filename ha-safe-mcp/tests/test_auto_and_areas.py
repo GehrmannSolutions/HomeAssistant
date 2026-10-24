@@ -50,7 +50,7 @@ def test_turning_a_level_off_also_turns_its_auto_mode_off():
 
 def test_capped_store_ignores_auto_above_the_cap(tmp_path):
     path = tmp_path / ".env"
-    path.write_text(f"HA_URL=http://10.0.0.2:8123\nHA_TOKEN={TOKEN}\nHA_ALLOW_WRITE=true\nHA_AUTO_WRITE=true\n"
+    path.write_text(f"HA_URL=http://192.0.2.2:8123\nHA_TOKEN={TOKEN}\nHA_ALLOW_WRITE=true\nHA_AUTO_WRITE=true\n"
                     "HA_ALLOW_ADMIN_WRITE=true\nHA_AUTO_ADMIN_WRITE=true\n")
     assert SettingsStore(path, max_level="control").load().auto_levels() == {"control"}
     assert SettingsStore(path, max_level="read").load().auto_levels() == set()
