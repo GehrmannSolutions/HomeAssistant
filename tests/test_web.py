@@ -488,3 +488,47 @@ def test_read_only_cli_flag_reaches_the_store(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "create_app", lambda store, **kw: seen.setdefault("store", store) and original(store, **kw))
     web.main()
     assert seen["store"].read_only is True and seen["port"] == 8766
+
+
+
+async def test_control_only_instance_allows_steering_but_never_config_or_delete(tmp_path):
+    """Production with --max-level control: service calls with approval yes, configuration changes and deletes no."""
+    store = SettingsStore(tmp_path / ".env", max_level="control")
+    app = create_app(store, checks=FakeChecks(), runs=RunManager(lambda *a, **k: None))
+    async with client(app) as http:
+        await configure(http)
+        ok = await http.post("/api/settings", headers=HEADERS, json={"ha_url": "http://127.0.0.1:8123",
+                                                                     "allow_write": True})
+        assert ok.status_code == 200, ok.text
+        for body in ({"allow_write": True, "allow_admin_write": True},
+                     {"allow_write": True, "allow_admin_write": True, "allow_delete": True}):
+            refused = await http.post("/api/settings", headers=HEADERS, json={"ha_url": "http://127.0.0.1:8123", **body})
+            assert refused.status_code == 400 and "steuern" in refused.json()["error"].lower()
+        status = (await http.get("/api/status")).json()
+    assert status["max_level"] == "control" and status["read_only"] is False
+    assert status["settings"]["allow_write"] is True
+    assert status["settings"]["allow_admin_write"] is False and status["settings"]["allow_delete"] is False
+
+
+def test_control_only_store_ignores_config_and_delete_switches_in_the_env_file(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("HA_URL=http://10.0.0.2:8123\nHA_TOKEN=" + TOKEN + "\nHA_ALLOW_WRITE=true\n"
+                    "HA_ALLOW_ADMIN_WRITE=true\nHA_ALLOW_DELETE=true\n")
+    env = SettingsStore(path, max_level="control").load().mcp_env()
+    assert env["HA_ALLOW_WRITE"] == "true"
+    assert env["HA_ALLOW_ADMIN_WRITE"] == env["HA_ALLOW_DELETE"] == "false"
+
+
+def test_max_level_cli_flag_and_read_only_alias(tmp_path, monkeypatch):
+    import sys
+    import uvicorn
+    from ha_safe_mcp import web
+    for argv, level in ((["--max-level", "control"], "control"), (["--read-only"], "read"), ([], "full")):
+        seen = {}
+        monkeypatch.setattr(sys, "argv", ["ha-mcp-ui", "--port", "8766", *argv, "--env-file", str(tmp_path / "p.env")])
+        monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+        original = web.create_app
+        monkeypatch.setattr(web, "create_app", lambda store, _o=original, **kw: seen.setdefault("store", store) and _o(store, **kw))
+        web.main()
+        monkeypatch.setattr(web, "create_app", original)
+        assert seen["store"].max_level == level

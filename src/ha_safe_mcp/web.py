@@ -274,7 +274,8 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def status(request: Request):
         settings = store.load()
         return _ok({"configured": settings.configured, "settings": settings.public(),
-                    "chat_busy": runs.active is not None, "read_only": bool(getattr(store, "read_only", False))})
+                    "chat_busy": runs.active is not None, "read_only": bool(getattr(store, "read_only", False)),
+                    "max_level": getattr(store, "max_level", "full")})
 
     async def test_ha(request: Request):
         try:
@@ -533,7 +534,9 @@ def main():
     parser.add_argument("--allow-remote", action="store_true",
                         help="bind beyond loopback; only behind your own authentication")
     parser.add_argument("--read-only", action="store_true",
-                        help="lock all write switches off (e.g. for a production Home Assistant)")
+                        help="lock all write switches off (e.g. for a production Home Assistant); = --max-level read")
+    parser.add_argument("--max-level", choices=("read", "control", "full"), default=None,
+                        help="highest permission the settings may enable: read, control (service calls only) or full")
     parser.add_argument("--public-host", default=None,
                         help="HTTPS hostname behind Cloudflare Access; stays bound to loopback")
     args = parser.parse_args()
@@ -559,12 +562,15 @@ def main():
     import uvicorn
 
     hosts = ({args.public_host} if args.public_host else LOOPBACK_NAMES | ({args.host} if args.allow_remote else set()))
-    app = create_app(SettingsStore(env_file, read_only=args.read_only), allowed_hosts=hosts, allow_remote=args.allow_remote,
+    if args.read_only and args.max_level not in (None, "read"):
+        raise SystemExit("--read-only conflicts with --max-level " + args.max_level)
+    max_level = "read" if args.read_only else (args.max_level or "full")
+    app = create_app(SettingsStore(env_file, max_level=max_level), allowed_hosts=hosts, allow_remote=args.allow_remote,
                      public_origin=f"https://{args.public_host}" if args.public_host else None,
                      access_verifier=verifier)
     display_url = (f"https://{args.public_host}/" if args.public_host else
                    f"http://{'localhost' if _is_loopback(args.host) else args.host}:{args.port}/")
-    print(f"ha-safe-mcp UI: {display_url}" + (" (nur lesen)" if args.read_only else ""))
+    print(f"ha-safe-mcp UI: {display_url}" + {"read": " (nur lesen)", "control": " (höchstens steuern)"}.get(max_level, ""))
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning", proxy_headers=False,
                 server_header=False, date_header=False)
 

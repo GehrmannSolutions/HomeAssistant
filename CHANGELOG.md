@@ -3,6 +3,12 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.9.2 – 2026-10-24
+
+- **`--max-level control`**: Zwischenstufe für Produktiv-Instanzen; nur „Steuern“ lässt sich einschalten,
+  Konfiguration ändern und Löschen sind im Code gesperrt (`.env` wird ignoriert, Speichern abgelehnt, Schalter
+  ausgegraut). `/api/status` meldet `max_level`. `--read-only` = `--max-level read`.
+
 ## 0.9.1 – 2026-10-24
 
 - **Nur-lesen-Instanz**: `ha-mcp-ui --read-only` sperrt Steuern, Konfiguration und Löschen im Code (`.env`-Werte

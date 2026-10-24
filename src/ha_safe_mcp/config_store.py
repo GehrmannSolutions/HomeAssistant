@@ -119,17 +119,28 @@ def _as_bool(value) -> bool:
 
 
 READ_ONLY_REFUSAL = "Diese Instanz ist fest auf nur lesen eingestellt (--read-only); Schalter bleiben aus"
+CONTROL_ONLY_REFUSAL = ("Diese Instanz erlaubt höchstens Steuern (--max-level control); Konfiguration ändern und "
+                        "Löschen bleiben aus")
+MAX_LEVELS = ("read", "control", "full")
 
 
 class SettingsStore:
     """Owns the .env file. Writes are atomic; unrelated lines and comments survive.
 
-    read_only=True locks every write switch off in code: whatever the .env says is ignored on load, and saving a
-    switch is refused. Meant for a second UI against a production Home Assistant."""
+    max_level caps the write switches in code, whatever the .env says: "read" = all off (alias read_only=True),
+    "control" = only service calls (HA_ALLOW_WRITE) may be switched on, "full" = no cap. Meant for a second UI
+    against a production Home Assistant; saving a switch above the cap is refused."""
 
-    def __init__(self, path: Path, *, read_only: bool = False):
+    def __init__(self, path: Path, *, read_only: bool = False, max_level: str | None = None):
         self.path = Path(path)
-        self.read_only = read_only
+        level = max_level or ("read" if read_only else "full")
+        if level not in MAX_LEVELS or (read_only and level != "read"):
+            raise ValueError(f"max_level must be one of {', '.join(MAX_LEVELS)}")
+        self.max_level = level
+
+    @property
+    def read_only(self) -> bool:
+        return self.max_level == "read"
 
     def load(self) -> Settings:
         if not self.path.exists():
@@ -138,12 +149,13 @@ class SettingsStore:
         defaults = Settings()
         token = (values.get("HA_TOKEN") or "").strip()
         domains = tuple(item.strip() for item in (values.get("HA_ALLOWED_DOMAINS") or "").split(",") if item.strip())
-        writable = not self.read_only
+        control = self.max_level != "read"
+        full = self.max_level == "full"
         return Settings(ha_url=(values.get("HA_URL") or defaults.ha_url).strip().rstrip("/"),
                         ha_token="" if token == PLACEHOLDER_TOKEN else token,
-                        allow_write=writable and _as_bool(values.get("HA_ALLOW_WRITE")),
-                        allow_admin_write=writable and _as_bool(values.get("HA_ALLOW_ADMIN_WRITE")),
-                        allow_delete=writable and _as_bool(values.get("HA_ALLOW_DELETE")),
+                        allow_write=control and _as_bool(values.get("HA_ALLOW_WRITE")),
+                        allow_admin_write=full and _as_bool(values.get("HA_ALLOW_ADMIN_WRITE")),
+                        allow_delete=full and _as_bool(values.get("HA_ALLOW_DELETE")),
                         allowed_domains=domains or defaults.allowed_domains,
                         ollama_url=(values.get("OLLAMA_URL") or defaults.ollama_url).strip().rstrip("/"),
                         ollama_model=(values.get("OLLAMA_MODEL") or defaults.ollama_model).strip())
@@ -153,6 +165,8 @@ class SettingsStore:
             raise SetupError("Ohne Token kann nicht gespeichert werden")
         if self.read_only and (settings.allow_write or settings.allow_admin_write or settings.allow_delete):
             raise SetupError(READ_ONLY_REFUSAL)
+        if self.max_level == "control" and (settings.allow_admin_write or settings.allow_delete):
+            raise SetupError(CONTROL_ONLY_REFUSAL)
         flag = lambda value: "true" if value else "false"  # noqa: E731
         values = {"HA_URL": settings.ha_url, "HA_TOKEN": settings.ha_token,
                   "HA_ALLOW_WRITE": flag(settings.allow_write),

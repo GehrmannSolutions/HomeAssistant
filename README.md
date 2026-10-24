@@ -84,6 +84,9 @@ Speichern mit einem Schalter wird abgelehnt, der Chat nimmt keine Aktionen an. E
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME` trennen Zugangsdaten, Dateien und Protokoll von der Dev-Instanz.
 Zusätzlich einen **HA-Benutzer ohne Admin-Rechte** für den Token verwenden.
 
+Zwischenstufe: `--max-level control` erlaubt nur „Steuern“ (Dienstaufrufe der erlaubten Domains, jeder einzeln
+freigegeben); Konfiguration ändern und Löschen bleiben im Code gesperrt. `--read-only` entspricht `--max-level read`.
+
 ## Installation und MCP-Client
 
 ```bash

@@ -104,10 +104,11 @@ function renderModePill() {
   const pill = $("#mode-pill");
   const settings = app.status && app.status.settings;
   if (!settings || !app.status.configured) { pill.hidden = true; return; }
+  const capped = app.status.max_level && app.status.max_level !== "full";
   let text = app.status.read_only ? "Nur lesen (fest)" : "Nur lesen";
   if (settings.allow_delete) text = "Löschen erlaubt";
   else if (settings.allow_admin_write) text = "Konfiguration erlaubt";
-  else if (settings.allow_write) text = "Steuern erlaubt";
+  else if (settings.allow_write) text = capped ? "Steuern erlaubt (max.)" : "Steuern erlaubt";
   pill.textContent = text;
   pill.classList.toggle("write", Boolean(settings.allow_write));
   pill.hidden = false;
@@ -179,6 +180,10 @@ const wizard = {
     const sync = () => {
       if (app.status && app.status.read_only) {
         for (const box of [write, admin, del]) { box.checked = false; box.disabled = true; }
+        return;
+      }
+      if (app.status && app.status.max_level === "control") {
+        for (const box of [admin, del]) { box.checked = false; box.disabled = true; }
         return;
       }
       admin.disabled = !write.checked; if (!write.checked) admin.checked = false;
@@ -352,6 +357,10 @@ function syncSettingsSwitches() {
     return;
   }
   write.disabled = false;
+  if (app.status && app.status.max_level === "control") {
+    for (const box of [admin, del]) { box.checked = false; box.disabled = true; }
+    return;
+  }
   admin.disabled = !write.checked; if (!write.checked) admin.checked = false;
   del.disabled = !admin.checked; if (!admin.checked) del.checked = false;
 }

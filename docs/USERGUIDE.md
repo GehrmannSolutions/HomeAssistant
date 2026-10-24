@@ -108,6 +108,11 @@ Unter **Einstellungen** lässt sich alles später ändern. Ein leeres Token-Feld
 3. `http://127.0.0.1:8766/` öffnen, in der Ersteinrichtung den Token eintragen. Die drei Rechte-Schalter sind
    ausgegraut; die Anzeige oben lautet „Nur lesen (fest)“.
 
+Soll die Produktiv-Instanz Geräte schalten dürfen, statt `--read-only` mit `--max-level control` starten: Dann
+lässt sich nur „Steuern erlauben“ einschalten, „Konfiguration ändern“ und „Löschen“ bleiben ausgegraut und werden
+auch aus der `.env` ignoriert. Die erlaubten Domains klein halten, z. B. nur `light`; bei `switch` stecken oft
+Kamera- oder Netzwerk-Schalter dahinter.
+
 Der Token sollte zu einem HA-Benutzer **ohne** Administratorrechte gehören. Dann kann auch ein Fehler im MCP nichts an
 der Konfiguration ändern. Einige Admin-Abfragen (z. B. Integrationsliste, Backups) liefern mit so einem Token „nicht
 berechtigt“; Zustände, Bereiche, Geräte und Entitäten sind lesbar.
