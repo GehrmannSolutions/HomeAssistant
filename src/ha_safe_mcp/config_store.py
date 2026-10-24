@@ -118,11 +118,18 @@ def _as_bool(value) -> bool:
     return str(value or "").strip().lower() == "true"
 
 
-class SettingsStore:
-    """Owns the .env file. Writes are atomic; unrelated lines and comments survive."""
+READ_ONLY_REFUSAL = "Diese Instanz ist fest auf nur lesen eingestellt (--read-only); Schalter bleiben aus"
 
-    def __init__(self, path: Path):
+
+class SettingsStore:
+    """Owns the .env file. Writes are atomic; unrelated lines and comments survive.
+
+    read_only=True locks every write switch off in code: whatever the .env says is ignored on load, and saving a
+    switch is refused. Meant for a second UI against a production Home Assistant."""
+
+    def __init__(self, path: Path, *, read_only: bool = False):
         self.path = Path(path)
+        self.read_only = read_only
 
     def load(self) -> Settings:
         if not self.path.exists():
@@ -131,11 +138,12 @@ class SettingsStore:
         defaults = Settings()
         token = (values.get("HA_TOKEN") or "").strip()
         domains = tuple(item.strip() for item in (values.get("HA_ALLOWED_DOMAINS") or "").split(",") if item.strip())
+        writable = not self.read_only
         return Settings(ha_url=(values.get("HA_URL") or defaults.ha_url).strip().rstrip("/"),
                         ha_token="" if token == PLACEHOLDER_TOKEN else token,
-                        allow_write=_as_bool(values.get("HA_ALLOW_WRITE")),
-                        allow_admin_write=_as_bool(values.get("HA_ALLOW_ADMIN_WRITE")),
-                        allow_delete=_as_bool(values.get("HA_ALLOW_DELETE")),
+                        allow_write=writable and _as_bool(values.get("HA_ALLOW_WRITE")),
+                        allow_admin_write=writable and _as_bool(values.get("HA_ALLOW_ADMIN_WRITE")),
+                        allow_delete=writable and _as_bool(values.get("HA_ALLOW_DELETE")),
                         allowed_domains=domains or defaults.allowed_domains,
                         ollama_url=(values.get("OLLAMA_URL") or defaults.ollama_url).strip().rstrip("/"),
                         ollama_model=(values.get("OLLAMA_MODEL") or defaults.ollama_model).strip())
@@ -143,6 +151,8 @@ class SettingsStore:
     def save(self, settings: Settings) -> Settings:
         if not settings.configured:
             raise SetupError("Ohne Token kann nicht gespeichert werden")
+        if self.read_only and (settings.allow_write or settings.allow_admin_write or settings.allow_delete):
+            raise SetupError(READ_ONLY_REFUSAL)
         flag = lambda value: "true" if value else "false"  # noqa: E731
         values = {"HA_URL": settings.ha_url, "HA_TOKEN": settings.ha_token,
                   "HA_ALLOW_WRITE": flag(settings.allow_write),

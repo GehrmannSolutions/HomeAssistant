@@ -104,7 +104,7 @@ function renderModePill() {
   const pill = $("#mode-pill");
   const settings = app.status && app.status.settings;
   if (!settings || !app.status.configured) { pill.hidden = true; return; }
-  let text = "Nur lesen";
+  let text = app.status.read_only ? "Nur lesen (fest)" : "Nur lesen";
   if (settings.allow_delete) text = "Löschen erlaubt";
   else if (settings.allow_admin_write) text = "Konfiguration erlaubt";
   else if (settings.allow_write) text = "Steuern erlaubt";
@@ -177,14 +177,20 @@ const wizard = {
     const admin = $("#step-3").elements.allow_admin_write;
     const del = $("#step-3").elements.allow_delete;
     const sync = () => {
+      if (app.status && app.status.read_only) {
+        for (const box of [write, admin, del]) { box.checked = false; box.disabled = true; }
+        return;
+      }
       admin.disabled = !write.checked; if (!write.checked) admin.checked = false;
       del.disabled = !admin.checked; if (!admin.checked) del.checked = false;
     };
     for (const box of [write, admin, del]) box.addEventListener("change", sync);
+    this.syncSwitches = sync;
     sync();
   },
 
   start(settings) {
+    if (this.syncSwitches) this.syncSwitches();
     const form = $("#step-1");
     if (settings) {
       form.elements.ha_url.value = settings.ha_url;
@@ -341,6 +347,11 @@ function fillSettings() {
 function syncSettingsSwitches() {
   const form = $("#settings-form");
   const { allow_write: write, allow_admin_write: admin, allow_delete: del } = form.elements;
+  if (app.status && app.status.read_only) {
+    for (const box of [write, admin, del]) { box.checked = false; box.disabled = true; }
+    return;
+  }
+  write.disabled = false;
   admin.disabled = !write.checked; if (!write.checked) admin.checked = false;
   del.disabled = !admin.checked; if (!admin.checked) del.checked = false;
 }

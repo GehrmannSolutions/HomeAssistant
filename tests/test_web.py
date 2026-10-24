@@ -446,3 +446,45 @@ async def test_chat_allows_talking_about_credentials_without_values(tmp_path, me
         await configure(http)
         response = await http.post("/api/chat", headers=HEADERS, json={"message": message})
     assert response.status_code == 200, response.text
+
+
+
+async def test_read_only_instance_refuses_every_write_switch_and_says_so(tmp_path):
+    """A second UI for a production HA: switches are locked off in code, not only in the .env."""
+    store = SettingsStore(tmp_path / ".env", read_only=True)
+    app = create_app(store, checks=FakeChecks(), runs=RunManager(lambda *a, **k: None))
+    async with client(app) as http:
+        await configure(http)
+        for switch in ("allow_write", "allow_admin_write", "allow_delete"):
+            body = {"ha_url": "http://127.0.0.1:8123", "allow_write": True, "allow_admin_write": switch != "allow_write",
+                    "allow_delete": switch == "allow_delete"}
+            response = await http.post("/api/settings", headers=HEADERS, json=body)
+            assert response.status_code == 400 and "nur lesen" in response.json()["error"].lower()
+        status = (await http.get("/api/status")).json()
+        chat = await http.post("/api/chat", headers=HEADERS, json={"message": "Licht an", "allow_write": True})
+    assert status["read_only"] is True
+    assert not any(status["settings"][key] for key in ("allow_write", "allow_admin_write", "allow_delete"))
+    assert chat.status_code == 400
+
+
+def test_read_only_store_ignores_write_switches_edited_into_the_env_file(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("HA_URL=http://10.0.0.2:8123\nHA_TOKEN=" + TOKEN + "\nHA_ALLOW_WRITE=true\n"
+                    "HA_ALLOW_ADMIN_WRITE=true\nHA_ALLOW_DELETE=true\n")
+    settings = SettingsStore(path, read_only=True).load()
+    assert (settings.allow_write, settings.allow_admin_write, settings.allow_delete) == (False, False, False)
+    env = settings.mcp_env()
+    assert env["HA_ALLOW_WRITE"] == env["HA_ALLOW_ADMIN_WRITE"] == env["HA_ALLOW_DELETE"] == "false"
+
+
+def test_read_only_cli_flag_reaches_the_store(tmp_path, monkeypatch):
+    import sys
+    import uvicorn
+    from ha_safe_mcp import web
+    seen = {}
+    monkeypatch.setattr(sys, "argv", ["ha-mcp-ui", "--port", "8766", "--read-only", "--env-file", str(tmp_path / "p.env")])
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+    original = web.create_app
+    monkeypatch.setattr(web, "create_app", lambda store, **kw: seen.setdefault("store", store) and original(store, **kw))
+    web.main()
+    assert seen["store"].read_only is True and seen["port"] == 8766

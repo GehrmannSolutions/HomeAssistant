@@ -76,6 +76,14 @@ Automation-CRUD nutzt `/api/config/automation/config/{id}`; Dashboard- und Helpe
 
 `ha_call_service` beschränkt Ziel-Domains standardmäßig auf `light,switch,fan,climate,cover,media_player`, erfordert eine konkrete Einzel-Entität und verbietet zusätzliche Targets. Der explizite REST-Katalog hat dagegen eigene Berechtigungsklassen und kein willkürliches URL-Schema. Ein HA-Admin-Token besitzt trotzdem weitreichende Rechte; diese Adapter-Checks ersetzen **keine** Home-Assistant-Autorisierung. Der stdio-Server darf nicht ungeschützt ans Netzwerk. Token und Response-Bodies werden in Fehlern nicht ausgegeben.
 
+### Zweite Instanz nur lesend (z. B. Produktiv-HA)
+
+`ha-mcp-ui --port 8766 --read-only --env-file ~/.config/ha-safe-mcp/prod.env` startet eine getrennte Oberfläche, in
+der Steuern, Konfiguration ändern und Löschen **im Code** gesperrt sind: Werte aus der `.env` werden ignoriert,
+Speichern mit einem Schalter wird abgelehnt, der Chat nimmt keine Aktionen an. Eigene Datenordner per
+`XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME` trennen Zugangsdaten, Dateien und Protokoll von der Dev-Instanz.
+Zusätzlich einen **HA-Benutzer ohne Admin-Rechte** für den Token verwenden.
+
 ## Installation und MCP-Client
 
 ```bash

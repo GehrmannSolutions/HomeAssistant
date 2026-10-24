@@ -100,6 +100,18 @@ Optionen: `--port` (Standard `8765`), `--host` (Standard `127.0.0.1`), `--env-fi
 
 Unter **Einstellungen** lässt sich alles später ändern. Ein leeres Token-Feld behält den gespeicherten Token, gilt aber nur für **dieselbe** HA-Adresse; bei neuer Adresse muss der Token neu eingegeben werden. Jedes Speichern prüft die Verbindung erneut. Die Oberfläche selbst übernimmt geänderte Einstellungen sofort für die nächste Chat-Anfrage. Ein **separat laufender** MCP-Client (Kapitel 5) liest `.env` dagegen nur beim Start und muss neu gestartet werden.
 
+### 7.1a Zweite Instanz für die Produktiv-HA (nur lesen)
+
+1. Einstellungsdatei anlegen, z. B. `~/.config/ha-safe-mcp/prod.env` (Rechte 600), mit `HA_URL=http://<ip>:8123`.
+2. Starten mit `ha-mcp-ui --port 8766 --read-only --env-file ~/.config/ha-safe-mcp/prod.env`, am besten als eigener
+   systemd-User-Dienst mit eigenen `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`.
+3. `http://127.0.0.1:8766/` öffnen, in der Ersteinrichtung den Token eintragen. Die drei Rechte-Schalter sind
+   ausgegraut; die Anzeige oben lautet „Nur lesen (fest)“.
+
+Der Token sollte zu einem HA-Benutzer **ohne** Administratorrechte gehören. Dann kann auch ein Fehler im MCP nichts an
+der Konfiguration ändern. Einige Admin-Abfragen (z. B. Integrationsliste, Backups) liefern mit so einem Token „nicht
+berechtigt“; Zustände, Bereiche, Geräte und Entitäten sind lesbar.
+
 ### 7.2 Chat-Seite und Chat-Bubble
 
 - **Chat** (Reiter oben): großer Chat mit Verlauf, Startvorschlägen und eingeklappten Zeilen für jeden Tool-Aufruf (Argumente und gekürztes Ergebnis zum Aufklappen).

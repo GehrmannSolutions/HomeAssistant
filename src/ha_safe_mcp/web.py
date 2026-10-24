@@ -29,7 +29,8 @@ from starlette.routing import Route
 
 from .chat_runs import RunBusy, RunManager
 from .access_auth import AccessTokenVerifier
-from .config_store import Settings, SettingsStore, SetupError, merge_settings, normalize_url, resolve_token
+from .config_store import (READ_ONLY_REFUSAL, Settings, SettingsStore, SetupError, merge_settings, normalize_url,
+                           resolve_token)
 from .credentials import CredentialError, CredentialStore
 from .audit import AuditLog
 from .files import FileError, FileStore
@@ -273,7 +274,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def status(request: Request):
         settings = store.load()
         return _ok({"configured": settings.configured, "settings": settings.public(),
-                    "chat_busy": runs.active is not None})
+                    "chat_busy": runs.active is not None, "read_only": bool(getattr(store, "read_only", False))})
 
     async def test_ha(request: Request):
         try:
@@ -323,6 +324,8 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             allow_write = data.get("allow_write", False)
             if not isinstance(allow_write, bool):
                 raise SetupError("allow_write muss true oder false sein")
+            if allow_write and getattr(store, "read_only", False):
+                raise SetupError(READ_ONLY_REFUSAL)
             if allow_write and not settings.allow_write:
                 raise SetupError("Schreibmodus ist aus: in den Einstellungen 'Steuern erlauben' aktivieren")
         except (SetupError, ValueError) as exc:
@@ -529,6 +532,8 @@ def main():
     parser.add_argument("--env-file", default=None, help="settings file (default: .env in the project)")
     parser.add_argument("--allow-remote", action="store_true",
                         help="bind beyond loopback; only behind your own authentication")
+    parser.add_argument("--read-only", action="store_true",
+                        help="lock all write switches off (e.g. for a production Home Assistant)")
     parser.add_argument("--public-host", default=None,
                         help="HTTPS hostname behind Cloudflare Access; stays bound to loopback")
     args = parser.parse_args()
@@ -554,12 +559,12 @@ def main():
     import uvicorn
 
     hosts = ({args.public_host} if args.public_host else LOOPBACK_NAMES | ({args.host} if args.allow_remote else set()))
-    app = create_app(SettingsStore(env_file), allowed_hosts=hosts, allow_remote=args.allow_remote,
+    app = create_app(SettingsStore(env_file, read_only=args.read_only), allowed_hosts=hosts, allow_remote=args.allow_remote,
                      public_origin=f"https://{args.public_host}" if args.public_host else None,
                      access_verifier=verifier)
     display_url = (f"https://{args.public_host}/" if args.public_host else
                    f"http://{'localhost' if _is_loopback(args.host) else args.host}:{args.port}/")
-    print(f"ha-safe-mcp UI: {display_url}")
+    print(f"ha-safe-mcp UI: {display_url}" + (" (nur lesen)" if args.read_only else ""))
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning", proxy_headers=False,
                 server_header=False, date_header=False)
 

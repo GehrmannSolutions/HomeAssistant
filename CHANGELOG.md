@@ -3,6 +3,12 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.9.1 – 2026-10-24
+
+- **Nur-lesen-Instanz**: `ha-mcp-ui --read-only` sperrt Steuern, Konfiguration und Löschen im Code (`.env`-Werte
+  werden ignoriert, Speichern mit Schalter und Chat-Aktionen abgelehnt); Oberfläche zeigt „Nur lesen (fest)“ und
+  graut die Schalter aus. Gedacht für eine zweite Oberfläche gegen die Produktiv-HA.
+
 ## 0.9.0 – 2026-10-24
 
 - **Integrations-Einstellungen**: `ha_start_integration_options`, `ha_integration_options_step`,
