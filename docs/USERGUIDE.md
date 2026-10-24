@@ -304,6 +304,7 @@ Nach einem Write mit dem passenden Lesetool prüfen; eine erfolgreiche Tool-Rüc
 | Weboberfläche: „Ungültiger Host“ (400), „Nur lokal erreichbar“ oder „Cloudflare Access Anmeldung erforderlich“ (403) | Beim geschützten Dienst `https://mcp.example.com/` nutzen; die direkte lokale Adresse ist ohne gültige Access-Assertion absichtlich gesperrt. Tunnel-Ziel, Access-Login, AUD-Tag und Dienststatus prüfen. [Weboberfläche](../src/ha_safe_mcp/web.py). |
 | Weboberfläche: „Ollama ist nicht erreichbar“ | Läuft der Ollama-Dienst, stimmt die Adresse in den Einstellungen? Ist das gewählte Modell installiert (`ollama list`)? |
 | Weboberfläche: Häkchen „Aktionen erlauben“ ist ausgegraut | In den Einstellungen zuerst „Steuern erlauben“ aktivieren und speichern. |
+| Anlegen/Ändern/Schalten passiert nicht; das Modell verweist auf „Aktionen erlauben“ | Ohne das Häkchen bekommt das Modell nur Lese-Tools. Häkchen setzen und die Anfrage erneut senden; danach erscheint die Freigabe-Karte. |
 | Weboberfläche: „Für 'Konfiguration ändern' braucht der Token einen Admin-Benutzer“ | Token eines HA-Admins verwenden oder ohne Konfigurationsrechte speichern. |
 | Modell antwortet aus dem Verlauf statt aktuell nachzusehen | Kleine Modelle verlassen sich manchmal auf frühere Antworten. **Neu** starten oder ausdrücklich „prüfe den aktuellen Zustand“ schreiben. |
 
