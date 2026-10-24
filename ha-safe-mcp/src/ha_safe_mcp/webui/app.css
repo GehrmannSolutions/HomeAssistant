@@ -237,3 +237,18 @@ button.primary.small { padding: 6px 12px; font-size: 0.9rem; }
 .oauth-card form { display: flex; flex-direction: column; gap: 12px; }
 .oauth-card label { display: flex; flex-direction: column; gap: 4px; }
 .oauth-card .actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Domain picker */
+.domain-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; flex-basis: 100%; }
+.domain-picker label.domain-chip {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px; padding: 4px 10px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: 0.85rem;
+  cursor: pointer; margin: 0; font-weight: 500;
+}
+.domain-picker label.domain-chip input { margin: 0; }
+.domain-picker label.domain-chip code { font-size: 0.75rem; color: var(--muted); }
+.domain-picker label.domain-chip.risky { border-color: var(--warn); }
+.domain-picker label.domain-chip.missing { opacity: 0.7; border-style: dashed; }
+.domain-picker .risk-note { color: var(--warn); font-size: 0.75rem; }
+.domain-picker .domain-hint { flex-basis: 100%; margin: 2px 0 0; }
+.domain-picker .small { font-size: 0.8rem; }

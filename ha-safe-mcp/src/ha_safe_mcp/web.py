@@ -46,7 +46,8 @@ MAX_MESSAGE = 4000
 LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1"}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
-STATIC = {"app.js": "text/javascript; charset=utf-8", "oauth.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
+STATIC = {"app.js": "text/javascript; charset=utf-8", "oauth.js": "text/javascript; charset=utf-8",
+          "domains.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
           "icon.svg": "image/svg+xml"}
 # "pw: x", "Passwort ist x", "password=x": a secret value typed into the chat. Asking about a password
 # field ("Wie ist das Passwort-Feld ...") or naming a stored alias stays allowed.
@@ -376,6 +377,13 @@ def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, jou
                                                **flags))
 
 
+async def live_domain_source(settings: Settings):
+    """States and services of the connected HA, read-only, for the domain pickers."""
+    from .server import HAClient
+    client = HAClient(settings.ha_url, settings.ha_token)
+    return await client._request("GET", "/api/states"), await client._request("GET", "/api/services")
+
+
 def _static_text(name: str) -> str:
     return resources.files("ha_safe_mcp").joinpath("webui", name).read_text(encoding="utf-8")
 
@@ -385,7 +393,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                public_origin: str | None = None, access_verifier=None,
                credentials: CredentialStore | None = None, files: FileStore | None = None,
                audit: AuditLog | None = None, backups_factory=None, journal: ChangeJournal | None = None,
-               changes_factory=None, clients: ClientStore | None = None, mcp_pool=None):
+               changes_factory=None, clients: ClientStore | None = None, mcp_pool=None, domain_source=None):
     checks = checks or LiveChecks()
     credentials = credentials or CredentialStore()
     files = files or FileStore()
@@ -676,6 +684,18 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     def client_view(item: dict, settings: Settings) -> dict:
         return {**item, "effective_level": effective_level(settings, item)}
 
+    async def domains_list(request: Request):
+        from .domains import summarize
+        settings = store.load()
+        if not settings.configured:
+            return _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+        try:
+            states, services = await (domain_source or live_domain_source)(settings)
+        except (RuntimeError, httpx.HTTPError) as exc:
+            return _error(f"Home Assistant nicht erreichbar: {exc}", 502)
+        return _ok({"allowed": list(settings.allowed_domains),
+                    "domains": summarize(states, services, settings.allowed_domains)})
+
     async def oauth_page(request: Request):
         return _security_headers(Response(_static_text("oauth.html"), media_type="text/html; charset=utf-8"))
 
@@ -755,6 +775,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/backups/{backup_id}/download", backups_download),
         Route("/api/changes", changes_list),
         Route("/api/changes/{change_id}/undo", changes_undo, methods=["POST"]),
+        Route("/api/domains", domains_list),
         Route("/oauth/authorize", oauth_page),
         Route("/api/oauth/check", partial(oauth_action, action="check"), methods=["POST"]),
         Route("/api/oauth/approve", partial(oauth_action, action="approve"), methods=["POST"]),

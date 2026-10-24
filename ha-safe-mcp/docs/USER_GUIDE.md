@@ -108,6 +108,43 @@ In **Chat**, enabling **Steuern erlauben** in settings is not enough: tick **Akt
 
 Under **Einstellungen**, each level has a separate **ohne Freigabe ausführen** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Aktionen erlauben** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `JA` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
 
+### Domains: what the allowed list means and how to choose it
+
+A **domain** is the part of an entity ID before the dot: `light` in `light.living_room`, `lock` in
+`lock.front_door`. The allowed-domain list (`HA_ALLOWED_DOMAINS`, **Einstellungen → Erlaubte Domains für
+Steuerbefehle**) decides which entities the control tools may target: `ha_call_service`, `ha_activate_scene`
+(needs `scene`) and `ha_run_script` (needs `script`). It does **not** limit configuration changes: an automation
+saved with "Konfiguration ändern" may still act on any entity when it runs.
+
+- Any Home Assistant domain can be entered (lowercase, e.g. `light`). Which ones exist depends on the
+  integrations of *your* HA. The default is `light, switch, fan, climate, cover, media_player`.
+- **Find them:** in **Einstellungen**, **MCP-Clients** and on the OAuth consent page the UI lists the domains your
+  HA actually has, with the number of entities, as clickable chips (the text field stays editable and is the value
+  that is saved). In a chat or MCP client, `ha_list_services` lists the domains that offer actions.
+- Clients (token or OAuth) can only **narrow** the instance list: their picker shows only the allowed domains, and
+  an empty choice means "all allowed domains".
+- Domains without actions (`sensor`, `binary_sensor`, `event`, `sun`, ...) are read-only anyway; reading never
+  needs an allowed domain.
+
+Domains marked ⚠ in the UI have physical or security consequences; allow them only on purpose, and preferably not
+together with "ohne Freigabe" or for foreign clients:
+
+| Domain | What its actions do |
+|---|---|
+| `lock` | opens doors |
+| `alarm_control_panel` | arms or disarms the alarm system |
+| `cover` | opens and closes covers, gates and garage doors |
+| `valve` | opens and closes water or gas valves |
+| `siren` | triggers sirens |
+| `update` | installs firmware and software updates |
+| `button` | presses device buttons, e.g. restart or factory reset |
+| `camera` | switches cameras and recordings |
+| `notify` | sends messages |
+| `script`, `automation` | start scripts / switch or trigger automations, which can contain any action |
+
+Also consider what hides behind `switch`: besides lamps and plugs, integrations expose device settings as switches
+(e.g. camera privacy modes or recording), so check the entity list before allowing it broadly.
+
 ## 3. Common workflows (read → decide → approve → verify)
 
 The JSON blocks below are **MCP tool arguments**, not HTTP commands. Names such as `light.example_lamp`, `office`, `test-views`, `example_scene`, and `sample_automation` are fictional stand-ins. **Replace them with IDs actually discovered on your installation.** For existing configuration, save a copy of the read result and consider an HA backup before approving a change. After every write, read the target back; a successful MCP response does not prove a physical device acted or an asynchronous HA reload finished.

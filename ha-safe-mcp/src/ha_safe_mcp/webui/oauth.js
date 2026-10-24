@@ -37,6 +37,7 @@ async function start() {
     document.querySelector("#oauth-host").textContent = info.redirect_host;
     document.querySelector("#oauth-intro").hidden = true;
     form.hidden = false;
+    window.domainPicker.attach(form.elements.domains, { scope: "allowed" });
   } catch (error) {
     document.querySelector("#oauth-intro").textContent = "Diese Anfrage kann nicht freigegeben werden.";
     show(error.message, "err");

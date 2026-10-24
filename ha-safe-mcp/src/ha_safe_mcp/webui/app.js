@@ -350,7 +350,9 @@ function fillSettings() {
   form.elements.auto_write.checked = Boolean(settings.auto_write);
   form.elements.auto_admin_write.checked = Boolean(settings.auto_admin_write);
   form.elements.auto_delete.checked = Boolean(settings.auto_delete);
-  form.elements.allowed_domains.value = settings.allowed_domains.join(",");
+  form.elements.allowed_domains.value = settings.allowed_domains.join(", ");
+  window.domainPicker.reset();
+  window.domainPicker.attach(form.elements.allowed_domains, { scope: "all" });
   fillModelSelect(form.elements.ollama_model, app.models, settings.ollama_model);
   if (!app.models.length) loadModels(form, $("[data-action='load-models']", form));
   syncSettingsSwitches();
@@ -1077,6 +1079,8 @@ const clientPage = {
       $("#client-endpoint").textContent = data.endpoint;
       $("#client-instance-level").textContent = `zurzeit höchstens ${CLIENT_LEVELS[data.instance_level] || data.instance_level}`;
       this.render(data.clients || []);
+      window.domainPicker.reset();
+      window.domainPicker.attach($("#client-form").elements.domains, { scope: "allowed" });
       setResult($("#client-result"), "");
     } catch (error) {
       this.render([]);
@@ -1109,6 +1113,7 @@ const clientPage = {
     try {
       const result = await api("/api/clients", { method: "POST", body: { name: data.get("name"), level: data.get("level"), domains } });
       form.reset();
+      form.elements.domains.dispatchEvent(new Event("input"));
       const name = result.client.name;
       const slug = "ha-safe-mcp";
       $("#client-token-name").textContent = name;

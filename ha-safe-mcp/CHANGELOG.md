@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.14.0 – 2026-10-25
+
+- **Domain pickers**: Einstellungen, MCP-Clients and the OAuth consent page list the domains the connected HA
+  really has (entity count, German label), as chips writing the existing text field; risky domains (lock, alarm,
+  cover, valve, siren, update, button, camera, notify, script, automation) are marked with a note. Clients and
+  consent only offer the instance's allowed domains. New read-only `/api/domains`.
+- User guide section on domains: what the allowed list covers (control tools only), how to find domains, and a
+  risk table.
+
 ## 0.13.0 – 2026-10-24
 
 - **OAuth 2.1 for the remote endpoint** (web connectors of ChatGPT, Claude and other OAuth clients): discovery

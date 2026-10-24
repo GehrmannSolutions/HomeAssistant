@@ -80,7 +80,7 @@ This uses `.env` via the MCP child process. With writes explicitly enabled in `.
 | `HA_ALLOW_WRITE` | `false` | Allow control/service calls for `HA_ALLOWED_DOMAINS` (and non-admin REST writes where catalogued). |
 | `HA_ALLOW_ADMIN_WRITE` | `false` | In addition to write, allow configuration changes; HA still requires its own admin rights where applicable. |
 | `HA_ALLOW_DELETE` | `false` | In addition to both above, allow destructive delete tools. |
-| `HA_ALLOWED_DOMAINS` | `light,switch,fan,climate,cover,media_player` | Service-call target domain allowlist, **not** a general limit on admin mutations. Narrow it before granting control. |
+| `HA_ALLOWED_DOMAINS` | `light,switch,fan,climate,cover,media_player` | Service-call target domain allowlist, **not** a general limit on admin mutations. Narrow it before granting control. What domains are and which ones are risky: [USER_GUIDE.md](USER_GUIDE.md#domains-what-the-allowed-list-means-and-how-to-choose-it). |
 | `HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` | `false` | In **UI chat only**, skip the approval card for that allowed level; the chat "Aktionen erlauben" checkbox remains required. Avoid for routine use. |
 
 A generic MCP client does **not** inherit the UI approval cards or CLI `JA`: enforce per-call human approval in that client. The server settings gate operations, not consent. Running a separate UI with `--read-only --env-file /path/to/instance.env` also caps writes **in code**; use a separate non-admin HA token and XDG directories when isolating multiple installations. `--max-level control` does **not** restrict which individual lights or devices can be controlled within an allowed domain. For truly read-only operation, combine the hard cap with minimal HA privileges.

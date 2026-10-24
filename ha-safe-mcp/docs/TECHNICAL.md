@@ -37,6 +37,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`registry.py`](../src/ha_safe_mcp/registry.py) | Area/floor/device WS operations and area-entity view |
 | [`backups.py`](../src/ha_safe_mcp/backups.py) | HA backup WS operations and allowlisted streaming download |
 | [`oauth.py`](../src/ha_safe_mcp/oauth.py), [`webui/oauth.html`](../src/ha_safe_mcp/webui/oauth.html) | OAuth 2.1 authorization server for the remote endpoint: metadata, dynamic registration, consent, PKCE code flow, refresh rotation |
+| [`domains.py`](../src/ha_safe_mcp/domains.py), [`webui/domains.js`](../src/ha_safe_mcp/webui/domains.js) | Domain labels and risk notes; `/api/domains` (read-only states + services of the connected HA) feeding the domain pickers |
 | [`remote.py`](../src/ha_safe_mcp/remote.py) | Remote MCP endpoint: client token store, permission caps, per-client stdio children, gateway server |
 | [`changes.py`](../src/ha_safe_mcp/changes.py) | Change journal: capture previous state, journaled writes, undo through the same gated operations |
 | [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop, CLI confirmation, web run/approval lifecycle |
