@@ -43,7 +43,9 @@ async def test_entries_are_listed_with_a_small_stable_field_set(tmp_path):
         entries = await make(tmp_path).list_entries("shelly")
     assert route.calls[0].request.url.params["domain"] == "shelly"
     assert entries == [{"entry_id": ENTRY, "domain": "shelly", "title": "Plug", "state": "loaded",
-                        "source": "user", "disabled_by": None, "reason": None}]
+                        "source": "user", "disabled_by": None, "reason": None, "supports_options": True,
+                        "supports_reconfigure": None, "pref_disable_polling": False,
+                        "pref_disable_new_entities": None}]
 
 
 @pytest.mark.asyncio
@@ -215,3 +217,162 @@ async def test_harmless_defaults_stay_visible_so_the_model_does_not_invent_ports
     fields = {field["name"]: field for field in result["data_schema"]}
     assert fields["port"]["default"] == 80
     assert "default" not in fields["password"]
+
+
+
+class EntryWS(FakeWS):
+    """config_entries/update|disable with a tiny in-memory entry."""
+
+    def __init__(self):
+        super().__init__()
+        self.entry = {"entry_id": ENTRY, "domain": "shelly", "title": "Plug", "state": "loaded",
+                      "disabled_by": None, "pref_disable_polling": False, "pref_disable_new_entities": False}
+
+    async def command(self, kind, payload=None):
+        self.calls.append((kind, payload or {}))
+        if kind == "config_entries/update":
+            self.entry.update({k: v for k, v in payload.items() if k != "entry_id"})
+            return {"config_entry": dict(self.entry), "require_restart": False}
+        if kind == "config_entries/disable":
+            self.entry["disabled_by"] = payload["disabled_by"]
+            self.entry["state"] = "not_loaded" if payload["disabled_by"] else "loaded"
+            return {"require_restart": False}
+        if kind == "config_entries/get_single":
+            return {"config_entry": dict(self.entry)}
+        return await super().command(kind, payload)
+
+
+@pytest.mark.asyncio
+async def test_options_flow_starts_with_the_entry_id_as_handler_and_needs_admin(tmp_path):
+    form = {"type": "form", "flow_id": FLOW, "handler": ENTRY, "step_id": "init",
+            "data_schema": [{"name": "scan_interval", "type": "integer", "default": 30}], "errors": {}}
+    with respx.mock(base_url=URL) as router:
+        route = router.post("/api/config/config_entries/options/flow").mock(return_value=httpx.Response(200, json=form))
+        with pytest.raises(ValueError, match="admin"):
+            await make(tmp_path, admin=False).start_options(ENTRY)
+        result = await make(tmp_path).start_options(ENTRY)
+    assert json.loads(route.calls[0].request.content) == {"handler": ENTRY, "show_advanced_options": False}
+    assert result["data_schema"][0]["default"] == 30 and result["kind"] == "options"
+
+
+@pytest.mark.asyncio
+async def test_options_steps_and_abort_use_the_options_routes_with_credential_refs(tmp_path):
+    done = {"type": "create_entry", "flow_id": FLOW, "handler": ENTRY, "title": "", "result": True,
+            "description_placeholders": {"x": SECRET}}
+    with respx.mock(base_url=URL) as router:
+        step = router.post(f"/api/config/config_entries/options/flow/{FLOW}").mock(return_value=httpx.Response(200, json=done))
+        abort = router.delete(f"/api/config/config_entries/options/flow/{FLOW}").mock(
+            return_value=httpx.Response(200, json={"message": "Flow aborted"}))
+        integrations = make(tmp_path)
+        result = await integrations.options_step(FLOW, {"scan_interval": 60,
+                                                        "password": {"$credential": "shelly_login", "field": "password"}})
+        await integrations.abort_options(FLOW)
+    assert json.loads(step.calls[0].request.content) == {"scan_interval": 60, "password": SECRET}
+    assert SECRET not in json.dumps(result) and result["type"] == "create_entry"
+    assert abort.called
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_starts_a_config_flow_for_the_entry(tmp_path):
+    form = {"type": "form", "flow_id": FLOW, "handler": "shelly", "step_id": "reconfigure",
+            "data_schema": [{"name": "host", "type": "string", "default": "192.0.2.10"}], "errors": {}}
+    with respx.mock(base_url=URL) as router:
+        router.get("/api/config/config_entries/entry").mock(return_value=httpx.Response(200, json=[
+            {"entry_id": ENTRY, "domain": "shelly", "supports_reconfigure": True}]))
+        route = router.post("/api/config/config_entries/flow").mock(return_value=httpx.Response(200, json=form))
+        result = await make(tmp_path).start_reconfigure(ENTRY)
+    assert json.loads(route.calls[0].request.content) == {"handler": "shelly", "entry_id": ENTRY,
+                                                          "show_advanced_options": False}
+    assert result["step_id"] == "reconfigure" and "default" in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_is_refused_when_the_integration_does_not_support_it(tmp_path):
+    with respx.mock(base_url=URL, assert_all_called=False) as router:
+        router.get("/api/config/config_entries/entry").mock(return_value=httpx.Response(200, json=[
+            {"entry_id": ENTRY, "domain": "sun", "supports_reconfigure": False}]))
+        post = router.post("/api/config/config_entries/flow")
+        with pytest.raises(ValueError, match="reconfigure"):
+            await make(tmp_path).start_reconfigure(ENTRY)
+        with pytest.raises(ValueError, match="unknown entry_id"):
+            await make(tmp_path).start_reconfigure("01M5NHB2W16NRS2JGCSBJVTCY0")
+    assert not post.called
+
+
+@pytest.mark.asyncio
+async def test_entry_settings_rename_polling_and_disable_are_gated_and_read_back(tmp_path):
+    ws = EntryWS()
+    with pytest.raises(ValueError, match="admin"):
+        await make(tmp_path, admin=False, ws=ws).update_entry(ENTRY, {"title": "x"})
+    integrations = make(tmp_path, ws=ws)
+    updated = await integrations.update_entry(ENTRY, {"title": "Steckdose Flur", "pref_disable_polling": True})
+    assert updated["title"] == "Steckdose Flur" and updated["pref_disable_polling"] is True
+    with pytest.raises(ValueError, match="fields"):
+        await integrations.update_entry(ENTRY, {"data": {"host": "x"}})
+    with pytest.raises(ValueError):
+        await integrations.update_entry(ENTRY, {"title": ""})
+    disabled = await integrations.set_entry_disabled(ENTRY, True)
+    assert disabled["disabled_by"] == "user" and ("config_entries/disable", {"entry_id": ENTRY, "disabled_by": "user"}) in ws.calls
+    enabled = await integrations.set_entry_disabled(ENTRY, False)
+    assert enabled["disabled_by"] is None
+
+
+def test_option_and_settings_tools_are_registered():
+    import asyncio
+    from ha_safe_mcp.server import create_server
+    names = {tool.name for tool in asyncio.run(create_server(HAClient(URL, "t")).list_tools())}
+    assert {"ha_start_integration_options", "ha_integration_options_step", "ha_abort_integration_options",
+            "ha_start_integration_reconfigure", "ha_update_integration", "ha_set_integration_disabled"} <= names
+
+
+@pytest.mark.asyncio
+async def test_options_forms_show_the_current_value_and_never_leak_current_secrets(tmp_path):
+    """HA puts the current option value in description.suggested_value; default is only the factory value."""
+    form = {"type": "form", "flow_id": FLOW, "handler": ENTRY, "step_id": "init", "errors": {}, "data_schema": [
+        {"name": "workdays", "default": ["mon", "tue", "wed", "thu", "fri"],
+         "description": {"suggested_value": ["mon", "tue", "wed", "thu"]}},
+        {"name": "password", "description": {"suggested_value": SECRET}, "default": SECRET},
+        {"name": "api_key", "description": {"suggested_value": SECRET, "note": "kept"}}]}
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/config/config_entries/options/flow").mock(return_value=httpx.Response(200, json=form))
+        result = await make(tmp_path).start_options(ENTRY)
+    fields = {field["name"]: field for field in result["data_schema"]}
+    assert fields["workdays"]["current"] == ["mon", "tue", "wed", "thu"]
+    assert SECRET not in json.dumps(result)
+    assert fields["password"].get("current") is None and fields["api_key"]["description"] == {"note": "kept"}
+    assert "current" in result.get("hint", "") and "kept" in result["hint"]
+
+
+
+@pytest.mark.asyncio
+async def test_options_steps_keep_current_values_the_model_did_not_send(tmp_path):
+    """Real HA 2026.10: a partial options submit resets omitted fields to factory defaults (days_offset 1 -> 0).
+    The HA frontend avoids that by pre-filling suggested values; the MCP does the same per flow."""
+    form = {"type": "form", "flow_id": FLOW, "handler": ENTRY, "step_id": "init", "errors": {}, "data_schema": [
+        {"name": "workdays", "default": ["mon"], "description": {"suggested_value": ["mon", "tue"]}},
+        {"name": "days_offset", "default": 0, "description": {"suggested_value": 1}},
+        {"name": "password", "description": {"suggested_value": SECRET}}]}
+    done = {"type": "create_entry", "flow_id": FLOW, "handler": ENTRY, "result": True}
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/config/config_entries/options/flow").mock(return_value=httpx.Response(200, json=form))
+        step = router.post(f"/api/config/config_entries/options/flow/{FLOW}").mock(return_value=httpx.Response(200, json=done))
+        integrations = make(tmp_path)
+        await integrations.start_options(ENTRY)
+        result = await integrations.options_step(FLOW, {"workdays": ["mon", "tue", "wed"]})
+    assert json.loads(step.calls[0].request.content) == {"workdays": ["mon", "tue", "wed"], "days_offset": 1}
+    assert result["kept_current"] == ["days_offset"]
+    assert SECRET not in json.dumps(result)
+
+
+@pytest.mark.asyncio
+async def test_kept_values_are_forgotten_after_the_flow_ends(tmp_path):
+    form = {"type": "form", "flow_id": FLOW, "handler": ENTRY, "step_id": "init", "errors": {}, "data_schema": [
+        {"name": "days_offset", "description": {"suggested_value": 1}}]}
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/config/config_entries/options/flow").mock(return_value=httpx.Response(200, json=form))
+        router.delete(f"/api/config/config_entries/options/flow/{FLOW}").mock(
+            return_value=httpx.Response(200, json={"message": "Flow aborted"}))
+        integrations = make(tmp_path)
+        await integrations.start_options(ENTRY)
+        await integrations.abort_options(FLOW)
+    assert integrations._current == {}

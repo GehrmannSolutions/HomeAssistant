@@ -3,6 +3,15 @@
 Alle wesentlichen Änderungen an `ha-safe-mcp`. Versionen folgen grob [SemVer](https://semver.org/lang/de/);
 vor 1.0 können sich Tool-Signaturen noch ändern.
 
+## 0.9.0 – 2026-10-24
+
+- **Integrations-Einstellungen**: `ha_start_integration_options`, `ha_integration_options_step`,
+  `ha_abort_integration_options`, `ha_start_integration_reconfigure`, `ha_update_integration`,
+  `ha_set_integration_disabled`. `ha_list_integrations` zeigt `supports_options`, `supports_reconfigure` und die
+  Systemoptionen.
+- Formulare zeigen den aktuellen Wert (`current`); nicht gesendete Felder behält der MCP bei, weil HA sie sonst auf
+  den Werkswert zurücksetzt. Geheime Felder zeigen nie einen Wert.
+
 ## 0.8.0 – 2026-10-24
 
 - **Szenen und Skripte**: `ha_list_scenes`, `ha_get_scene`, `ha_save_scene`, `ha_delete_scene`,

@@ -18,12 +18,12 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         "config/entity_registry/list", "auth/current_user",
                         "config_entries/flow/progress", "backup/info", "backup/agents/info",
                         "config/area_registry/list", "config/floor_registry/list",
-                        "config/device_registry/list"}) | frozenset(
+                        "config/device_registry/list", "config_entries/get_single"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
                          "config/area_registry/create", "config/area_registry/update",
                          "config/floor_registry/create", "config/floor_registry/update",
-                         "config/device_registry/update",
+                         "config/device_registry/update", "config_entries/update", "config_entries/disable",
                          "lovelace/dashboards/update", "config/entity_registry/update"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
 DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",

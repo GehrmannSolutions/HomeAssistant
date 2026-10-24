@@ -364,6 +364,41 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await integrations.abort_flow(flow_id)
 
     @tool()
+    async def ha_start_integration_options(entry_id: EntryId, show_advanced_options: bool = False) -> dict:
+        """Open the settings (options) of a configured integration whose supports_options is true; returns a form
+        with current values as defaults and a flow_id. Admin write required."""
+        return await integrations.start_options(entry_id, show_advanced_options)
+
+    @tool()
+    async def ha_integration_options_step(flow_id: FlowId, data: dict | None = None) -> dict:
+        """Submit one options form step; keep shown defaults unless the user wants them changed. Secret fields only
+        as credential references. Admin write required."""
+        return await integrations.options_step(flow_id, data)
+
+    @tool()
+    async def ha_abort_integration_options(flow_id: FlowId) -> dict:
+        """Abort an options flow without saving. Admin write required."""
+        return await integrations.abort_options(flow_id)
+
+    @tool()
+    async def ha_start_integration_reconfigure(entry_id: EntryId, show_advanced_options: bool = False) -> dict:
+        """Reconfigure the connection of an integration whose supports_reconfigure is true (e.g. new host/IP);
+        continue with ha_integration_setup_step. Admin write required."""
+        return await integrations.start_reconfigure(entry_id, show_advanced_options)
+
+    @tool()
+    async def ha_update_integration(entry_id: EntryId, changes: dict) -> dict:
+        """Rename an integration entry or change its system options: changes may contain title,
+        pref_disable_polling, pref_disable_new_entities. Admin write required."""
+        return await integrations.update_entry(entry_id, changes)
+
+    @tool()
+    async def ha_set_integration_disabled(entry_id: EntryId, disabled: bool) -> dict:
+        """Disable (true) or re-enable (false) an integration entry; its entities become unavailable while
+        disabled. Admin write required."""
+        return await integrations.set_entry_disabled(entry_id, disabled)
+
+    @tool()
     async def ha_reload_integration(entry_id: EntryId) -> dict:
         """Reload a configured integration by entry_id. Admin write required."""
         return await integrations.reload_entry(entry_id)

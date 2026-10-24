@@ -336,6 +336,22 @@ Erlaubte Felder: `name`, `area_id`, `icon`; keine neue Entity-ID, keine Servicea
 
 **Wichtig:** Der MCP **durchsucht das Netzwerk nicht selbst**. „Suche im Netzwerk“ heißt hier: `ha_list_discovered` zeigt, was Home Assistant selbst gefunden hat (zeroconf/DHCP/SSDP) und was auf Bestätigung wartet; für die Bestätigung ruft das Modell `ha_integration_setup_step` mit `{}` auf. Läuft HA in einem Docker-Container ohne Host-Netzwerk (wie `ha-mcp-dev`), findet HA dort keine Geräte – dann die IP angeben. Passwörter im Chat-Text lehnt die Oberfläche ab, bevor sie beim Modell oder im Verlauf landen.
 
+### 8.6b Integrations-Einstellungen ändern
+
+Chat mit „Aktionen erlauben“, z. B. *„Ändere bei der Integration Workday Sensor DE die Arbeitstage auf Montag bis Donnerstag“*:
+
+1. `ha_list_integrations` zeigt je Eintrag `supports_options` (Zahnrad „Konfigurieren“ in HA) und `supports_reconfigure` (Verbindungsdaten ändern).
+2. `ha_start_integration_options` mit `{"entry_id":"<aus der Liste>"}` → Formular; jedes Feld zeigt den aktuellen Wert als `current`, `default` ist nur der Werkswert.
+3. `ha_integration_options_step` mit nur den geänderten Feldern, z. B. `{"flow_id":"<…>","data":{"workdays":["mon","tue","wed","thu"]}}`. Nicht genannte Felder behält der MCP bei und meldet sie in `kept_current`. Abbrechen ohne Speichern: `ha_abort_integration_options`.
+
+Weitere Einstellungen:
+
+- **Neu konfigurieren** (z. B. neue IP oder neue Feed-Adresse, nur bei `supports_reconfigure: true`): `ha_start_integration_reconfigure`, dann `ha_integration_setup_step`. HA meldet Erfolg als `abort` mit `reason: reconfigure_successful`.
+- **Umbenennen und Systemoptionen:** `ha_update_integration` mit `{"entry_id":"<…>","changes":{"title":"Steckdose Flur"}}`; außerdem `pref_disable_polling` (Abfrage aus) und `pref_disable_new_entities` (neue Entitäten nicht automatisch hinzufügen).
+- **Deaktivieren/Aktivieren:** `ha_set_integration_disabled` mit `{"entry_id":"<…>","disabled":true}`; die Entitäten sind dann nicht verfügbar, die Einrichtung bleibt erhalten.
+
+Alles braucht „Konfiguration ändern“ (Admin-Write); jeder Schritt erscheint als Freigabe-Karte. Geheime Felder zeigen nie ihren Wert; ändern nur als Verweis auf einen Eintrag unter „Zugangsdaten“.
+
 ### 8.7 REST-Katalog: ausdrücklich erlaubte Methoden und Routen
 
 1. `ha_rest_catalog` mit `{}` lesen; Pfad-Templates und Klassen prüfen.
