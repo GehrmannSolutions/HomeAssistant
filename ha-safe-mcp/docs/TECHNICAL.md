@@ -36,6 +36,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`scenes.py`](../src/ha_safe_mcp/scenes.py) | Scene/script config HTTP, prechecks, read-back and service invocation |
 | [`registry.py`](../src/ha_safe_mcp/registry.py) | Area/floor/device WS operations and area-entity view |
 | [`backups.py`](../src/ha_safe_mcp/backups.py) | HA backup WS operations and allowlisted streaming download |
+| [`oauth.py`](../src/ha_safe_mcp/oauth.py), [`webui/oauth.html`](../src/ha_safe_mcp/webui/oauth.html) | OAuth 2.1 authorization server for the remote endpoint: metadata, dynamic registration, consent, PKCE code flow, refresh rotation |
 | [`remote.py`](../src/ha_safe_mcp/remote.py) | Remote MCP endpoint: client token store, permission caps, per-client stdio children, gateway server |
 | [`changes.py`](../src/ha_safe_mcp/changes.py) | Change journal: capture previous state, journaled writes, undo through the same gated operations |
 | [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop, CLI confirmation, web run/approval lifecycle |
@@ -86,8 +87,7 @@ Limits of the protections:
 ## Remote MCP endpoint
 
 `create_app` returns `McpRouter`: requests to `/mcp` and `/mcp/...` go to the MCP gateway, everything else to the UI
-behind `LocalOnlyGuard`. The router does its own Host and loopback-peer check, answers 404 while no client exists,
-and requires `Authorization: Bearer hsm_...`; it does **not** require the Access JWT, so a proxy bypass for `/mcp`
+behind `LocalOnlyGuard`. The router does its own Host and loopback-peer check and requires `Authorization: Bearer hsm_...`; it does **not** require the Access JWT, so a proxy bypass for `/mcp`
 is enough. [`ClientStore`](../src/ha_safe_mcp/remote.py) keeps clients in the XDG config directory
 (`clients/clients.json`, `0700`/`0600`) with the SHA-256 of the token (256-bit random, shown once).
 
@@ -100,6 +100,20 @@ gate, read-back, credential-reference rule, audit record and change-journal entr
 lists only tools the client level may use (`tool_level`; unclassified tools are never exposed), refuses others, and
 sets `readOnlyHint`/`destructiveHint`; the stdio server sets the same annotations. Undo is visible from level admin;
 the child's delete gate decides when an undo would remove something.
+
+### OAuth
+
+`McpRouter` also serves, without the UI login, the discovery documents (`/.well-known/oauth-protected-resource`
+and `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`; issuer = public
+origin) and `/mcp/oauth/register` and `/mcp/oauth/token`, with permissive CORS (bearer tokens, no cookies). The 401
+on `/mcp` carries `resource_metadata`. [`OAuthServer`](../src/ha_safe_mcp/oauth.py) keeps registrations in
+`clients/oauth_clients.json` (redirect URIs https or loopback http only, no fragments; optional client secret stored
+as SHA-256; at most 200, oldest unused dropped first). The consent page `/oauth/authorize` is a static UI page behind
+`LocalOnlyGuard`; it calls `/api/oauth/check|approve|deny` (UI header + Origin), and the server re-validates client,
+exact redirect URI, `response_type=code`, PKCE S256 and `resource` on every call. Codes are single-use, in memory,
+valid 10 minutes, bound to client, redirect URI and challenge. The token endpoint verifies the client (none,
+`client_secret_post`, `client_secret_basic`) and PKCE, then `ClientStore.issue_oauth` creates or replaces one
+profile per OAuth client with a 1-hour access token and a rotating 60-day refresh token (both stored as SHA-256).
 
 ## Web exposure model
 

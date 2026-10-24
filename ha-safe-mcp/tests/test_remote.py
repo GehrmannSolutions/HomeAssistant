@@ -231,11 +231,11 @@ async def test_public_mcp_path_needs_no_access_jwt_but_the_ui_still_does(tmp_pat
     assert foreign.status_code == 400
 
 
-async def test_mcp_is_off_until_a_client_exists(tmp_path):
+async def test_without_clients_the_endpoint_only_answers_with_the_oauth_challenge(tmp_path):
     app, _, _ = make(tmp_path)
     async with running(app), http(app) as h:
         response = await h.post("/mcp", headers=MCP_HEADERS, json=rpc("tools/list"))
-    assert response.status_code == 404
+    assert response.status_code == 401 and "resource_metadata=" in response.headers["www-authenticate"]
 
 
 # ---------------------------------------------------------------- client management in the UI
@@ -253,7 +253,7 @@ async def test_clients_are_managed_from_the_ui_and_the_token_is_returned_once(tm
         after = (await h.get("/api/clients")).json()
     assert forged.status_code == 403
     assert created.status_code == 200 and created.json()["token"].startswith("hsm_")
-    assert "token" not in json.dumps(listed["clients"]).replace("token_set", "")
+    assert "hsm_" not in json.dumps(listed["clients"]) and "token_hash" not in json.dumps(listed["clients"])
     assert listed["endpoint"] == "http://127.0.0.1:8765/mcp"
     assert listed["clients"][0]["effective_level"] == "read"  # instance switches are still off
     assert changed.json()["client"]["level"] == "read"

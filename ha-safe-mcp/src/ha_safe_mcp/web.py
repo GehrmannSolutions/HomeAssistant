@@ -8,6 +8,7 @@ The Home Assistant token is written to the local ``.env`` (mode 0600) and never 
 
 import argparse
 import asyncio
+import base64
 import ipaddress
 import json
 import os
@@ -17,7 +18,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 from importlib import resources
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, unquote_plus, urlsplit
 
 import httpx
 from mcp import ClientSession
@@ -36,6 +37,7 @@ from .audit import AuditLog
 from .changes import ChangeJournal, CHANGE_ID
 from .files import FileError, FileStore
 from .remote import ChildPool, ClientStore, build_gateway, effective_level
+from .oauth import OAuthError, OAuthServer, metadata as oauth_metadata
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
 
 UI_HEADER = "x-ha-mcp-ui"
@@ -44,7 +46,7 @@ MAX_MESSAGE = 4000
 LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1"}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
-STATIC = {"app.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
+STATIC = {"app.js": "text/javascript; charset=utf-8", "oauth.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
           "icon.svg": "image/svg+xml"}
 # "pw: x", "Passwort ist x", "password=x": a secret value typed into the chat. Asking about a password
 # field ("Wie ist das Passwort-Feld ...") or naming a stored alias stays allowed.
@@ -131,14 +133,25 @@ class LocalOnlyGuard:
         return await self.app(scope, receive, send)
 
 
-class McpRouter:
-    """Sends /mcp (and /mcp/...) to the remote MCP gateway with its own bearer-token check; everything else goes
-    to the UI behind LocalOnlyGuard (Access JWT, UI header). The /mcp path needs an Access bypass at Cloudflare."""
+CORS = {"access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+        "access-control-allow-headers": "Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id",
+        "access-control-expose-headers": "WWW-Authenticate, Mcp-Session-Id", "access-control-max-age": "600"}
+RESOURCE_METADATA = "/.well-known/oauth-protected-resource"
+SERVER_METADATA = "/.well-known/oauth-authorization-server"
 
-    def __init__(self, ui, mcp_app, clients: ClientStore, *, allowed_hosts: set[str], allow_remote: bool):
-        self.ui, self.mcp_app, self.clients = ui, mcp_app, clients
+
+class McpRouter:
+    """Sends the remote MCP surface past the UI login: /mcp (bearer token), /mcp/oauth/token and /mcp/oauth/register,
+    and the OAuth discovery documents under /.well-known/oauth-*. Everything else, including the consent page
+    /oauth/authorize, goes to the UI behind LocalOnlyGuard (Access JWT, UI header). A proxy in front needs a login
+    bypass for exactly /mcp and /.well-known/oauth-*."""
+
+    def __init__(self, ui, mcp_app, clients: ClientStore, oauth: OAuthServer, *, allowed_hosts: set[str],
+                 allow_remote: bool, public_origin: str | None = None):
+        self.ui, self.mcp_app, self.clients, self.oauth = ui, mcp_app, clients, oauth
         self.allowed_hosts = {host.lower() for host in allowed_hosts}
         self.allow_remote = allow_remote
+        self.public_origin = public_origin
 
     def __getattr__(self, name):
         # attributes of the UI guard (e.g. access_verifier) stay reachable for callers and tests
@@ -148,28 +161,86 @@ class McpRouter:
     def is_mcp(path: str) -> bool:
         return path == "/mcp" or path.startswith("/mcp/")
 
+    @staticmethod
+    def is_discovery(path: str) -> bool:
+        return any(path == prefix or path.startswith(prefix + "/") for prefix in (RESOURCE_METADATA, SERVER_METADATA))
+
+    def base(self, request: Request) -> str:
+        return self.public_origin or f"{request.url.scheme}://{request.headers.get('host')}"
+
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not self.is_mcp(scope.get("path", "")):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or not (self.is_mcp(path) or self.is_discovery(path)):
             return await self.ui(scope, receive, send)
-        request = Request(scope)
+        request = Request(scope, receive)
         host = _host_name(request.headers.get("host"))
         if host is None or (host.lower() not in self.allowed_hosts and not (self.allow_remote and host)):
             return await _error("Ungültiger Host", 400)(scope, receive, send)
         peer = scope.get("client")
         if not self.allow_remote and not (peer and _is_loopback(peer[0])):
             return await _error("Nur lokal erreichbar", 403)(scope, receive, send)
-        if not await asyncio.to_thread(self.clients.any):
-            return await _error("Kein MCP-Client eingerichtet", 404)(scope, receive, send)
+
+        async def cors_send(message):
+            if message["type"] == "http.response.start":
+                message = {**message, "headers": list(message.get("headers", [])) +
+                           [(k.encode(), v.encode()) for k, v in CORS.items()]}
+            await send(message)
+
+        if request.method == "OPTIONS":
+            return await Response(status_code=204)(scope, receive, cors_send)
+        base = self.base(request)
+        if self.is_discovery(path):
+            if request.method not in ("GET", "HEAD"):
+                return await _error("Method not allowed", 405)(scope, receive, cors_send)
+            resource, server = oauth_metadata(base)
+            document = resource if path.startswith(RESOURCE_METADATA) else server
+            return await JSONResponse(document)(scope, receive, cors_send)
+        if path in ("/mcp/oauth/register", "/mcp/oauth/token"):
+            response = await self.oauth_endpoint(request, path)
+            return await response(scope, receive, cors_send)
+        if path != "/mcp":
+            return await _error("Nicht gefunden", 404)(scope, receive, cors_send)
         header = request.headers.get("authorization", "")
         token = header[7:].strip() if header[:7].lower() == "bearer " else ""
         client = await asyncio.to_thread(self.clients.authenticate, token) if token else None
         if client is None:
+            challenge = (f'Bearer realm="ha-safe-mcp", error="invalid_token", '
+                         f'resource_metadata="{base}{RESOURCE_METADATA}/mcp"')
             response = JSONResponse({"error": "invalid_token", "error_description": "Bearer token required"},
-                                    status_code=401, headers={"WWW-Authenticate": 'Bearer realm="ha-safe-mcp", '
-                                                                                  'error="invalid_token"'})
-            return await response(scope, receive, send)
+                                    status_code=401, headers={"WWW-Authenticate": challenge})
+            return await response(scope, receive, cors_send)
         scope = {**scope, "state": {**scope.get("state", {}), "mcp_client": client}}
-        return await self.mcp_app(scope, receive, send)
+        return await self.mcp_app(scope, receive, cors_send)
+
+    async def oauth_endpoint(self, request: Request, path: str) -> Response:
+        if request.method != "POST":
+            return JSONResponse({"error": "invalid_request", "error_description": "POST required"}, status_code=405)
+        raw = await request.body()
+        if len(raw) > MAX_BODY:
+            return JSONResponse({"error": "invalid_request", "error_description": "body too large"}, status_code=413)
+        try:
+            if path.endswith("/register"):
+                data = json.loads(raw or b"{}")
+                return JSONResponse(await asyncio.to_thread(self.oauth.register, data), status_code=201,
+                                    headers={"Cache-Control": "no-store"})
+            if request.headers.get("content-type", "").startswith("application/json"):
+                form = json.loads(raw or b"{}")
+            else:
+                form = {k: v[0] for k, v in parse_qs(raw.decode("utf-8", "replace")).items()}
+            basic = None
+            header = request.headers.get("authorization", "")
+            if header[:6].lower() == "basic ":
+                try:
+                    user, _, secret = base64.b64decode(header[6:]).decode().partition(":")
+                    basic = (unquote_plus(user), unquote_plus(secret))
+                except (ValueError, UnicodeDecodeError):
+                    return JSONResponse({"error": "invalid_client"}, status_code=401)
+            result = await asyncio.to_thread(self.oauth.token, form if isinstance(form, dict) else {}, basic)
+            return JSONResponse(result, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+        except json.JSONDecodeError:
+            return JSONResponse({"error": "invalid_request", "error_description": "invalid JSON"}, status_code=400)
+        except OAuthError as exc:
+            return JSONResponse(exc.body(), status_code=exc.status, headers={"Cache-Control": "no-store"})
 
 
 async def _json_body(request: Request) -> dict:
@@ -328,6 +399,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         lambda settings: live_changes(settings, credentials.directory, audit, journal))
     lock = asyncio.Lock()
     clients = clients or ClientStore()
+    oauth = OAuthServer(clients)
     mcp_pool = mcp_pool or ChildPool()
 
     def child_dirs() -> dict:
@@ -604,6 +676,30 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     def client_view(item: dict, settings: Settings) -> dict:
         return {**item, "effective_level": effective_level(settings, item)}
 
+    async def oauth_page(request: Request):
+        return _security_headers(Response(_static_text("oauth.html"), media_type="text/html; charset=utf-8"))
+
+    def oauth_base(request: Request) -> str:
+        return public_origin or f"{request.url.scheme}://{request.headers.get('host')}"
+
+    async def oauth_action(request: Request, action: str):
+        try:
+            data = await _json_body(request)
+            params = data.get("params")
+            base = oauth_base(request)
+            if action == "check":
+                return _ok(oauth.check(params, base))
+            if action == "deny":
+                return _ok({"redirect": oauth.deny(params, base)})
+            domains = data.get("domains") or []
+            from .remote import _profile
+            level, domains = _profile(data.get("level"), domains)
+            return _ok({"redirect": oauth.approve(params, base, level, domains)})
+        except OAuthError as exc:
+            return _error(exc.description, 400)
+        except (SetupError, ValueError) as exc:
+            return _error(str(exc), 400)
+
     async def clients_list(request: Request):
         settings = store.load()
         return _ok({"endpoint": endpoint(request), "instance_level": effective_level(settings, {"level": "delete"}),
@@ -659,6 +755,10 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/backups/{backup_id}/download", backups_download),
         Route("/api/changes", changes_list),
         Route("/api/changes/{change_id}/undo", changes_undo, methods=["POST"]),
+        Route("/oauth/authorize", oauth_page),
+        Route("/api/oauth/check", partial(oauth_action, action="check"), methods=["POST"]),
+        Route("/api/oauth/approve", partial(oauth_action, action="approve"), methods=["POST"]),
+        Route("/api/oauth/deny", partial(oauth_action, action="deny"), methods=["POST"]),
         Route("/api/clients", clients_list),
         Route("/api/clients", clients_create, methods=["POST"]),
         Route("/api/clients/{client_id}", clients_update, methods=["POST"]),
@@ -686,8 +786,8 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         raise ValueError("Public origin requires Access verification and vice versa")
     ui = LocalOnlyGuard(app, allowed_hosts=allowed_hosts or LOOPBACK_NAMES, allow_remote=allow_remote,
                         public_origin=public_origin, access_verifier=access_verifier)
-    return McpRouter(ui, mcp_app, clients, allowed_hosts=allowed_hosts or LOOPBACK_NAMES,
-                     allow_remote=allow_remote)
+    return McpRouter(ui, mcp_app, clients, oauth, allowed_hosts=allowed_hosts or LOOPBACK_NAMES,
+                     allow_remote=allow_remote, public_origin=public_origin)
 
 
 def main():

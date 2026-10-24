@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.13.0 – 2026-10-24
+
+- **OAuth 2.1 for the remote endpoint** (web connectors of ChatGPT, Claude and other OAuth clients): discovery
+  documents under `/.well-known/oauth-*`, dynamic client registration and token endpoint under `/mcp/oauth/`,
+  consent page `/oauth/authorize` behind the UI login (pick level and domains), mandatory PKCE S256, single-use
+  codes, 1-hour access tokens with rotating 60-day refresh tokens. Grants appear as OAuth entries in
+  **MCP-Clients** and are capped like token clients. The 401 on `/mcp` points to the discovery document; the
+  endpoint no longer answers 404 when no client exists.
+
 ## 0.12.0 – 2026-10-24
 
 - **Remote MCP endpoint** `/mcp` (Streamable HTTP) in the web UI process for Claude Code, Codex and other MCP

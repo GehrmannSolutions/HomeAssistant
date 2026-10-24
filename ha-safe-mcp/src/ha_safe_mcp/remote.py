@@ -34,7 +34,10 @@ DOMAIN = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
 MAX_CLIENTS = 50
 # Undo is a configuration change that sometimes removes something; the child's delete gate decides that part.
 REMOTE_LEVEL = {"ha_undo_change": "admin"}
-PUBLIC_FIELDS = ("id", "name", "level", "domains", "created", "last_used")
+PUBLIC_FIELDS = ("id", "name", "level", "domains", "created", "last_used", "kind")
+ACCESS_SECONDS = 3600
+REFRESH_SECONDS = 60 * 24 * 3600
+STAMP = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def default_directory() -> Path:
@@ -46,8 +49,6 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _profile(level, domains) -> tuple[str, list[str]]:
@@ -62,10 +63,19 @@ def _profile(level, domains) -> tuple[str, list[str]]:
 class ClientStore:
     """Remote MCP clients with hashed bearer tokens (directory 0700, file 0600)."""
 
-    def __init__(self, directory: Path | None = None):
+    def __init__(self, directory: Path | None = None, *, now: Callable[[], datetime] | None = None):
         self.directory = Path(directory) if directory else default_directory()
         self.path = self.directory / "clients.json"
         self._lock = threading.Lock()
+        self.now = now or (lambda: datetime.now(timezone.utc))
+
+    def _stamp(self, offset: int = 0) -> str:
+        return datetime.fromtimestamp(self.now().timestamp() + offset, timezone.utc).strftime(STAMP)
+
+    def _expired(self, stamp: str | None) -> bool:
+        if not stamp:
+            return False
+        return datetime.strptime(stamp, STAMP).replace(tzinfo=timezone.utc) <= self.now()
 
     def _load(self) -> list[dict]:
         if not self.path.is_file() or self.path.is_symlink():
@@ -90,7 +100,7 @@ class ClientStore:
 
     @staticmethod
     def public(client: dict) -> dict:
-        return {key: client.get(key) for key in PUBLIC_FIELDS}
+        return {**{key: client.get(key) for key in PUBLIC_FIELDS}, "kind": client.get("kind") or "token"}
 
     def any(self) -> bool:
         return bool(self._load())
@@ -110,7 +120,7 @@ class ClientStore:
             ids = {c["id"] for c in clients}
             client_id = next(i for i in (secrets.token_hex(4) for _ in range(100)) if i not in ids)
             client = {"id": client_id, "name": name.strip(), "level": level, "domains": domains,
-                      "created": _now(), "last_used": None, "token_hash": _hash(token)}
+                      "created": self._stamp(), "last_used": None, "token_hash": _hash(token), "kind": "token"}
             self._save(clients + [client])
         return self.public(client), token
 
@@ -141,14 +151,54 @@ class ClientStore:
         with self._lock:
             clients = self._load()
             client = next((c for c in clients if secrets.compare_digest(c.get("token_hash", ""), digest)), None)
-            if client is None:
+            if client is None or self._expired(client.get("token_expires")):
                 return None
             last = client.get("last_used")
-            if not last or (datetime.now(timezone.utc) - datetime.strptime(last, "%Y-%m-%dT%H:%M:%SZ").replace(
+            if not last or (self.now() - datetime.strptime(last, STAMP).replace(
                     tzinfo=timezone.utc)).total_seconds() > 60:
-                client["last_used"] = _now()
+                client["last_used"] = self._stamp()
                 self._save(clients)
         return self.public(client)
+
+    # ------------------------------------------------------------ OAuth-issued profiles
+    def _new_pair(self, client: dict) -> tuple[str, str]:
+        access, refresh = "hsm_" + secrets.token_urlsafe(32), "hsr_" + secrets.token_urlsafe(32)
+        client.update(token_hash=_hash(access), token_expires=self._stamp(ACCESS_SECONDS),
+                      refresh_hash=_hash(refresh), refresh_expires=self._stamp(REFRESH_SECONDS))
+        return access, refresh
+
+    def issue_oauth(self, name: str, level, domains, *, oauth_client_id: str) -> tuple[dict, str, str]:
+        """One profile per OAuth client: authorizing again replaces level, domains and tokens."""
+        level, domains = _profile(level, domains or [])
+        with self._lock:
+            clients = self._load()
+            client = next((c for c in clients if c.get("oauth_client_id") == oauth_client_id), None)
+            if client is None:
+                if len(clients) >= MAX_CLIENTS:
+                    raise ValueError("too many clients")
+                ids = {c["id"] for c in clients}
+                client = {"id": next(i for i in (secrets.token_hex(4) for _ in range(100)) if i not in ids),
+                          "created": self._stamp(), "last_used": None, "kind": "oauth",
+                          "oauth_client_id": oauth_client_id}
+                clients.append(client)
+            client.update(name=f"{name.strip()[:72]} (OAuth)", level=level, domains=domains)
+            access, refresh = self._new_pair(client)
+            self._save(clients)
+        return self.public(client), access, refresh
+
+    def refresh_oauth(self, refresh_token: str, oauth_client_id: str) -> tuple[dict, str, str] | None:
+        if not isinstance(refresh_token, str) or not refresh_token.startswith("hsr_") or len(refresh_token) > 200:
+            return None
+        digest = _hash(refresh_token)
+        with self._lock:
+            clients = self._load()
+            client = next((c for c in clients if secrets.compare_digest(c.get("refresh_hash") or "", digest)), None)
+            if client is None or client.get("oauth_client_id") != oauth_client_id \
+                    or self._expired(client.get("refresh_expires")):
+                return None
+            access, refresh = self._new_pair(client)
+            self._save(clients)
+        return self.public(client), access, refresh
 
 
 # ---------------------------------------------------------------- permissions

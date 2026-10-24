@@ -56,7 +56,7 @@ reverse proxy, `https://<your-host>/mcp`.
 
 Notes:
 
-- The endpoint is off until at least one client exists. Requests without a valid token get HTTP 401.
+- Requests without a valid token get HTTP 401 with a pointer to the OAuth discovery document.
 - Foreign clients do not show this UI's approval cards and ignore the "ohne Freigabe" switches; whether they ask
   before acting is up to the client (tools carry `readOnlyHint`/`destructiveHint` so clients can ask before writes).
   Give each client only the level it needs.
@@ -64,9 +64,23 @@ Notes:
   the client's random ID and its configuration changes in **Änderungen**, like chat actions.
 - Device names and states go to the provider of the AI client you connect.
 - **Behind Cloudflare Access** (or another login proxy): the proxy's browser login cannot be completed by MCP
-  clients. Add a bypass for the path `/mcp` only (Cloudflare: a self-hosted application for `<host>/mcp` with a
-  *Bypass* policy); the UI itself stays behind the login, `/mcp` is protected by the tokens.
-- Web connectors of ChatGPT and Claude usually need OAuth instead of a static token; that is planned next.
+  clients. Add a bypass for exactly the paths `/mcp` and `/.well-known/oauth-*` (Cloudflare: a self-hosted
+  application for `<host>/mcp` and `<host>/.well-known/oauth-*` with a *Bypass* policy). The UI and the OAuth
+  consent page `/oauth/authorize` stay behind the login; `/mcp` is protected by the tokens.
+
+### Connect with OAuth (ChatGPT and Claude web connectors, or any client that supports OAuth)
+
+In the client, add a custom MCP server / connector with the URL `https://<your-host>/mcp` and choose OAuth (no
+client ID or secret needed: the client registers itself). The client then opens the consent page
+`/oauth/authorize` in your browser, behind your UI login. It shows the client's name and where you will be sent
+back; pick the level and optional domains and press **Freigeben** (or **Ablehnen**).
+
+- The grant becomes an entry of kind OAuth in **MCP-Clients**, capped by the instance switches like any token
+  client. Authorizing the same client again replaces its level and tokens. **Entfernen** revokes it.
+- Access tokens last one hour; the client refreshes them with a rotating refresh token (60 days).
+- Technically: OAuth 2.1 with dynamic client registration and mandatory PKCE (S256); discovery documents at
+  `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server`; token and
+  registration endpoints at `/mcp/oauth/token` and `/mcp/oauth/register`.
 
 ### Ask a local Ollama model from the command line
 

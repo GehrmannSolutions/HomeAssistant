@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Zugriff freigeben – HA Safe MCP</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/oauth.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>HA Safe MCP</span></div>
+  </header>
+  <main>
+    <section class="card oauth-card">
+      <h1>Zugriff freigeben</h1>
+      <p id="oauth-intro" class="muted">Anfrage wird geprüft …</p>
+      <form id="oauth-form" hidden>
+        <p><strong id="oauth-client"></strong> möchte über den MCP-Endpunkt auf dein Home Assistant zugreifen.
+          Nach der Freigabe geht es zurück zu <code id="oauth-host"></code>.</p>
+        <label>Stufe
+          <select name="level">
+            <option value="read" selected>Nur lesen</option>
+            <option value="control">Steuern</option>
+            <option value="admin">Konfiguration ändern</option>
+            <option value="delete">Löschen</option>
+          </select>
+        </label>
+        <label>Domains (optional, kommagetrennt) <input name="domains" placeholder="light, switch"></label>
+        <p class="muted">Die Stufe wird durch die Schalter unter „Einstellungen“ gedeckelt. Der Client zeigt keine
+          Freigabe-Karten dieser Oberfläche; Gerätenamen und Zustände gehen an seinen Anbieter. Widerrufen kannst du
+          den Zugriff jederzeit im Reiter „MCP-Clients“.</p>
+        <div class="actions">
+          <button type="button" class="secondary" data-action="deny">Ablehnen</button>
+          <button type="submit" class="primary">Freigeben</button>
+        </div>
+      </form>
+      <div class="result" id="oauth-result" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+</body>
+</html>
