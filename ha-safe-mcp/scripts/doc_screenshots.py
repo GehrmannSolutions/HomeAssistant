@@ -66,6 +66,20 @@ class UI:
         self.page.click(f"{ROOT} .approval button.danger")
         return self.wait()
 
+    def follow_up(self, prompt):
+        """Answer the model's question in the same chat (e.g. 'Yes' after it asked for confirmation)."""
+        self.page.fill(f"{ROOT} textarea", prompt)
+        self.page.click(f'{ROOT} button[type="submit"]')
+        return self.wait()
+
+    def reject(self):
+        self.page.click(f"{ROOT} .approval button.secondary")
+        return self.wait()
+
+    def period(self, value):
+        self.page.click(f'#view-energy [data-period="{value}"]')
+        self.page.wait_for_timeout(2500)
+
     def chat_shot(self, name):
         box = self.page.evaluate(f"""() => {{ const root = document.querySelector('{ROOT}');
             const m = root.querySelector('.messages'); m.scrollTop = 0;
@@ -92,12 +106,16 @@ def log(name, prompt, state):
     LOG.write_text(json.dumps(data, ensure_ascii=False, indent=1))
 
 
-def chat(ui, name, prompt, allow_write=False, approve=False, card_name=None):
+def chat(ui, name, prompt, allow_write=False, approve=False, card_name=None, reject=False, follow_up=None):
     st = ui.ask(prompt, allow_write)
+    if follow_up and not st["pending"]:  # the model asked back first
+        st = ui.follow_up(follow_up)
     if card_name and st["pending"]:
         ui.chat_shot(card_name)
     while approve and st["pending"]:
         st = ui.approve()
+    while reject and st["pending"]:
+        st = ui.reject()
     ui.chat_shot(name)
     log(name, prompt, st)
     print(name, "->", st["text"][-300:].replace("\n", " | "))
@@ -138,6 +156,15 @@ SCENARIOS = {
     "clients": lambda ui: (ui.view("clients"), ui.element_shot("17-clients", "#view-clients")),
     "filemanager": lambda ui: (ui.view("files"), ui.element_shot("18-file-manager", "#view-files")),
     "audit": lambda ui: (ui.view("audit"), ui.element_shot("19-audit", "#view-audit", max_height=760)),
+    "energy": lambda ui: (ui.view("energy"), ui.period("7d"), ui.element_shot("20-energy", "#view-energy")),
+    "energy-chat": lambda ui: chat(ui, "21-chat-energy", P("How much energy did my devices use in the last 7 days?",
+                                                          "Wie viel Strom haben meine Geräte in den letzten 7 Tagen verbraucht?")),
+    "assist": lambda ui: chat(ui, "22-chat-assist", P("Would Assist understand 'turn off the Deckenlicht'?",
+                                                     "Würde Assist den Satz 'schalte das Deckenlicht aus' verstehen?")),
+    # the card is shot, then rejected: nothing is removed
+    "remove-device": lambda ui: chat(ui, "23-chat-remove-device", P("Remove the device Outlet 4.", "Entferne das Gerät Outlet 4."),
+                                     allow_write=True, card_name="23a-remove-device-card", reject=True,
+                                     follow_up=P("Yes.", "Ja.")),
 }
 
 

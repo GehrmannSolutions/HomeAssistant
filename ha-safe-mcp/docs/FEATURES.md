@@ -35,8 +35,10 @@ are in the [user guide](USER_GUIDE.md).
 - [16. Backups](#16-backups)
 - [17. Blueprints](#17-blueprints)
 - [18. Add-ons, system, HACS, Zigbee and Thread](#18-add-ons-system-hacs-zigbee-and-thread)
-- [19. Change journal and undo](#19-change-journal-and-undo)
-- [20. Direct REST access (advanced)](#20-direct-rest-access-advanced)
+- [19. Energy: plugs, solar, battery storage](#19-energy-plugs-solar-battery-storage)
+- [20. Voice assistants (Assist)](#20-voice-assistants-assist)
+- [21. Change journal and undo](#21-change-journal-and-undo)
+- [22. Direct REST access (advanced)](#22-direct-rest-access-advanced)
 
 ## How to read this guide: levels, approval cards, undo
 
@@ -66,28 +68,34 @@ What protects you in the web UI chat:
 
 ## The web UI at a glance
 
-**Übersicht** shows the connection to Home Assistant, the local model and which levels are switched on.
+**Overview** shows the connection to Home Assistant, the local model and which levels are switched on.
 
 ![Overview page](images/en/01-overview.png)
 
-**Einstellungen**: Home Assistant address and token (never shown again after saving), the local model, the
-levels with their "ohne Freigabe" switches and the allowed domains. Chips marked ▲ (covers, automations, locks,
+**Settings**: Home Assistant address and token (never shown again after saving), the local model, the
+levels with their "run without approval" switches and the allowed domains. Chips marked ▲ (covers, automations, locks,
 alarm) have consequences for safety or the building and should be allowed consciously.
 
 ![Settings page](images/en/02-settings.png)
 
-**Zugangsdaten**: logins for devices and services (e.g. a Shelly password). They are stored encrypted on this
+**Credentials**: logins for devices and services (e.g. a Shelly password). They are stored encrypted on this
 computer and never shown; in the chat you only name the alias, the model never sees the value.
 
 ![Credentials page](images/en/15-credentials.png)
 
-**MCP-Clients**: tokens for external AI clients, each with its own level and optional domain list. The token is
+**MCP clients**: tokens for external AI clients, each with its own level and optional domain list. The token is
 shown once when created.
 
 ![MCP clients page](images/en/17-clients.png)
 
-**Dateien**: plans and scripts the model wrote in the chat, stored on this computer only (they never reach Home
-Assistant). **Protokoll**: a metadata-only log of every call (time, tool, route, status, duration; no names,
+**Energy**: usage per device and source for today, yesterday, 7 or 30 days, the problems Home Assistant reports
+for the energy dashboard, and energy sensors that are not in it yet, with *Add* and *Remove* buttons (journaled;
+see [section 19](#19-energy-plugs-solar-battery-storage)).
+
+![Energy page](images/en/20-energy.png)
+
+**Files**: plans and scripts the model wrote in the chat, stored on this computer only (they never reach Home
+Assistant). **Audit log**: a metadata-only log of every call (time, tool, route, status, duration; no names,
 contents or tokens), deleted after 30 days.
 
 ![File manager](images/en/18-file-manager.png)
@@ -225,11 +233,24 @@ template flow with `ha_start_integration_setup` and fills in the form step by st
 | `ha_create_floor` | Creates a floor with level. Journaled. | Configure |
 | `ha_update_floor` | Changes a floor. Journaled. | Configure |
 | `ha_delete_floor` | Deletes a floor; its rooms stay. Journaled. | Delete |
-| `ha_update_device` | Moves a device to a room, renames or disables it, sets labels. Journaled. Removing devices is deliberately not offered. | Configure |
+| `ha_update_device` | Moves a device to a room, renames or disables it, sets labels. Journaled. | Configure |
+| `ha_get_device_removal` | Preview before removing a device: its entities, devices connected through it, where the entities are used, and whether its integration can remove devices at all. | Read |
+| `ha_remove_device` | Removes a device and its entities, like *Delete* on HA's device page. Only if the integration supports it; **cannot be undone** by the MCP. In the chat it always shows an approval card with the preview. | Delete |
+| `ha_list_orphaned_entities` | Entities no integration provides any more (HA: "not provided"), leftovers of removed devices. | Read |
+| `ha_remove_entity` | Removes one such orphaned entity. Entities that are still provided are refused (HA would add them again; disable them instead). Cannot be undone. | Delete |
 | `ha_update_entity_registry` | Changes an entity's name, icon, room, labels, categories, voice-assistant aliases, hidden/disabled. Journaled. | Configure |
 | `ha_rename_entity` | Changes an entity ID (`light.x` → `light.y`); HA keeps the history. Lists the automations, scripts and dashboards that still use the old ID. Journaled. | Configure |
 
 **Example**: *"Move the Arbeitslicht to the Küche and give it the alias 'Kitchen light'."*
+
+**Example (removing)**: *"Remove the old Outlet 3."* → the model shows the preview (`ha_get_device_removal`):
+one switch entity, not used anywhere, the integration supports removal. After your approval it is gone. If an
+integration does not support removing (for example *Sun*), the MCP says so and suggests disabling instead.
+The card always comes, even when deletes may run without approval (rejected here, nothing was removed):
+
+![Chat: approval card for removing a device](images/en/23a-remove-device-card.png)
+
+![Chat: after rejecting](images/en/23-chat-remove-device.png)
 
 ## 8. Labels, categories and zones
 
@@ -460,7 +481,70 @@ addresses, host names or network keys are returned.
 
 **Example**: *"Which Zigbee devices have poor reception or are offline?"*
 
-## 19. Change journal and undo
+## 19. Energy: plugs, solar, battery storage
+
+Home Assistant's energy dashboard shows where electricity comes from (grid, solar, battery storage) and which
+devices use it, for example smart plugs. The MCP reads and changes the same settings that you find in HA under
+**Settings → Dashboards → Energy**, and it can sum up the usage per device.
+
+| Tool | What it does | Level |
+|---|---|---|
+| `ha_get_energy_config` | The energy settings: sources (grid, solar, battery, gas, water) and single devices, each with HA's own check (for example "sensor does not exist") and a plain explanation. | Read |
+| `ha_find_energy_sensors` | Sensors that could go into the energy dashboard (energy, power, battery, gas, water), with unit, whether they have statistics and whether they are already used. | Read |
+| `ha_get_energy_usage` | kWh per source and per device for today, yesterday, 7 days, 30 days or this month. | Read |
+| `ha_get_solar_forecast` | The solar forecast of a forecast integration (e.g. Forecast.Solar), Wh per hour. | Read |
+| `ha_save_energy_config` | Replaces whole parts of the settings, for example all sources when you add solar and a battery. New sensors must have statistics. Journaled. | Configure |
+| `ha_add_energy_device` | Adds one device, typically a smart plug's energy sensor, optionally with its power sensor for live values. Journaled. | Configure |
+| `ha_remove_energy_device` | Removes one device from the energy dashboard; its history stays. Journaled. | Delete |
+
+**Protection**: changes are checked before they are saved (only known source types and fields, new sensors
+must exist in the statistics), so a typo cannot break the energy dashboard. Old entries that point to a vanished
+sensor do not block other changes. Every change is in the change journal, *Undo* puts the previous settings back.
+
+**Examples**:
+
+- *"How much did my plugs use today?"* → `ha_get_energy_usage` lists the devices sorted by kWh.
+- *"Add the terrace plug to the energy dashboard."* → `ha_find_energy_sensors` finds
+  `sensor.terrace_plug_energy`, `ha_add_energy_device` adds it (approval card).
+- *"I have a balcony solar system with a battery: set up solar and storage."* → the model reads the current
+  settings, picks the inverter's energy sensor as solar source and the battery's charge/discharge counters as
+  battery source, and saves all sources at once.
+- *"Which energy entries are broken?"* → `ha_get_energy_config` shows the entries whose sensor no longer exists.
+
+![Chat: energy usage of the last 7 days](images/en/21-chat-energy.png)
+
+## 20. Voice assistants (Assist)
+
+Assist is Home Assistant's own voice assistant. The MCP manages its **pipelines** (which language, which
+conversation agent, speech-to-text, text-to-speech, wake word), decides which entities voice assistants may
+**use**, and can **test sentences** without running them.
+
+| Tool | What it does | Level |
+|---|---|---|
+| `ha_list_assist_pipelines` | All pipelines with the preferred one marked, and the available conversation agents. | Read |
+| `ha_save_assist_pipeline` | Creates a pipeline (name and language are enough) or changes single fields of one. Journaled. | Configure |
+| `ha_set_preferred_assist_pipeline` | Makes a pipeline the preferred one. Journaled. | Configure |
+| `ha_delete_assist_pipeline` | Deletes a pipeline, not the preferred one. Journaled; undo recreates it. | Delete |
+| `ha_list_exposed_entities` | Which entities Assist, Alexa and Google Assistant may use, and whether new entities are added automatically. | Read |
+| `ha_set_exposure` | Exposes entities to voice assistants or hides them. Journaled with the previous value of each entity. | Configure |
+| `ha_set_expose_new_entities` | Whether entities added later are exposed automatically. Journaled. | Configure |
+| `ha_test_assist_sentences` | Shows how Assist would understand sentences (intent, target entities) **without running anything**. | Read |
+
+**Protection**: the sentence test only recognises; nothing is switched. A free "tell Assist to do something" tool
+is deliberately missing: Assist would switch devices past the MCP's domain allowlist and protected rooms. For
+switching use the normal tools.
+
+**Examples**:
+
+- *"Why does Assist not understand 'turn on the floor lamp'?"* → `ha_test_assist_sentences` shows that no entity
+  is called that; the model suggests an alias (`ha_update_entity_registry`) or exposing the lamp.
+- *"Hide all switches in the cellar from Alexa."* → `ha_list_area_entities` finds them, `ha_set_exposure` with
+  `assistants: ["cloud.alexa"]` hides them (approval card, undo possible).
+- *"Create an English pipeline and make it the default."*
+
+![Chat: sentence test without running anything](images/en/22-chat-assist.png)
+
+## 21. Change journal and undo
 
 Before every configuration change made through the MCP the previous state is stored on this computer for 30
 days. The *Changes* page lists them with an *Undo* button; the model can do the same.
@@ -471,12 +555,12 @@ days. The *Changes* page lists them with an *Undo* button; the model can do the 
 | `ha_get_change` | One change with the stored previous state (passwords in files stay masked). | Read |
 | `ha_undo_change` | Writes the previous state back (removes what was created, recreates what was deleted). The undo is journaled too and can itself be undone; with newer changes to the same item it refuses unless you insist. | Configure (Delete when it removes something) |
 
-Not journaled: switching devices and firing events, calendar and to-do items, removing an integration, options
-dialogs, updates, restarts and backups. A newly set-up integration is journaled (undo removes it).
+Not journaled: switching devices and firing events, calendar and to-do items, removing an integration, devices or
+orphaned entities, options dialogs, updates, restarts and backups. A newly set-up integration is journaled (undo removes it).
 
 ![Change journal](images/en/09-changes.png)
 
-## 20. Direct REST access (advanced)
+## 22. Direct REST access (advanced)
 
 For the rare case that no dedicated tool exists. Only documented routes of Home Assistant's REST API are
 allowed, each with its permission class.

@@ -21,6 +21,7 @@
       <button type="button" class="tab" data-view="home" data-de="Übersicht">Overview</button>
       <button type="button" class="tab" data-view="chat">Chat</button>
       <button type="button" class="tab" data-view="credentials" data-de="Zugangsdaten">Credentials</button>
+      <button type="button" class="tab" data-view="energy" data-de="Energie">Energy</button>
       <button type="button" class="tab" data-view="backups">Backups</button>
       <button type="button" class="tab" data-view="changes" data-de="Änderungen">Changes</button>
       <button type="button" class="tab" data-view="clients" data-de="MCP-Clients">MCP clients</button>
@@ -191,6 +192,36 @@
     </section>
 
     <!-- Backups of Home Assistant (HA's own backup integration) -->
+    <!-- Energy: usage per device and source from HA's energy dashboard settings -->
+    <section id="view-energy" class="view" hidden>
+      <div class="card">
+        <div class="viewer-head">
+          <h2 data-de="Energie">Energy</h2>
+          <div class="period-switch" role="group" aria-label="Period" data-de-aria-label="Zeitraum">
+            <button type="button" class="ghost small" data-period="today" data-de="Heute">Today</button>
+            <button type="button" class="ghost small" data-period="yesterday" data-de="Gestern">Yesterday</button>
+            <button type="button" class="ghost small" data-period="7d" data-de="7 Tage">7 days</button>
+            <button type="button" class="ghost small" data-period="30d" data-de="30 Tage">30 days</button>
+          </div>
+        </div>
+        <p class="muted" data-de-html="Verbrauch pro Gerät und Quelle aus dem Energie-Dashboard von Home Assistant (stündliche Statistiken, die laufende Stunde fehlt noch). Ein Gerät hinzufügen braucht „Konfiguration ändern“, herausnehmen braucht „Löschen erlauben“; beides steht im Änderungsjournal.">Usage per device and source from Home Assistant's energy dashboard (hourly statistics, the current
+          hour is still missing). Adding a device needs "Change configuration", removing one needs "Allow delete";
+          both are in the change journal.</p>
+        <div class="energy-sources" id="energy-sources"></div>
+        <table class="cred-table" id="energy-table">
+          <thead><tr><th data-de="Gerät">Device</th><th class="num">kWh</th><th class="bar-col"></th><th></th></tr></thead>
+          <tbody id="energy-rows"></tbody>
+        </table>
+        <p class="muted" id="energy-empty" hidden></p>
+        <div id="energy-problems"></div>
+        <details class="energy-candidates" id="energy-candidates-box" hidden>
+          <summary data-de="Energiesensoren, die noch nicht im Energie-Dashboard sind">Energy sensors not in the energy dashboard yet</summary>
+          <table class="cred-table"><tbody id="energy-candidates"></tbody></table>
+        </details>
+        <div class="result" id="energy-result" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+
     <section id="view-backups" class="view" hidden>
       <div class="card">
         <div class="viewer-head">

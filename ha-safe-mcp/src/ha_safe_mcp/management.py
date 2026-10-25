@@ -30,9 +30,17 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         "config/entity_registry/get", "todo/item/list", "update/release_notes",
                         "blueprint/list", "frontend/get_themes", "lovelace/resources",
                         # ecosystem views (read-only; supervisor/api limited to SUPERVISOR_READ below)
-                        "supervisor/api", "hacs/repositories/list", "zha/devices", "thread/list_datasets"}) | frozenset(
+                        "supervisor/api", "hacs/repositories/list", "zha/devices", "thread/list_datasets",
+                        # energy dashboard settings
+                        "energy/get_prefs", "energy/info", "energy/validate", "energy/solar_forecast",
+                        # assist (the debug command only recognises, it never runs an intent)
+                        "assist_pipeline/pipeline/list", "conversation/agent/list",
+                        "homeassistant/expose_entity/list", "homeassistant/expose_new_entities/get",
+                        "conversation/agent/homeassistant/debug"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
-WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "backup/generate",
+WRITE_TYPES = frozenset({"lovelace/config/save", "energy/save_prefs", "assist_pipeline/pipeline/create",
+                         "assist_pipeline/pipeline/update", "assist_pipeline/pipeline/set_preferred",
+                         "homeassistant/expose_entity", "homeassistant/expose_new_entities/set", "lovelace/dashboards/create", "backup/generate",
                          "config/area_registry/create", "config/area_registry/update",
                          "config/floor_registry/create", "config/floor_registry/update",
                          "config/device_registry/update", "config_entries/update", "config_entries/disable",
@@ -42,7 +50,8 @@ WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "
                          "zone/create", "zone/update", "blueprint/import", "blueprint/save",
                          "lovelace/resources/create"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
-DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
+DELETE_TYPES = frozenset({"assist_pipeline/pipeline/delete", "config/device_registry/remove", "config/device_registry/remove_config_entry",
+                          "config/entity_registry/remove", "lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
                           "backup/restore",
                           "config/area_registry/delete", "config/floor_registry/delete",
                           "config/entity_registry/remove", "config/label_registry/delete",

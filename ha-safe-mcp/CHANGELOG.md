@@ -3,6 +3,38 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.29.0 – 2026-10-25
+
+Wunsch „alles im MCP möglich, auch destruktive Dinge“: die bisher geparkten Punkte.
+
+- **Energie** (7 Werkzeuge): Energie-Einstellungen lesen (mit HAs eigener Prüfung und einer Erklärung pro Problem),
+  passende Sensoren finden, Verbrauch pro Gerät und Quelle (heute, gestern, 7 und 30 Tage, Monat), Solarprognose;
+  Einstellungen speichern, ein Gerät (Steckdose) hinzufügen, ein Gerät herausnehmen (Stufe Löschen). Neue Sensoren
+  müssen Statistiken haben; alles im Änderungsjournal mit Rückgängig.
+- **Geräte und verwaiste Entitäten entfernen** (4 Werkzeuge): Vorschau (Entitäten, verbundene Geräte, wo verwendet,
+  ob die Integration das kann), Gerät entfernen (Stufe Löschen, im Chat immer mit Karte), verwaiste Entitäten
+  auflisten und entfernen. Noch bereitgestellte Entitäten werden abgelehnt. Nicht rückgängig zu machen, das steht
+  überall dabei.
+- **Assist** (8 Werkzeuge): Pipelines anlegen, ändern, bevorzugen, löschen; Freigabe von Entitäten für Assist,
+  Alexa und Google; Regel für neue Entitäten; Satzprüfung, die nur erkennt. Ein freies „Sag Assist etwas“ fehlt
+  mit Absicht, weil Assist an Domain-Freigabe und Schutzräumen vorbei schalten würde.
+- **Weboberfläche: neue Seite „Energie“** mit Verbrauch pro Gerät und Quelle (heute, gestern, 7, 30 Tage), den
+  Problemen, die HA meldet, und Energiesensoren, die noch fehlen; Hinzufügen und Herausnehmen mit
+  Änderungsjournal.
+- **Freigabekarte zum Entfernen eines Geräts** zeigt die Vorschau in einfachen Worten (Gerät, Integration, welche
+  Entitäten mitgehen, wo sie verwendet werden, nicht rückgängig zu machen) statt nur der Geräte-ID.
+- **Fehler behoben:** *Rückgängig* auf der Seite „Änderungen“ kannte Labels, Kategorien, Zonen, Themes,
+  Blueprints, Ressourcen und Dateien nicht und wäre dort mit einem Serverfehler gescheitert; jetzt baut die Seite
+  dieselben Bausteine wie der MCP-Server.
+- Satzprüfung ohne Sprachangabe testet die Systemsprache und alle Pipeline-Sprachen und sagt, in welcher Sprache
+  ein Satz verstanden wird (ein englischer Satz scheiterte vorher an der deutschen Systemsprache).
+- Verbrauchsfragen ohne eingerichtetes Energie-Dashboard werden aus allen Energiesensoren beantwortet; das lokale
+  Modell versuchte vorher, dafür ungefragt ein Gerät hinzuzufügen (die Freigabekarte hatte es abgefangen).
+- 154 Werkzeuge (Lesen 73, Steuern 80, Konfigurieren 129, Löschen 154). Lokaler Chat findet die neuen Werkzeuge
+  über deutsche und englische Stichwörter.
+- Alles auf dem Dev-HA echt durchgespielt (Kitchen-Sink-Testgeräte, Demo-Energiesensoren), Energie zusätzlich nur
+  lesend gegen Prod.
+
 ## 0.28.2 – 2026-10-25
 
 - **Wiederherstellen auf HA OS**: Der Supervisor stellt Home Assistant nur zusammen mit genau der Datenbank-Wahl des

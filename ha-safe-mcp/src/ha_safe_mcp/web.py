@@ -366,21 +366,42 @@ def live_backups(settings: Settings, credentials_dir: Path, audit: AuditLog):
                      credentials=CredentialStore(credentials_dir))
 
 
+def live_energy(settings: Settings, audit: AuditLog):
+    """Energy page client: the same gated code the MCP tools use, with the saved switches."""
+    from .energy import HAEnergy
+    from .management import HAWebSocket
+    from .server import HAClient
+    client = HAClient(settings.ha_url, settings.ha_token, allow_write=settings.allow_write, audit=audit)
+    ws = HAWebSocket(client, allow_admin_write=settings.allow_admin_write, allow_delete=settings.allow_delete)
+    return HAEnergy(client, ws, allow_admin_write=settings.allow_admin_write, allow_delete=settings.allow_delete)
+
+
 def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, journal: ChangeJournal):
     """Undo for the web UI: the same gated, journaled code the MCP tools use, with the saved switches."""
+    from .assist import HAAssist
     from .changes import Changes
+    from .config_files import ConfigFiles
+    from .customize import HACustomize
+    from .energy import HAEnergy
     from .integrations import HAIntegrations
     from .management import HAAdmin
+    from .organize import HAOrganizer
     from .registry import HARegistry
     from .scenes import HAScenes
     from .server import HAClient
+    from .system import HASystem
     client = HAClient(settings.ha_url, settings.ha_token, allow_write=settings.allow_write, audit=audit)
     flags = {"allow_admin_write": settings.allow_admin_write, "allow_delete": settings.allow_delete}
     admin = HAAdmin(client, **flags)
+    # every kind the journal knows needs its object here, the same set the MCP server builds
     return Changes(journal, admin=admin, scenes=HAScenes(client, admin.ws, **flags),
                    registry=HARegistry(client, admin.ws, **flags),
                    integrations=HAIntegrations(client, admin.ws, credentials=CredentialStore(credentials_dir),
-                                               **flags))
+                                               **flags),
+                   organizer=HAOrganizer(client, admin.ws, **flags), customize=HACustomize(client, admin.ws, **flags),
+                   config_files=ConfigFiles(client, admin.ws, checker=HASystem(client, admin.ws, **flags).check_config,
+                                            **flags),
+                   energy=HAEnergy(client, admin.ws, **flags), assist=HAAssist(client, admin.ws, **flags))
 
 
 async def live_domain_source(settings: Settings):
@@ -399,7 +420,8 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                public_origin: str | None = None, access_verifier=None,
                credentials: CredentialStore | None = None, files: FileStore | None = None,
                audit: AuditLog | None = None, backups_factory=None, journal: ChangeJournal | None = None,
-               changes_factory=None, clients: ClientStore | None = None, mcp_pool=None, domain_source=None):
+               changes_factory=None, clients: ClientStore | None = None, mcp_pool=None, domain_source=None,
+               energy_factory=None):
     checks = checks or LiveChecks()
     credentials = credentials or CredentialStore()
     files = files or FileStore()
@@ -409,6 +431,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     runs.on_answer = partial(store_generated_files, files)
     backups_factory = backups_factory or (lambda settings: live_backups(settings, credentials.directory, audit))
     journal = journal or ChangeJournal()
+    energy_factory = energy_factory or (lambda settings: live_energy(settings, audit))
     changes_factory = changes_factory or (
         lambda settings: live_changes(settings, credentials.directory, audit, journal))
     lock = asyncio.Lock()
@@ -616,6 +639,72 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             return _error(str(exc), 502)
         return _ok(result)
 
+    def _energy_or_error():
+        settings = store.load()
+        if not settings.configured:
+            return None, None, _error(L("Please finish the first-run setup first", "Bitte zuerst die Ersteinrichtung abschließen"), 409)
+        return settings, energy_factory(settings), None
+
+    async def energy_page(request: Request):
+        settings, energy, problem = _energy_or_error()
+        if problem:
+            return problem
+        period = request.query_params.get("period", "today")
+        try:
+            usage = await energy.usage(period)
+            config = await energy.get_config()
+            sensors = await energy.find_sensors()
+        except ValueError as exc:
+            return _error(str(exc), 400)
+        except RuntimeError as exc:
+            return _error(str(exc), 502)
+        candidates = [s for s in sensors["energy"] if s["has_statistics"] and not s["in_energy_dashboard"]]
+        return _ok({"usage": usage, "config": config, "candidates": candidates})
+
+    async def energy_add(request: Request):
+        settings, energy, problem = _energy_or_error()
+        if problem:
+            return problem
+        if not (settings.allow_write and settings.allow_admin_write):
+            return _error(L("Changing the energy dashboard needs 'Change configuration' in the settings",
+                            "Das Energie-Dashboard ändern braucht in den Einstellungen 'Konfiguration ändern'"), 403)
+        from .changes import Changes
+        try:
+            data = await _json_body(request)
+            statistic = str(data.get("stat_consumption") or "")
+            name = str(data.get("name") or "").strip() or None
+            changes = Changes(journal, admin=None, scenes=None, registry=None, integrations=None, energy=energy)
+            result, change_id = await changes.apply("ui_energy_add", "energy", "prefs",
+                                                    lambda: energy.add_device(statistic, name=name))
+        except SetupError as exc:
+            return _error(str(exc))
+        except ValueError as exc:
+            return _error(str(exc), 400)
+        except RuntimeError as exc:
+            return _error(str(exc), 502)
+        return _ok({"saved": True, "change_id": change_id, "problem_count": result["problem_count"]})
+
+    async def energy_remove(request: Request):
+        settings, energy, problem = _energy_or_error()
+        if problem:
+            return problem
+        if not (settings.allow_write and settings.allow_admin_write and settings.allow_delete):
+            return _error(L("Removing a device from the energy dashboard needs 'Allow delete' in the settings",
+                            "Ein Gerät aus dem Energie-Dashboard nehmen braucht in den Einstellungen 'Löschen erlauben'"), 403)
+        statistic = request.path_params["statistic"]
+        if not re.fullmatch(r"[a-z0-9_]+[.:][a-z0-9_]+", statistic):
+            return _error(L("Invalid statistic ID", "Ungültige Statistik-ID"), 400)
+        from .changes import Changes
+        try:
+            changes = Changes(journal, admin=None, scenes=None, registry=None, integrations=None, energy=energy)
+            result, change_id = await changes.apply("ui_energy_remove", "energy", "prefs",
+                                                    lambda: energy.remove_device(statistic))
+        except ValueError as exc:
+            return _error(str(exc), 400)
+        except RuntimeError as exc:
+            return _error(str(exc), 502)
+        return _ok({"removed": statistic, "change_id": change_id})
+
     async def backups_delete(request: Request):
         settings, backups, problem = _backups_or_error()
         if problem:
@@ -796,6 +885,9 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/files/{kind}/{name}", files_delete, methods=["DELETE"]),
         Route("/api/audit", audit_list),
         Route("/api/audit", audit_clear, methods=["DELETE"]),
+        Route("/api/energy", energy_page),
+        Route("/api/energy/devices", energy_add, methods=["POST"]),
+        Route("/api/energy/devices/{statistic}", energy_remove, methods=["DELETE"]),
         Route("/api/backups", backups_list),
         Route("/api/backups", backups_create, methods=["POST"]),
         Route("/api/backups/{backup_id}", backups_delete, methods=["DELETE"]),

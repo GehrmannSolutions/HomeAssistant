@@ -25,7 +25,7 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 **[Feature guide](docs/FEATURES.md)**: every function in plain words, with examples and screenshots.
 
 - Read states, discover entities and services; discover entities in a room; call allowed services on one or up to 20 entities of the same domain.
-- A **fixed, documented REST route catalog** plus typed tools for automations, dashboards, helpers, registry metadata, areas/floors/devices, scenes/scripts, integration config flows and settings, and Home Assistant backups.
+- A **fixed, documented REST route catalog** plus typed tools for automations, dashboards, helpers, registry metadata, areas/floors/devices (including removing devices and orphaned entities), scenes/scripts, integration config flows and settings, Home Assistant backups, the energy dashboard (plugs, solar, battery storage) and Assist (pipelines, exposure to voice assistants, sentence test).
 - Separate gates for control, admin changes, and deletion; CLI/UI per-call confirmation by default. Other MCP clients must implement their own human approval.
 - Remote MCP endpoint `/mcp` (Streamable HTTP) for Claude Code, Codex, ChatGPT, Claude and other clients: bearer token or OAuth 2.1 login (consent page behind your UI login), one permission level per client, capped by the instance switches.
 - Deep search ("where is this entity used?") and a system overview.

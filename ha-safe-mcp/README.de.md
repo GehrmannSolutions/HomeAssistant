@@ -25,7 +25,7 @@ Der Einrichtungsassistent der Oberfläche testet deine Home-Assistant-Adresse un
 **[Funktionsübersicht](docs/FEATURES.de.md)**: jede Funktion in einfachen Worten, mit Beispielen und Screenshots.
 
 - Zustände lesen, Entitäten und Dienste finden; Entitäten in einem Raum finden; erlaubte Dienste für eine Entität oder bis zu 20 Entitäten derselben Domain aufrufen.
-- Ein **fester, dokumentierter Katalog von REST-Routen** sowie typisierte Werkzeuge für Automationen, Dashboards, Helfer, Registry-Metadaten, Bereiche/Etagen/Geräte, Szenen/Skripte, Konfigurationsabläufe (Config Flows) und Einstellungen von Integrationen sowie Home-Assistant-Backups.
+- Ein **fester, dokumentierter Katalog von REST-Routen** sowie typisierte Werkzeuge für Automationen, Dashboards, Helfer, Registry-Metadaten, Bereiche/Etagen/Geräte (auch Geräte und verwaiste Entitäten entfernen), Szenen/Skripte, Konfigurationsabläufe (Config Flows) und Einstellungen von Integrationen, Home-Assistant-Backups, das Energie-Dashboard (Steckdosen, Solar, Batteriespeicher) und Assist (Pipelines, Freigabe für Sprachassistenten, Satzprüfung).
 - Getrennte Schalter für Steuerung, administrative Änderungen und Löschen; in CLI und Oberfläche standardmäßig eine Bestätigung pro Aufruf. Andere MCP-Clients müssen ihre eigene menschliche Freigabe umsetzen.
 - Entfernter MCP-Endpunkt `/mcp` (Streamable HTTP) für Claude Code, Codex, ChatGPT, Claude und andere Clients: Bearer-Token oder OAuth-2.1-Anmeldung (Zustimmungsseite hinter deinem UI-Login), eine Berechtigungsstufe pro Client, begrenzt durch die Schalter der Instanz.
 - Tiefensuche („Wo wird diese Entität verwendet?“) und eine Systemübersicht.

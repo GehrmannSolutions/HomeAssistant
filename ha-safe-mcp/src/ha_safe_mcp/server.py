@@ -262,6 +262,9 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .management import HAAdmin
     from .integrations import HAIntegrations
     from .backups import HABackups
+    from .energy import HAEnergy
+    from .removal import HARemoval
+    from .assist import HAAssist
     from .registry import HARegistry
     from .scenes import HAScenes
     from .changes import Changes, journal_from_env
@@ -292,10 +295,14 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
+    energy = HAEnergy(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    assist = HAAssist(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
+    removal = HARemoval(client, admin.ws, overview=overview, allow_admin_write=allow_admin_write,
+                        allow_delete=allow_delete)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
                       integrations=integrations, organizer=organizer, customize=customize,
-                      config_files=config_files)
+                      config_files=config_files, energy=energy, assist=assist)
 
     async def journaled(tool_name: str, kind: str, target, writer, **options):
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
@@ -1080,6 +1087,160 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_delete_backup(backup_id: BackupId) -> dict:
         """Delete one backup by backup_id from ha_list_backups. Admin write and delete required."""
         return await backups.delete_backup(backup_id)
+
+    @tool()
+    async def ha_list_assist_pipelines() -> dict:
+        """Assist voice pipelines (conversation agent, language, speech-to-text, text-to-speech, wake word) with
+        the preferred one marked, plus the available conversation agents."""
+        return await assist.list_pipelines()
+
+    @tool()
+    async def ha_save_assist_pipeline(changes: dict, pipeline_id: str = "") -> dict:
+        """Create an Assist pipeline (no pipeline_id; needs name and language) or change one (pipeline_id from
+        ha_list_assist_pipelines; only the given fields change). Fields: name, language, conversation_engine,
+        conversation_language, stt_engine, stt_language, tts_engine, tts_language, tts_voice, wake_word_entity,
+        wake_word_id, prefer_local_intents. Journaled. Admin write required."""
+        if pipeline_id:
+            return await journaled("ha_save_assist_pipeline", "pipeline", pipeline_id,
+                                   lambda: assist.save_pipeline(pipeline_id, changes))
+        return await journaled("ha_save_assist_pipeline", "pipeline", None,
+                               lambda: assist.save_pipeline(None, changes), target_from=lambda r: r["id"])
+
+    @tool()
+    async def ha_set_preferred_assist_pipeline(pipeline_id: str) -> dict:
+        """Make a pipeline the preferred one (used by Assist unless a device picks another). Journaled. Admin
+        write required."""
+        return await journaled("ha_set_preferred_assist_pipeline", "pipeline", "preferred",
+                               lambda: assist.set_preferred(pipeline_id))
+
+    @tool()
+    async def ha_delete_assist_pipeline(pipeline_id: str) -> dict:
+        """Delete an Assist pipeline (not the preferred one). Journaled, undo recreates it with a new id. Admin
+        write and delete required."""
+        return await journaled("ha_delete_assist_pipeline", "pipeline", pipeline_id,
+                               lambda: assist.delete_pipeline(pipeline_id))
+
+    @tool()
+    async def ha_list_exposed_entities() -> dict:
+        """Which entities voice assistants may use, per assistant: conversation (Assist, also local voice),
+        cloud.alexa, cloud.google_assistant; plus whether new entities are exposed automatically."""
+        return await assist.list_exposure()
+
+    @tool()
+    async def ha_set_exposure(entity_ids: list[str], should_expose: bool,
+                              assistants: list[str] | None = None) -> dict:
+        """Expose entities to voice assistants or hide them (assistants default ['conversation'] = Assist).
+        Journaled with the previous value of every entity, undo with ha_undo_change. Admin write required."""
+        targets = assist._assistants(assistants)
+        return await journaled("ha_set_exposure", "exposure", ",".join(targets),
+                               lambda: assist.set_exposure(entity_ids, should_expose, targets),
+                               fields=list(entity_ids) if isinstance(entity_ids, list) else [entity_ids])
+
+    @tool()
+    async def ha_set_expose_new_entities(assistant: str, expose_new: bool) -> dict:
+        """Whether entities added later are exposed to an assistant automatically. Journaled. Admin write
+        required."""
+        return await journaled("ha_set_expose_new_entities", "exposure", f"new:{assistant}",
+                               lambda: assist.set_expose_new(assistant, expose_new))
+
+    @tool()
+    async def ha_test_assist_sentences(sentences: list[str], language: str = "") -> dict:
+        """Check how Assist's built-in agent would understand sentences (intent, slots, target entities)
+        WITHOUT running anything. Use it to debug voice commands, aliases and exposure. Without language it tries
+        Home Assistant's language and every pipeline language and reports where a sentence matched; null or
+        match false = not understood in any of them. Read only."""
+        return await assist.test_sentences(sentences, language)
+
+    @tool()
+    async def ha_get_device_removal(device_id: str) -> dict:
+        """Preview before removing a device: its entities, connected devices (via this hub), where the entities
+        are used (automations, scripts, scenes, dashboards), the integration and whether it supports removing
+        devices at all (can_remove, reason). Read only."""
+        return await removal.device_removal(device_id)
+
+    @tool()
+    async def ha_remove_device(device_id: str) -> dict:
+        """Remove a device and its entities from Home Assistant, like 'Delete' on the device page. Only when its
+        integration supports it (see ha_get_device_removal); the integration may still refuse. Cannot be undone
+        by the MCP; the integration may add the device again if it finds it. Show the user the preview first.
+        Prefer disabling (ha_update_device disabled_by='user') when the device may come back. Admin write and
+        delete required."""
+        return await removal.remove_device(device_id)
+
+    @tool()
+    async def ha_list_orphaned_entities() -> dict:
+        """Entities no integration provides any more (HA shows them as 'not provided', state unavailable,
+        restored): leftovers of removed devices or renamed integrations. Read only."""
+        return await removal.orphaned_entities()
+
+    @tool()
+    async def ha_remove_entity(entity_id: str) -> dict:
+        """Remove an orphaned entity (from ha_list_orphaned_entities) from the entity registry. Entities an
+        integration still provides are refused, disable those instead. Cannot be undone by the MCP. Admin write
+        and delete required."""
+        return await removal.remove_entity(entity_id)
+
+    @tool()
+    async def ha_get_energy_config() -> dict:
+        """Energy dashboard settings: energy_sources (grid, solar, battery storage, gas, water with their
+        statistics), device_consumption (single devices such as smart plugs) and device_consumption_water. Each
+        item carries Home Assistant's own validation problems (e.g. entity_not_defined). For usage questions
+        ('how much did ... use') call ha_get_energy_usage directly; it also works when nothing is configured."""
+        return await energy.get_config()
+
+    @tool()
+    async def ha_find_energy_sensors(query: str = "") -> dict:
+        """Sensors that could go into the energy dashboard, grouped as energy, power, battery, gas, water, with
+        unit, state_class, has_statistics and in_energy_dashboard (where it is already used, or false). Read only;
+        for usage numbers call ha_get_energy_usage next."""
+        return await energy.find_sensors(query)
+
+    @tool()
+    async def ha_get_energy_usage(period: Annotated[str, Field(
+            description="today, yesterday, 7d, 30d or this_month (time zone of Home Assistant)")] = "today",
+            statistic_ids: list[str] | None = None) -> dict:
+        """Energy per source (grid_import, grid_export, solar, battery_charge, battery_discharge, gas, water) and
+        per configured device in a period, summed from the hourly/daily statistics. Answers 'how much did the
+        plugs use today', 'how much solar yesterday'. statistic_ids: evaluate these energy sensors instead (also
+        ones not in the energy dashboard, from ha_find_energy_sensors). Read only: answering a usage question
+        never needs a change to the energy settings."""
+        return await energy.usage(period, statistic_ids)
+
+    @tool()
+    async def ha_get_solar_forecast() -> dict:
+        """Solar production forecast per configured forecast integration (e.g. Forecast.Solar), Wh per hour."""
+        return await energy.solar_forecast()
+
+    @tool()
+    async def ha_save_energy_config(energy_sources: list[dict] | None = None,
+                                    device_consumption: list[dict] | None = None,
+                                    device_consumption_water: list[dict] | None = None) -> dict:
+        """Replace whole parts of the energy dashboard settings; omitted parts stay. Read ha_get_energy_config
+        first and send the full list with your change. energy_sources items: {"type": "grid"|"solar"|"battery"|
+        "gas"|"water", "stat_energy_from": ..., "stat_energy_to": ... (grid export / battery charge),
+        optional cost fields and "power_config"}. Devices: {"stat_consumption": ..., "name": ...,
+        "stat_rate": <power sensor>, "included_in_stat": <parent device statistic>}. New statistic IDs must exist
+        (ha_find_energy_sensors). Journaled, undo with ha_undo_change. Admin write required; removing entries
+        this way is the same as editing them."""
+        return await journaled("ha_save_energy_config", "energy", "prefs", lambda: energy.save(
+            energy_sources, device_consumption, device_consumption_water))
+
+    @tool()
+    async def ha_add_energy_device(stat_consumption: str, name: str = "", stat_rate: str = "",
+                                   included_in_stat: str = "", water: bool = False) -> dict:
+        """Only when the user explicitly asks to add a device to the energy dashboard (never to answer a usage
+        question: ha_get_energy_usage works without it). Adds one device (e.g. a smart plug's energy sensor).
+        stat_rate: optional power sensor for live power; included_in_stat: statistic of a device it is part of
+        (so it is not counted twice); water=true for water meters. Journaled. Admin write required."""
+        return await journaled("ha_add_energy_device", "energy", "prefs", lambda: energy.add_device(
+            stat_consumption, name or None, stat_rate or None, included_in_stat or None, water))
+
+    @tool()
+    async def ha_remove_energy_device(stat_consumption: str, water: bool = False) -> dict:
+        """Remove one device from the energy dashboard (its history stays in the recorder). Journaled, undo with
+        ha_undo_change. Admin write and delete required."""
+        return await journaled("ha_remove_energy_device", "energy", "prefs", lambda: energy.remove_device(
+            stat_consumption, water))
 
     @tool()
     async def ha_find_usages(needle: str, kinds: list[str] | None = None, limit: int = 100) -> dict:

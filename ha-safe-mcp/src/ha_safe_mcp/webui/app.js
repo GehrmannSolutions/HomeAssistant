@@ -99,6 +99,7 @@ function showView(name) {
   if (name === "credentials") credentials.load();
   if (name === "files") fileManager.load();
   if (name === "backups") backupPage.load();
+  if (name === "energy") energyPage.load();
   if (name === "changes") changePage.load();
   if (name === "clients") clientPage.load();
   if (name === "audit") auditLog.load();
@@ -808,6 +809,7 @@ const chat = {
         el("div", {}, auto ? t("The model runs this action:", "Das Modell führt diese Aktion aus:") : t("The model wants to run this action:", "Das Modell möchte folgende Aktion ausführen:")),
         el("pre", {}, `${item.name}\n${argsText(item.args)}`),
         item.details && item.details.backup ? restoreSummary(item.details.backup, (item.args || {}).restore_database !== false) : null,
+        item.details && item.details.device ? removalSummary(item.details) : null,
         pending
           ? el("div", { class: "actions" },
               el("button", { type: "button", class: "danger small", onclick: () => this.decide(item, true) }, t("Run", "Ausführen")),
@@ -933,6 +935,124 @@ const fileManager = {
       setResult($("#file-result"), t(`"${item.name}" deleted.`, `»${item.name}« gelöscht.`), "ok");
     } catch (error) {
       setResult($("#file-result"), error.message, "err");
+    }
+  },
+};
+
+/* ---------------------------------------------------------------- energy */
+
+const SOURCE_LABELS = {
+  grid_import: () => t("From the grid", "Aus dem Netz"), grid_export: () => t("To the grid", "Ins Netz"),
+  solar: () => t("Solar", "Solar"), battery_charge: () => t("Battery charged", "Akku geladen"),
+  battery_discharge: () => t("Battery discharged", "Akku entladen"), gas: () => t("Gas", "Gas"),
+  water: () => t("Water", "Wasser"),
+};
+
+function energyBar(percent) {
+  // the CSP blocks style attributes; setting the width through the CSSOM is allowed
+  const bar = el("div", { class: "energy-bar" });
+  bar.style.width = `${Math.max(0, Math.min(100, Math.round(percent)))}%`;
+  return bar;
+}
+
+const energyPage = {
+  period: "today",
+
+  init() {
+    $$("#view-energy [data-period]").forEach((button) => button.addEventListener("click", () => {
+      this.period = button.dataset.period;
+      this.load();
+    }));
+  },
+
+  settings() {
+    return (app.status && app.status.settings) || {};
+  },
+
+  async load() {
+    $$("#view-energy [data-period]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.period === this.period)));
+    setResult($("#energy-result"), t("Loading …", "Lade …"));
+    try {
+      const data = await api(`/api/energy?period=${encodeURIComponent(this.period)}`);
+      this.render(data);
+      setResult($("#energy-result"), "");
+    } catch (error) {
+      this.render({ usage: { devices: [], sources: {} }, config: {}, candidates: [] });
+      setResult($("#energy-result"), error.message, "err");
+    }
+  },
+
+  render(data) {
+    const usage = data.usage || {};
+    const settings = this.settings();
+    const canAdd = Boolean(settings.allow_write && settings.allow_admin_write);
+    const canRemove = canAdd && Boolean(settings.allow_delete);
+    const fmt = (value) => Number(value || 0).toLocaleString(LOCALE, { maximumFractionDigits: 2 });
+    const sources = Object.entries(usage.sources || {});
+    $("#energy-sources").replaceChildren(...sources.map(([key, value]) => el("div", { class: "energy-source" },
+      el("span", { class: "muted" }, (SOURCE_LABELS[key] || (() => key))()), el("strong", {}, `${fmt(value)} kWh`))));
+    const configured = new Set(((data.config || {}).device_consumption || []).map((d) => d.stat_consumption));
+    const devices = usage.devices || [];
+    const top = Math.max(...devices.map((d) => d.kwh || 0), 0.001);
+    $("#energy-rows").replaceChildren(...devices.map((device) => el("tr", {},
+      el("td", {}, device.name, el("div", { class: "muted small" }, device.statistic)),
+      el("td", { class: "num" }, fmt(device.kwh)),
+      el("td", { class: "bar-col" }, energyBar(100 * (device.kwh || 0) / top)),
+      el("td", { class: "row-actions" }, canRemove && configured.has(device.statistic)
+        ? el("button", { type: "button", class: "secondary small", onclick: () => this.remove(device) }, t("Remove", "Herausnehmen"))
+        : null))));
+    $("#energy-table").hidden = devices.length === 0;
+    const empty = $("#energy-empty");
+    empty.hidden = devices.length > 0 && !usage.hint;
+    empty.textContent = usage.hint
+      ? t("The energy dashboard has no devices yet, so this shows every energy sensor with statistics.",
+          "Im Energie-Dashboard sind noch keine Geräte, deshalb stehen hier alle Energiesensoren mit Statistik.")
+      : t("No energy sensors with statistics found.", "Keine Energiesensoren mit Statistik gefunden.");
+    if (devices.length === 0 && !usage.hint) empty.hidden = false;
+    const broken = [];
+    for (const key of ["energy_sources", "device_consumption", "device_consumption_water"]) {
+      for (const item of (data.config || {})[key] || []) {
+        for (const problem of item.problems || []) {
+          broken.push(el("li", {}, el("strong", {}, item.name || item.stat_consumption || item.stat_energy_from || item.type || key), ": ",
+            problem.hint || problem.type, problem.entities && problem.entities.length ? ` (${problem.entities.join(", ")})` : ""));
+        }
+      }
+    }
+    $("#energy-problems").replaceChildren(...(broken.length ? [
+      el("h3", {}, t("Problems Home Assistant reports", "Probleme, die Home Assistant meldet")), el("ul", { class: "energy-problem-list" }, ...broken)] : []));
+    const candidates = data.candidates || [];
+    $("#energy-candidates-box").hidden = candidates.length === 0;
+    $("#energy-candidates").replaceChildren(...candidates.map((sensor) => el("tr", {},
+      el("td", {}, sensor.name || sensor.entity_id, el("div", { class: "muted small" }, sensor.entity_id)),
+      el("td", { class: "num" }, `${sensor.state} ${sensor.unit || ""}`),
+      el("td", { class: "row-actions" }, el("button", { type: "button", class: "primary small", disabled: canAdd ? null : "",
+        title: canAdd ? "" : t("Needs \"Change configuration\" in the settings", "Braucht in den Einstellungen „Konfiguration ändern“"),
+        onclick: () => this.add(sensor) }, t("Add", "Hinzufügen"))))));
+  },
+
+  async add(sensor) {
+    const name = window.prompt(t("Name in the energy dashboard:", "Name im Energie-Dashboard:"), sensor.name || sensor.entity_id);
+    if (name === null) return;
+    try {
+      const result = await api("/api/energy/devices", { method: "POST", body: { stat_consumption: sensor.entity_id, name } });
+      await this.load();
+      setResult($("#energy-result"), t(`Added. Undo on the Changes page (${result.change_id}).`,
+                                       `Hinzugefügt. Rückgängig auf der Seite Änderungen (${result.change_id}).`), "ok");
+    } catch (error) {
+      setResult($("#energy-result"), error.message, "err");
+    }
+  },
+
+  async remove(device) {
+    if (!window.confirm(t(`Remove "${device.name}" from the energy dashboard? Its history stays.`,
+                          `„${device.name}“ aus dem Energie-Dashboard nehmen? Der Verlauf bleibt erhalten.`))) return;
+    try {
+      const result = await api(`/api/energy/devices/${encodeURIComponent(device.statistic)}`, { method: "DELETE" });
+      await this.load();
+      setResult($("#energy-result"), t(`Removed. Undo on the Changes page (${result.change_id}).`,
+                                       `Herausgenommen. Rückgängig auf der Seite Änderungen (${result.change_id}).`), "ok");
+    } catch (error) {
+      setResult($("#energy-result"), error.message, "err");
     }
   },
 };
@@ -1241,6 +1361,43 @@ function restoreSummary(backup, restoreDatabase) {
     el("ul", {}, ...restoreImpact(backup, restoreDatabase).map((line) => el("li", {}, line))));
 }
 
+function removalSummary(preview) {
+  // the card's plain-words preview for ha_remove_device (details read with ha_get_device_removal)
+  const device = preview.device || {};
+  const integration = preview.integration || {};
+  const entities = preview.entities || [];
+  const usedIn = preview.used_in || [];
+  const connected = preview.connected_devices || [];
+  const facts = [
+    `${t("Device", "Gerät")}: ${device.name || device.device_id}${device.manufacturer ? ` (${device.manufacturer}${device.model ? ` ${device.model}` : ""})` : ""}`,
+    `${t("Integration", "Integration")}: ${integration.title || integration.domain || "–"}`,
+    `${t("Area", "Bereich")}: ${device.area_id || "–"}`,
+  ];
+  const impact = [
+    entities.length === 1
+      ? t(`This entity is removed with it: ${entities[0]}`, `Diese Entität wird mit entfernt: ${entities[0]}`)
+      : entities.length
+      ? t(`These ${entities.length} entities are removed with it: ${entities.join(", ")}`,
+          `Diese ${entities.length} Entitäten werden mit entfernt: ${entities.join(", ")}`)
+      : t("The device has no entities.", "Das Gerät hat keine Entitäten."),
+    usedIn.length
+      ? t(`Still used in: ${usedIn.map((u) => `${u.kind} "${u.name || u.id}" (${u.entity_id})`).join(", ")}; these stop working.`,
+          `Noch verwendet in: ${usedIn.map((u) => `${u.kind} „${u.name || u.id}“ (${u.entity_id})`).join(", ")}; das funktioniert danach nicht mehr.`)
+      : t("Its entities are not used in automations, scripts, scenes or dashboards.",
+          "Seine Entitäten werden in keiner Automation, keinem Skript, keiner Szene und keinem Dashboard verwendet."),
+    connected.length
+      ? t(`Devices connected through it: ${connected.map((d) => d.name).join(", ")}`,
+          `Darüber verbundene Geräte: ${connected.map((d) => d.name).join(", ")}`)
+      : null,
+    preview.can_remove === false ? `⚠ ${preview.reason}` : null,
+    t("This cannot be undone by the MCP; names, areas and settings are lost, the history stays. The integration may add the device again when it finds it.",
+      "Das lässt sich über den MCP nicht rückgängig machen; Namen, Bereiche und Einstellungen gehen verloren, der Verlauf bleibt. Die Integration kann das Gerät wieder anlegen, wenn sie es erneut findet."),
+  ].filter(Boolean);
+  return el("div", { class: "restore-summary" },
+    el("div", { class: "restore-facts" }, ...facts.map((line) => el("div", {}, line))),
+    el("ul", {}, ...impact.map((line) => el("li", {}, line))));
+}
+
 function formatBackupSize(bytes) {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -1311,6 +1468,7 @@ async function boot() {
   credentials.init();
   fileManager.init();
   backupPage.init();
+  energyPage.init();
   changePage.init();
   clientPage.init();
   auditLog.init();
@@ -1326,7 +1484,7 @@ async function boot() {
     showView("setup");
   } else {
     const wanted = location.hash.slice(1);
-    showView(["home", "chat", "credentials", "backups", "changes", "clients", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
+    showView(["home", "chat", "credentials", "energy", "backups", "changes", "clients", "files", "audit", "settings"].includes(wanted) ? wanted : "home");
   }
 }
 

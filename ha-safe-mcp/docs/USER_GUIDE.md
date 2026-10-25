@@ -117,7 +117,7 @@ Default write and auto flags are all `false`. The default control-domain list is
 
 In **Chat**, enabling **Allow control** in settings is not enough: tick **Allow actions** under the message box for that request. By default every proposed write shows an **Approval required** card with tool name and JSON arguments. **Run** approves *this call once*; **Reject** rejects it. Unanswered cards expire after 120 seconds; **Stop** rejects pending approvals. Multiple write calls require multiple decisions.
 
-Under **Settings**, each level has a separate **run without approval** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Allow actions** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Exception: `ha_restore_backup` always shows its card, even with Delete set to run without approval. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `YES` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
+Under **Settings**, each level has a separate **run without approval** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Allow actions** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Exceptions: `ha_restore_backup` and `ha_remove_device` always show their card, even with Delete set to run without approval. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `YES` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
 
 ### Two layers of permissions: server level and client settings
 
@@ -125,19 +125,19 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.28.2; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.29.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Read only | 64 | 64 | 0 |
-   | Control | 71 | 64 | 7 |
-   | Change configuration | 114 | 64 | 50 |
-   | Delete | 135 | 64 | 71 |
+   | Read only | 73 | 73 | 0 |
+   | Control | 80 | 73 | 7 |
+   | Change configuration | 129 | 73 | 56 |
+   | Delete | 154 | 73 | 81 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Change configuration** shows "read-only tools (64)" and "write/delete
-   tools (50)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   *Tool permissions*: a client with level **Change configuration** shows "read-only tools (73)" and "write/delete
+   tools (56)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -399,7 +399,7 @@ newest entries (`limit`, `max_points`).
 
 ### Back up before changing configuration
 
-Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Credentials**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—restore and delete backups; a download streams from HA and is not retained by MCP. `ha_delete_backup` uses a listed `backup_id` and is not a rollback mechanism.
+Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Credentials**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Energy** tab shows usage per device and source and can add or remove energy-dashboard devices (journaled). The UI **Backups** tab can list, create, download and—with delete permission—restore and delete backups; a download streams from HA and is not retained by MCP. `ha_delete_backup` uses a listed `backup_id` and is not a rollback mechanism.
 
 ### Restore a backup
 

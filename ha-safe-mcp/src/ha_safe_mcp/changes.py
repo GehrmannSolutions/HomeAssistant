@@ -20,7 +20,8 @@ MAX_ENTRIES = 1000
 CHANGE_ID = re.compile(r"^\d{8}T\d{12}Z-[0-9a-f]{8}$")
 STAMP = "%Y%m%dT%H%M%S%fZ"
 KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "helper", "entity", "area", "floor",
-         "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource", "file")
+         "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource", "file", "energy",
+         "pipeline", "exposure")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
 AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
@@ -144,8 +145,9 @@ class Changes:
     """Journaled writes and undo over the gated admin/scenes/registry/integrations objects."""
 
     def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None,
-                 customize=None, config_files=None):
+                 customize=None, config_files=None, energy=None, assist=None):
         self.journal = journal
+        self.energy, self.assist = energy, assist
         self.admin, self.scenes, self.registry, self.integrations = admin, scenes, registry, integrations
         self.organizer, self.customize, self.config_files = organizer, customize, config_files
 
@@ -232,6 +234,17 @@ class Changes:
             return _pick(item, fields or ("area_id", "name_by_user", "disabled_by", "labels"))
         if kind == "integration":
             return _pick(await self.integrations.entry_view(target), fields or ENTRY_FIELDS + ("disabled_by",))
+        if kind == "energy":
+            return await self.energy.prefs()
+        if kind == "pipeline":
+            if target == "preferred":
+                return {"preferred": await self.assist.preferred()}
+            item = await self.assist.pipeline(target)
+            return None if item is None else {k: v for k, v in item.items() if k != "id"}
+        if kind == "exposure":
+            if target.startswith("new:"):
+                return {"expose_new": await self.assist.expose_new(target[4:])}
+            return await self.assist.exposure_of(list(fields or []), target.split(","))
         raise ValueError("unknown change kind")
 
     # ------------------------------------------------------------------ journaled write
@@ -269,7 +282,8 @@ class Changes:
         if newer and not force:
             raise ValueError(f"newer changes to this target exist: {', '.join(newer[:5])}; undo them first "
                              "(newest first) or repeat with force=true to overwrite them")
-        fields = list(before) if isinstance(before, dict) and kind in ("entity", "device", "integration") else None
+        fields = list(before) if isinstance(before, dict) and kind in ("entity", "device", "integration",
+                                                                        "exposure") else None
         if kind in ("label", "category") and before is None:
             fields = ["assigned"]  # the undo deletes it: keep where it was used, so a redo can put it back
         holder: dict = {}
@@ -286,7 +300,7 @@ class Changes:
 
     def _overlaps(self, kind: str, before, other_id: str) -> bool:
         """Field-level kinds (entity, device, integration) only conflict when the same fields changed."""
-        if kind not in ("entity", "device", "integration") or not isinstance(before, dict):
+        if kind not in ("entity", "device", "integration", "exposure") or not isinstance(before, dict):
             return True
         other = self.journal.get(other_id).get("before")
         return not isinstance(other, dict) or bool(set(before) & set(other))
@@ -371,7 +385,30 @@ class Changes:
                 return await self.customize.delete_resource(target), target
             created = await self.customize.add_resource(before["url"], before.get("type") or "module")
             return created, created["id"]
+        if kind == "pipeline":
+            return await self._restore_pipeline(target, before)
+        if kind == "exposure":
+            if target.startswith("new:"):
+                return await self.assist.set_expose_new(target[4:], bool(before.get("expose_new"))), target
+            return await self.assist.restore_exposure(before), target
+        if kind == "energy":
+            # the whole energy settings go back; sensors that vanished since stay as they were stored
+            return await self.energy.save(**before, check_statistics=False), target
         raise ValueError("unknown change kind")
+
+    async def _restore_pipeline(self, target: str, before):
+        a = self.assist
+        if target == "preferred":
+            return await a.set_preferred(before["preferred"]), target
+        if before is None:
+            if target == await a.preferred():
+                raise ValueError("this pipeline was created by the change but is preferred now; make another one "
+                                 "preferred first")
+            return await a.delete_pipeline(target), target
+        if await a.pipeline(target) is not None:
+            return await a.save_pipeline(target, before), target
+        created = await a.save_pipeline(None, before)
+        return created, created["id"]
 
     async def _restore_label(self, target: str, before):
         o = self.organizer

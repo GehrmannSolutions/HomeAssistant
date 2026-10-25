@@ -148,11 +148,13 @@ async def test_deletes_need_the_delete_switch_and_read_back():
     assert await registry.delete_floor("eg") == {"deleted": True}
 
 
-def test_registry_tools_are_registered_and_device_removal_is_not():
+def test_registry_tools_are_registered_and_device_removal_is_delete_level():
     import asyncio
     from ha_safe_mcp.server import create_server
     tools = {tool.name: tool for tool in asyncio.run(create_server(HAClient("http://ha:8123", "t")).list_tools())}
     assert {"ha_list_areas", "ha_list_floors", "ha_list_devices", "ha_create_area", "ha_update_area",
             "ha_delete_area", "ha_create_floor", "ha_update_floor", "ha_delete_floor", "ha_update_device"} <= tools.keys()
-    assert "ha_delete_device" not in tools and "ha_remove_device" not in tools
+    # removing devices is wanted since 2026-10-25 (delete level, always with an approval card in the chat)
+    from ha_safe_mcp.ollama_client import write_level
+    assert "ha_delete_device" not in tools and write_level("ha_remove_device") == "delete"
     assert "ha_list_devices" in tools["ha_update_device"].inputSchema["properties"]["device_id"]["description"]

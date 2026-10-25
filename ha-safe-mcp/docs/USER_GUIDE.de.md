@@ -117,7 +117,7 @@ Alle Schreib- und Auto-Schalter stehen standardmäßig auf `false`. Die voreinge
 
 Im **Chat** reicht es nicht, **Steuern erlauben** in den Einstellungen einzuschalten: Hake für die jeweilige Anfrage unter dem Eingabefeld **Aktionen erlauben** an. Standardmäßig zeigt jeder vorgeschlagene Schreibzugriff eine Karte **Freigabe erforderlich** mit Werkzeugname und JSON-Argumenten. **Ausführen** gibt *diesen einen Aufruf einmal* frei; **Ablehnen** weist ihn zurück. Unbeantwortete Karten verfallen nach 120 Sekunden; **Stopp** lehnt offene Freigaben ab. Mehrere Schreibaufrufe erfordern mehrere Entscheidungen.
 
-Unter **Einstellungen** hat jede Stufe einen eigenen Schalter **ohne Freigabe ausführen** (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in der `.env`). Das ist **automatisches Ausführen**, keine weitergehende Berechtigung: Der passende Erlauben-Schalter, das Häkchen **Aktionen erlauben** im Chat, die Obergrenze der Oberfläche und die Prüfungen von Server und HA gelten weiterhin, nur die Freigabe-Karte für diese Stufe entfällt. Ausgeführte Aufrufe bleiben im Chat und im Metadaten-Protokoll sichtbar. Ausnahme: `ha_restore_backup` zeigt immer seine Karte, auch wenn Löschen ohne Freigabe laufen darf. Lass die Auto-Schalter aus, solange du nicht bewusst in Kauf nimmst, dass das Modell Aktionen auslöst, ohne dass du jede einzelne prüfst. Für die automatische Freigabe stuft die Oberfläche `ha_rest_write` als Administrator-Werkzeug ein, selbst wenn die konkrete REST-Route nur Steuer-Stufe hat; der Server prüft jede Route trotzdem anhand ihrer Berechtigung im Katalog. Das `YES` der Kommandozeile und die Freigabe-Mechanismen anderer MCP-Clients sind **unabhängig** von den Auto-Schaltern der Oberfläche; diese Auto-Schalter sind keine Berechtigungsschalter des Servers. Sieh dir die [Werkzeug-Referenz (englisch)](TOOLS.md) an und nutze `ha_rest_catalog` für die Berechtigungen einzelner Routen.
+Unter **Einstellungen** hat jede Stufe einen eigenen Schalter **ohne Freigabe ausführen** (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in der `.env`). Das ist **automatisches Ausführen**, keine weitergehende Berechtigung: Der passende Erlauben-Schalter, das Häkchen **Aktionen erlauben** im Chat, die Obergrenze der Oberfläche und die Prüfungen von Server und HA gelten weiterhin, nur die Freigabe-Karte für diese Stufe entfällt. Ausgeführte Aufrufe bleiben im Chat und im Metadaten-Protokoll sichtbar. Ausnahmen: `ha_restore_backup` und `ha_remove_device` zeigen immer ihre Karte, auch wenn Löschen ohne Freigabe laufen darf. Lass die Auto-Schalter aus, solange du nicht bewusst in Kauf nimmst, dass das Modell Aktionen auslöst, ohne dass du jede einzelne prüfst. Für die automatische Freigabe stuft die Oberfläche `ha_rest_write` als Administrator-Werkzeug ein, selbst wenn die konkrete REST-Route nur Steuer-Stufe hat; der Server prüft jede Route trotzdem anhand ihrer Berechtigung im Katalog. Das `YES` der Kommandozeile und die Freigabe-Mechanismen anderer MCP-Clients sind **unabhängig** von den Auto-Schaltern der Oberfläche; diese Auto-Schalter sind keine Berechtigungsschalter des Servers. Sieh dir die [Werkzeug-Referenz (englisch)](TOOLS.md) an und nutze `ha_rest_catalog` für die Berechtigungen einzelner Routen.
 
 ### Zwei Ebenen von Berechtigungen: Server-Stufe und Client-Einstellungen
 
@@ -125,19 +125,19 @@ Ein entfernter Client wird doppelt begrenzt:
 
 1. **Auf dem Server (verbindlich):** die Stufe des Clients unter **MCP-Clients** (oder die auf der Zustimmungsseite gewählte), begrenzt durch die
    Schalter der Instanz. Werkzeuge oberhalb der Stufe werden dem Client gar nicht erst angezeigt. Anzahl der Werkzeuge, die ein Client sieht
-   (Version 0.28.2; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
+   (Version 0.29.0; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
 
    | Stufe | Angezeigte Werkzeuge | als nur lesend markiert | als schreibend/löschend markiert |
    |---|---|---|---|
-   | Nur lesen | 64 | 64 | 0 |
-   | Steuern | 71 | 64 | 7 |
-   | Konfiguration ändern | 114 | 64 | 50 |
-   | Löschen | 135 | 64 | 71 |
+   | Nur lesen | 73 | 73 | 0 |
+   | Steuern | 80 | 73 | 7 |
+   | Konfiguration ändern | 129 | 73 | 56 |
+   | Löschen | 154 | 73 | 81 |
 
 2. **Im Client (zusätzlich):** Viele Clients lassen dich Werkzeuge erlauben, bestätigen lassen oder sperren. Sie gruppieren sie anhand der Hinweise,
    die dieser Server mitschickt (`readOnlyHint`, `destructiveHint`). Beispiel Claude → Settings → Connectors → der Connector →
-   *Tool permissions*: Ein Client mit der Stufe **Konfiguration ändern** zeigt „read-only tools (64)“ und „write/delete
-   tools (50)“; stellst du die erste Gruppe auf *Always allow* (immer erlauben) und die zweite auf *Blocked* (gesperrt), liest Claude nur noch.
+   *Tool permissions*: Ein Client mit der Stufe **Konfiguration ändern** zeigt „read-only tools (73)“ und „write/delete
+   tools (56)“; stellst du die erste Gruppe auf *Always allow* (immer erlauben) und die zweite auf *Blocked* (gesperrt), liest Claude nur noch.
 
 Die Client-Einstellung schützt nur diesen einen Client. Jeder andere, der dasselbe Token besitzt, wird allein durch die Server-Stufe
 begrenzt. Stell die Server-Stufe also auf das, was der Client wirklich braucht, und nutze die Client-Einstellungen als zusätzliche Schicht (oder
@@ -399,7 +399,7 @@ neuesten Einträge gekürzt (`limit`, `max_points`).
 
 ### Vor Konfigurationsänderungen sichern
 
-Verwende `ha_list_backups` `{}` (HA kann schon für das Auflisten einen Administrator verlangen). Mit Administrator-Schreibrecht bittet `ha_create_backup` `{"name":"Before example change"}` HA um ein vollständiges Backup von Konfiguration und Datenbank auf seinem lokalen Backup-Agenten und wartet, bis es erscheint. Wenn eine Verschlüsselung nötig ist, füge `"password":{"$credential":"example_backup_password","field":"password"}` hinzu, nachdem du dieses Feld unter **Zugangsdaten** gespeichert hast. Prüfe das Anlegen mit `ha_list_backups`; meldet es, dass das Backup noch läuft, sieh später noch einmal nach, statt die Antwort als Abschluss zu werten. Der Reiter **Backups** der Oberfläche kann Backups auflisten, anlegen, herunterladen und – mit Lösch-Berechtigung – wiederherstellen und löschen; ein Download wird direkt von HA übertragen und vom MCP nicht aufbewahrt. `ha_delete_backup` verwendet eine aufgelistete `backup_id` und ist kein Mechanismus zum Zurücksetzen.
+Verwende `ha_list_backups` `{}` (HA kann schon für das Auflisten einen Administrator verlangen). Mit Administrator-Schreibrecht bittet `ha_create_backup` `{"name":"Before example change"}` HA um ein vollständiges Backup von Konfiguration und Datenbank auf seinem lokalen Backup-Agenten und wartet, bis es erscheint. Wenn eine Verschlüsselung nötig ist, füge `"password":{"$credential":"example_backup_password","field":"password"}` hinzu, nachdem du dieses Feld unter **Zugangsdaten** gespeichert hast. Prüfe das Anlegen mit `ha_list_backups`; meldet es, dass das Backup noch läuft, sieh später noch einmal nach, statt die Antwort als Abschluss zu werten. Der Reiter **Energie** der Oberfläche zeigt den Verbrauch pro Gerät und Quelle und kann Geräte ins Energie-Dashboard aufnehmen oder herausnehmen (im Änderungsjournal). Der Reiter **Backups** der Oberfläche kann Backups auflisten, anlegen, herunterladen und – mit Lösch-Berechtigung – wiederherstellen und löschen; ein Download wird direkt von HA übertragen und vom MCP nicht aufbewahrt. `ha_delete_backup` verwendet eine aufgelistete `backup_id` und ist kein Mechanismus zum Zurücksetzen.
 
 ### Ein Backup wiederherstellen
 

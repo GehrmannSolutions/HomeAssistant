@@ -35,8 +35,10 @@ in der [Bedienungsanleitung](USER_GUIDE.de.md).
 - [16. Backups](#16-backups)
 - [17. Blueprints](#17-blueprints)
 - [18. Add-ons, System, HACS, Zigbee und Thread](#18-add-ons-system-hacs-zigbee-und-thread)
-- [19. Änderungsjournal und Rückgängig](#19-änderungsjournal-und-rückgängig)
-- [20. Direkter REST-Zugriff (für Fortgeschrittene)](#20-direkter-rest-zugriff-für-fortgeschrittene)
+- [19. Energie: Steckdosen, Solar, Batteriespeicher](#19-energie-steckdosen-solar-batteriespeicher)
+- [20. Sprachassistenten (Assist)](#20-sprachassistenten-assist)
+- [21. Änderungsjournal und Rückgängig](#21-änderungsjournal-und-rückgängig)
+- [22. Direkter REST-Zugriff (für Fortgeschrittene)](#22-direkter-rest-zugriff-für-fortgeschrittene)
 
 ## So liest du diese Anleitung: Stufen, Freigabekarten, Rückgängig
 
@@ -87,6 +89,12 @@ Computer gespeichert und nie angezeigt; im Chat nennst du nur den Alias, das Mod
 wird beim Anlegen einmal angezeigt.
 
 ![Seite MCP-Clients](images/de/17-clients.png)
+
+**Energie**: Verbrauch pro Gerät und Quelle für heute, gestern, 7 oder 30 Tage, die Probleme, die Home Assistant
+für das Energie-Dashboard meldet, und Energiesensoren, die noch fehlen, mit *Hinzufügen* und *Herausnehmen*
+(im Änderungsjournal; siehe [Abschnitt 19](#19-energie-steckdosen-solar-batteriespeicher)).
+
+![Seite Energie](images/de/20-energy.png)
 
 **Dateien**: Pläne und Skripte, die das Modell im Chat geschrieben hat, nur auf diesem Computer gespeichert (sie
 landen nie in Home Assistant). **Protokoll**: ein Log jedes Aufrufs, das nur Metadaten enthält (Zeit, Werkzeug,
@@ -229,11 +237,25 @@ einer eigenen Karte.
 | `ha_create_floor` | Legt eine Etage mit Ebene an. Im Änderungsjournal. | Konfigurieren |
 | `ha_update_floor` | Ändert eine Etage. Im Änderungsjournal. | Konfigurieren |
 | `ha_delete_floor` | Löscht eine Etage; ihre Bereiche bleiben erhalten. Im Änderungsjournal. | Löschen |
-| `ha_update_device` | Verschiebt ein Gerät in einen Bereich, benennt es um oder deaktiviert es, setzt Labels. Im Änderungsjournal. Geräte zu entfernen wird bewusst nicht angeboten. | Konfigurieren |
+| `ha_update_device` | Verschiebt ein Gerät in einen Bereich, benennt es um oder deaktiviert es, setzt Labels. Im Änderungsjournal. | Konfigurieren |
+| `ha_get_device_removal` | Vorschau vor dem Entfernen eines Geräts: seine Entitäten, die darüber verbundenen Geräte, wo die Entitäten verwendet werden und ob die Integration Geräte überhaupt entfernen kann. | Lesen |
+| `ha_remove_device` | Entfernt ein Gerät mit seinen Entitäten, wie *Löschen* auf der Geräteseite von HA. Nur wenn die Integration das unterstützt; **nicht rückgängig zu machen** über den MCP. Im Chat kommt immer eine Freigabekarte mit der Vorschau. | Löschen |
+| `ha_list_orphaned_entities` | Entitäten, die keine Integration mehr bereitstellt (HA: „nicht bereitgestellt“), Reste entfernter Geräte. | Lesen |
+| `ha_remove_entity` | Entfernt eine solche verwaiste Entität. Noch bereitgestellte werden abgelehnt (HA würde sie wieder anlegen; deaktiviere sie stattdessen). Nicht rückgängig zu machen. | Löschen |
 | `ha_update_entity_registry` | Ändert Name, Symbol, Bereich, Labels, Kategorien, Aliase für Sprachassistenten und ausgeblendet/deaktiviert einer Entität. Im Änderungsjournal. | Konfigurieren |
 | `ha_rename_entity` | Ändert eine Entitäts-ID (`light.x` → `light.y`); HA behält den Verlauf. Listet die Automationen, Skripte und Dashboards auf, die noch die alte ID verwenden. Im Änderungsjournal. | Konfigurieren |
 
 **Beispiel**: *"Verschiebe das Arbeitslicht in die Küche und gib ihm den Alias 'Küchenlicht'."*
+
+**Beispiel (Entfernen)**: *„Entferne die alte Outlet 3.“* → Das Modell zeigt die Vorschau (`ha_get_device_removal`):
+eine Schalter-Entität, nirgends verwendet, die Integration unterstützt das Entfernen. Nach deiner Freigabe ist sie
+weg. Unterstützt eine Integration das Entfernen nicht (zum Beispiel *Sonne*), sagt der MCP das und schlägt
+Deaktivieren vor. Die Karte kommt immer, auch wenn Löschen ohne Freigabe laufen darf (hier abgelehnt, entfernt
+wurde nichts):
+
+![Chat: Freigabekarte zum Entfernen eines Geräts](images/de/23a-remove-device-card.png)
+
+![Chat: nach dem Ablehnen](images/de/23-chat-remove-device.png)
 
 ## 8. Labels, Kategorien und Zonen
 
@@ -469,7 +491,71 @@ werden keine Geräteadressen, IP-Adressen, Hostnamen oder Netzwerkschlüssel zur
 
 **Beispiel**: *"Welche Zigbee-Geräte haben schlechten Empfang oder sind offline?"*
 
-## 19. Änderungsjournal und Rückgängig
+## 19. Energie: Steckdosen, Solar, Batteriespeicher
+
+Das Energie-Dashboard von Home Assistant zeigt, woher der Strom kommt (Netz, Solar, Batteriespeicher) und welche
+Geräte ihn verbrauchen, zum Beispiel smarte Steckdosen. Der MCP liest und ändert dieselben Einstellungen, die du in
+HA unter **Einstellungen → Dashboards → Energie** findest, und kann den Verbrauch pro Gerät zusammenrechnen.
+
+| Werkzeug | Was es tut | Stufe |
+|---|---|---|
+| `ha_get_energy_config` | Die Energie-Einstellungen: Quellen (Netz, Solar, Batterie, Gas, Wasser) und einzelne Geräte, jeweils mit HAs eigener Prüfung (zum Beispiel „Sensor gibt es nicht“) und einer Erklärung in einfachen Worten. | Lesen |
+| `ha_find_energy_sensors` | Sensoren, die ins Energie-Dashboard passen (Energie, Leistung, Batterie, Gas, Wasser), mit Einheit, ob sie Statistiken haben und ob sie schon verwendet werden. | Lesen |
+| `ha_get_energy_usage` | kWh pro Quelle und pro Gerät für heute, gestern, 7 Tage, 30 Tage oder diesen Monat. | Lesen |
+| `ha_get_solar_forecast` | Die Solarprognose einer Prognose-Integration (zum Beispiel Forecast.Solar), Wh pro Stunde. | Lesen |
+| `ha_save_energy_config` | Ersetzt ganze Teile der Einstellungen, zum Beispiel alle Quellen, wenn Solar und ein Akku dazukommen. Neue Sensoren müssen Statistiken haben. Im Änderungsjournal. | Konfigurieren |
+| `ha_add_energy_device` | Fügt ein Gerät hinzu, meist den Energiesensor einer Steckdose, wahlweise mit ihrem Leistungssensor für Live-Werte. Im Änderungsjournal. | Konfigurieren |
+| `ha_remove_energy_device` | Nimmt ein Gerät aus dem Energie-Dashboard; sein Verlauf bleibt. Im Änderungsjournal. | Löschen |
+
+**Absicherung**: Änderungen werden vor dem Speichern geprüft (nur bekannte Quellenarten und Felder, neue Sensoren
+müssen in den Statistiken vorkommen), damit ein Tippfehler das Energie-Dashboard nicht kaputt macht. Alte
+Einträge, deren Sensor verschwunden ist, blockieren andere Änderungen nicht. Jede Änderung steht im
+Änderungsjournal, *Rückgängig* stellt die vorherigen Einstellungen wieder her.
+
+**Beispiele**:
+
+- *„Wie viel haben meine Steckdosen heute verbraucht?“* → `ha_get_energy_usage` listet die Geräte nach kWh sortiert.
+- *„Nimm die Terrassen-Steckdose ins Energie-Dashboard auf.“* → `ha_find_energy_sensors` findet
+  `sensor.terrasse_steckdose_energy`, `ha_add_energy_device` fügt ihn hinzu (Freigabekarte).
+- *„Ich habe ein Balkonkraftwerk mit Akku: richte Solar und Speicher ein.“* → Das Modell liest die aktuellen
+  Einstellungen, nimmt den Energiesensor des Wechselrichters als Solarquelle und die Lade- und Entladezähler des
+  Akkus als Batteriequelle und speichert alle Quellen auf einmal.
+- *„Welche Energie-Einträge sind kaputt?“* → `ha_get_energy_config` zeigt die Einträge, deren Sensor es nicht mehr gibt.
+
+![Chat: Verbrauch der letzten 7 Tage](images/de/21-chat-energy.png)
+
+## 20. Sprachassistenten (Assist)
+
+Assist ist der eigene Sprachassistent von Home Assistant. Der MCP verwaltet seine **Pipelines** (welche Sprache,
+welcher Konversationsagent, Sprache-zu-Text, Text-zu-Sprache, Aktivierungswort), legt fest, welche Entitäten
+Sprachassistenten **benutzen** dürfen, und kann **Sätze prüfen**, ohne sie auszuführen.
+
+| Werkzeug | Was es tut | Stufe |
+|---|---|---|
+| `ha_list_assist_pipelines` | Alle Pipelines, die bevorzugte markiert, dazu die verfügbaren Konversationsagenten. | Lesen |
+| `ha_save_assist_pipeline` | Legt eine Pipeline an (Name und Sprache genügen) oder ändert einzelne Felder. Im Änderungsjournal. | Konfigurieren |
+| `ha_set_preferred_assist_pipeline` | Macht eine Pipeline zur bevorzugten. Im Änderungsjournal. | Konfigurieren |
+| `ha_delete_assist_pipeline` | Löscht eine Pipeline, nicht die bevorzugte. Im Änderungsjournal; Rückgängig legt sie neu an. | Löschen |
+| `ha_list_exposed_entities` | Welche Entitäten Assist, Alexa und Google Assistant benutzen dürfen und ob neue Entitäten automatisch dazukommen. | Lesen |
+| `ha_set_exposure` | Gibt Entitäten für Sprachassistenten frei oder blendet sie aus. Im Änderungsjournal mit dem vorherigen Wert jeder Entität. | Konfigurieren |
+| `ha_set_expose_new_entities` | Ob später hinzukommende Entitäten automatisch freigegeben werden. Im Änderungsjournal. | Konfigurieren |
+| `ha_test_assist_sentences` | Zeigt, wie Assist Sätze verstehen würde (Absicht, Ziel-Entitäten), **ohne etwas auszuführen**. | Lesen |
+
+**Absicherung**: Die Satzprüfung erkennt nur, geschaltet wird nichts. Ein freies „Sag Assist, es soll etwas tun“
+fehlt mit Absicht: Assist würde Geräte an der Domain-Freigabe und den Schutzräumen des MCP vorbei schalten. Zum
+Schalten nimm die normalen Werkzeuge.
+
+**Beispiele**:
+
+- *„Warum versteht Assist ‚schalte die Stehlampe an‘ nicht?“* → `ha_test_assist_sentences` zeigt, dass keine Entität
+  so heißt; das Modell schlägt einen Alias vor (`ha_update_entity_registry`) oder die Freigabe der Lampe.
+- *„Blende alle Schalter im Keller für Alexa aus.“* → `ha_list_area_entities` findet sie, `ha_set_exposure` mit
+  `assistants: ["cloud.alexa"]` blendet sie aus (Freigabekarte, rückgängig machbar).
+- *„Leg eine englische Pipeline an und mach sie zum Standard.“*
+
+![Chat: Satzprüfung, ohne etwas auszuführen](images/de/22-chat-assist.png)
+
+## 21. Änderungsjournal und Rückgängig
 
 Vor jeder Konfigurationsänderung über den MCP wird der vorherige Zustand 30 Tage lang auf diesem Computer
 gespeichert. Die Seite *Änderungen* listet sie mit einer Schaltfläche *Rückgängig* auf; das Modell kann dasselbe.
@@ -481,12 +567,12 @@ gespeichert. Die Seite *Änderungen* listet sie mit einer Schaltfläche *Rückg�
 | `ha_undo_change` | Schreibt den vorherigen Zustand zurück (entfernt, was neu angelegt wurde, und legt neu an, was gelöscht wurde). Auch das Rückgängigmachen kommt ins Änderungsjournal und lässt sich selbst wieder rückgängig machen; gibt es neuere Änderungen am selben Element, lehnt es ab, außer du bestehst darauf. | Konfigurieren (Löschen, wenn dabei etwas entfernt wird) |
 
 Nicht im Änderungsjournal: Geräte schalten und Ereignisse auslösen, Kalender- und To-do-Einträge, das Entfernen
-einer Integration, Options-Dialoge, Updates, Neustarts und Backups. Eine neu eingerichtete Integration kommt ins
+einer Integration, von Geräten oder verwaisten Entitäten, Options-Dialoge, Updates, Neustarts und Backups. Eine neu eingerichtete Integration kommt ins
 Änderungsjournal (Rückgängig entfernt sie).
 
 ![Änderungsjournal](images/de/09-changes.png)
 
-## 20. Direkter REST-Zugriff (für Fortgeschrittene)
+## 22. Direkter REST-Zugriff (für Fortgeschrittene)
 
 Für den seltenen Fall, dass es kein eigenes Werkzeug gibt. Erlaubt sind nur dokumentierte Routen der REST-API von
 Home Assistant, jede mit ihrer Berechtigungsklasse.

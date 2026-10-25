@@ -33,7 +33,10 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_release_notes", "ha_check_config", "ha_list_blueprints", "ha_list_themes",
                         "ha_list_dashboard_resources", "ha_get_weather_forecast", "ha_list_addons",
                         "ha_get_system_info", "ha_list_hacs_repositories", "ha_list_zigbee_devices",
-                        "ha_list_thread_networks", "ha_list_config_files", "ha_read_config_file"})
+                        "ha_list_thread_networks", "ha_list_config_files", "ha_read_config_file",
+                        "ha_get_energy_config", "ha_find_energy_sensors", "ha_get_energy_usage",
+                        "ha_get_solar_forecast", "ha_get_device_removal", "ha_list_orphaned_entities",
+                        "ha_list_assist_pipelines", "ha_list_exposed_entities", "ha_test_assist_sentences"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -53,7 +56,10 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_install_update", "ha_restart", "ha_preview_blueprint", "ha_save_blueprint",
                          "ha_delete_blueprint", "ha_set_theme", "ha_add_dashboard_resource",
                          "ha_delete_dashboard_resource", "ha_fire_event", "ha_edit_config_file",
-                         "ha_write_config_file", "ha_delete_config_file"})
+                         "ha_write_config_file", "ha_delete_config_file", "ha_save_energy_config",
+                         "ha_add_energy_device", "ha_remove_energy_device", "ha_remove_device",
+                         "ha_remove_entity", "ha_save_assist_pipeline", "ha_set_preferred_assist_pipeline",
+                         "ha_delete_assist_pipeline", "ha_set_exposure", "ha_set_expose_new_entities"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
                            "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
@@ -61,16 +67,18 @@ DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_d
                           "ha_delete_scene", "ha_delete_script", "ha_delete_label", "ha_delete_category",
                           "ha_delete_zone", "ha_delete_calendar_event", "ha_remove_todo_items",
                           "ha_install_update", "ha_restart", "ha_delete_blueprint", "ha_delete_dashboard_resource",
-                          "ha_delete_config_file",
+                          "ha_delete_config_file", "ha_remove_energy_device", "ha_remove_device",
+                          "ha_remove_entity", "ha_delete_assist_pipeline",
                           # an undo may remove what a change created, so it never runs without a card unless
                           # deletes may run without one
                           "ha_undo_change"})
 
 
 # Never run without an approval card in the web UI chat, even when the level is set to "run without approval".
-ALWAYS_ASK = frozenset({"ha_restore_backup"})
+ALWAYS_ASK = frozenset({"ha_restore_backup", "ha_remove_device"})
 # Read tool whose result is shown on the approval card (what exactly would happen), with its arguments.
-CARD_DETAILS = {"ha_restore_backup": ("ha_get_backup", lambda args: {"backup_id": args.get("backup_id")})}
+CARD_DETAILS = {"ha_restore_backup": ("ha_get_backup", lambda args: {"backup_id": args.get("backup_id")}),
+                "ha_remove_device": ("ha_get_device_removal", lambda args: {"device_id": args.get("device_id")})}
 
 
 def write_level(name: str) -> str | None:
@@ -228,6 +236,21 @@ TOOL_TOPICS = (
     (r"[üu]berblick|[üu]bersicht|zusammenfassung|wie viele|anzahl|status (?:meines|des) (?:systems|hauses)|"
      r"bestandsaufnahme|inventar|overview|summary|summari[sz]e|how many|number of|inventory|status of my",
      {"ha_get_overview"}),
+    (r"energie|strom|verbrauch|kwh|\bwatt|leistung|solar|photovoltaik|\bpv\b|balkonkraftwerk|wechselrichter|"
+     r"akku|batteriespeicher|speicher|einspeis|netzbezug|steckdose|energy|electricity|consumption|power usage|"
+     r"inverter|battery storage|feed.?in|grid|smart plug|\bplugs?\b|forecast",
+     {"ha_get_energy_config", "ha_find_energy_sensors", "ha_get_energy_usage", "ha_get_solar_forecast",
+      "ha_save_energy_config", "ha_add_energy_device", "ha_remove_energy_device", "ha_get_statistics",
+      "ha_list_statistic_ids", "ha_search_entities"}),
+    (r"assist|sprach|stimme|wake ?word|aktivierungswort|pipeline|alexa|google assistant|voice|speech|"
+     r"freigegeben|freigeben|exposed?|expose",
+     {"ha_list_assist_pipelines", "ha_save_assist_pipeline", "ha_set_preferred_assist_pipeline",
+      "ha_delete_assist_pipeline", "ha_list_exposed_entities", "ha_set_exposure", "ha_set_expose_new_entities",
+      "ha_test_assist_sentences", "ha_get_entity_registry", "ha_update_entity_registry"}),
+    (r"entfern|l[öo]sch|verwaist|aufr[äa]um|nicht (?:mehr )?bereitgestellt|remove|delete|orphan|clean ?up|"
+     r"not provided|leftover",
+     {"ha_list_devices", "ha_get_device_removal", "ha_remove_device", "ha_list_orphaned_entities",
+      "ha_remove_entity", "ha_find_usages", "ha_update_device"}),
     (r"backup|sicherung|wiederherstell|restore|back up", {"ha_list_backups", "ha_get_backup", "ha_create_backup", "ha_delete_backup", "ha_restore_backup",
                                                    "ha_list_credentials"}),
     (r"\brest\b|\bapi\b|histor|logbuch|template|ereignis|\bevent\b", {"ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete"}),

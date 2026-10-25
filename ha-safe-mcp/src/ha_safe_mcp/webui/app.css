@@ -301,3 +301,18 @@ button.primary.small { padding: 6px 12px; font-size: 0.9rem; }
 .domain-picker .risk-note { color: var(--warn); font-size: 0.75rem; }
 .domain-picker .domain-hint { flex-basis: 100%; margin: 2px 0 0; }
 .domain-picker .small { font-size: 0.8rem; }
+
+/* energy page */
+.period-switch { display: flex; gap: 4px; flex-wrap: wrap; }
+.period-switch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.energy-sources { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.energy-source { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 8px; min-width: 120px; }
+.energy-source strong { font-size: 1.1rem; }
+#energy-table .num, #energy-candidates td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#energy-table .bar-col { width: 40%; }
+.energy-bar { height: 10px; border-radius: 5px; background: var(--accent); min-width: 3px; }
+.energy-problem-list { margin: 4px 0 12px 18px; padding: 0; }
+.energy-candidates { margin-top: 12px; }
+.energy-candidates summary { cursor: pointer; color: var(--muted); }
+.muted.small { font-size: 0.8rem; }
