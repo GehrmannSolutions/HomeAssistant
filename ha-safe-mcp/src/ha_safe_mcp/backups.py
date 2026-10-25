@@ -32,6 +32,7 @@ BACKUP_ID = re.compile(r"^[0-9a-z]{6,64}$")
 AGENT_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_\-]+$")
 NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,100}$")
 LOCAL_AGENT = "backup.local"
+LOCAL_AGENTS = (LOCAL_AGENT, "hassio.local")  # Core install, HA OS/Supervised
 FIELDS = ("backup_id", "name", "date", "protected", "homeassistant_included", "database_included", "folders",
           "homeassistant_version")
 CREATE_TIMEOUT = 600
@@ -108,7 +109,7 @@ class HABackups:
         self._check_write()
         if not isinstance(name, str) or not NAME.fullmatch(name.strip() or "\x00"):
             raise ValueError("invalid name: 1-100 printable characters")
-        payload = {"agent_ids": [LOCAL_AGENT], "name": name.strip(), "include_database": True,
+        payload = {"agent_ids": [await self._local_agent()], "name": name.strip(), "include_database": True,
                    "include_homeassistant": True}
         used: dict[str, str] = {}
         if password not in (None, ""):
@@ -147,6 +148,15 @@ class HABackups:
         errors = result.get("agent_errors") if isinstance(result, dict) else {}
         return {"deleted": not errors, "agent_errors": {str(k): "error" for k in (errors or {})}}
 
+    async def _local_agent(self) -> str:
+        """The local storage agent: 'backup.local' on Core installs, 'hassio.local' on HA OS/Supervised."""
+        agents = await self.ws.command("backup/agents/info")
+        ids = [item.get("agent_id") for item in (agents or {}).get("agents", []) if isinstance(item, dict)]
+        for preferred in LOCAL_AGENTS:
+            if preferred in ids:
+                return preferred
+        raise RuntimeError("No local backup storage found in Home Assistant (expected backup.local or hassio.local)")
+
     async def _core_state(self) -> str | None:
         config = await self.client._request("GET", "/api/config", timeout=10)
         return config.get("state") if isinstance(config, dict) else None
@@ -161,7 +171,8 @@ class HABackups:
     @staticmethod
     def _agent(backup: dict) -> str | None:
         agents = backup.get("agents") if isinstance(backup.get("agents"), dict) else {}
-        return LOCAL_AGENT if LOCAL_AGENT in agents else next((a for a in agents if AGENT_ID.fullmatch(str(a))), None)
+        local = next((agent for agent in LOCAL_AGENTS if agent in agents), None)
+        return local or next((a for a in agents if AGENT_ID.fullmatch(str(a))), None)
 
     @staticmethod
     def restore_impact(backup: dict, restore_database: bool = True) -> list[str]:
@@ -273,9 +284,9 @@ class HABackups:
             raise ValueError(L("Backup not found", "Backup nicht gefunden"))
         backup = listed[backup_id]
         agents = backup.get("agents") if isinstance(backup.get("agents"), dict) else {}
-        agent = LOCAL_AGENT if LOCAL_AGENT in agents else next((a for a in agents if AGENT_ID.fullmatch(str(a))), None)
+        agent = self._agent(backup)
         if agent is None:
-            raise ValueError("Backup hat keinen herunterladbaren Speicherort")
+            raise ValueError("Backup has no downloadable storage location")
         filename = f"{_slug(str(backup.get('name') or ''))}-{backup_id}.tar"
         started, status, error = time.monotonic(), None, None
         try:

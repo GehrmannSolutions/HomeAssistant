@@ -23,7 +23,8 @@ NEW = {**OLD, "backup_id": "bbbb2222", "name": "MCP Test", "date": "2026-10-24T1
 
 
 class FakeWS:
-    def __init__(self, infos=None, *, generate_result=None, restore=None):
+    def __init__(self, infos=None, *, generate_result=None, restore=None, agents=("backup.local",)):
+        self.agents = list(agents)
         self.calls = []
         self.infos = list(infos or [])
         self.generate_result = generate_result or {"backup_job_id": "job1"}
@@ -41,7 +42,7 @@ class FakeWS:
                 raise self.restore
             return None
         if kind == "backup/agents/info":
-            return {"agents": [{"agent_id": "backup.local", "name": "local"}]}
+            return {"agents": [{"agent_id": agent, "name": agent} for agent in self.agents]}
         if kind == "backup/generate":
             return self.generate_result
         if kind == "backup/delete":
@@ -88,8 +89,7 @@ async def test_create_needs_admin_write(tmp_path):
 async def test_create_starts_a_local_backup_and_waits_for_the_new_one(tmp_path):
     ws = FakeWS([info(OLD), info(OLD, state="create_backup"), info(OLD, NEW)])
     result = await make(tmp_path, ws).create_backup("MCP Test")
-    kind, payload = ws.calls[1]
-    assert kind == "backup/generate"
+    payload = next(payload for kind, payload in ws.calls if kind == "backup/generate")
     assert payload == {"agent_ids": ["backup.local"], "name": "MCP Test", "include_database": True,
                        "include_homeassistant": True}
     assert result["backup"]["backup_id"] == "bbbb2222" and result["completed"] is True
@@ -310,3 +310,18 @@ async def test_restore_waits_for_delayed_writes_before_the_safety_backup_and_for
     assert slept[0] == 12 and generate_at > 0
     assert result["restored"] is True and result["ha_state"] == "RUNNING"
     assert next(states, None) is None  # polled until RUNNING
+
+
+async def test_create_uses_the_supervisor_local_agent_on_home_assistant_os(tmp_path):
+    """Prod (HA OS) has only 'hassio.local'; 'backup.local' exists only on Core installs."""
+    ws = FakeWS([info(), info(NEW)], agents=("hassio.local", "cloud.example"))
+    await make(tmp_path, ws).create_backup("MCP Test")
+    generate = next(payload for kind, payload in ws.calls if kind == "backup/generate")
+    assert generate["agent_ids"] == ["hassio.local"]
+
+
+async def test_create_refuses_when_there_is_no_local_agent(tmp_path):
+    ws = FakeWS([info()], agents=("cloud.example",))
+    with pytest.raises(RuntimeError, match="local"):
+        await make(tmp_path, ws).create_backup("MCP Test")
+    assert "backup/generate" not in [kind for kind, _ in ws.calls]

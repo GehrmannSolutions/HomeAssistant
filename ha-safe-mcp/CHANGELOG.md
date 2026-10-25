@@ -3,6 +3,14 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.28.1 – 2026-10-25
+
+- **Backups auf HA OS**: Der lokale Speicherort heißt dort `hassio.local`, nicht `backup.local` (nur Core-Installation).
+  `ha_create_backup` – und damit auch das Sicherheits-Backup vor einem Wiederherstellen – nahm fest `backup.local` und
+  wäre auf HA OS gescheitert. Jetzt wählt der MCP den lokalen Speicherort aus `backup/agents/info`; ohne lokalen
+  Speicherort bricht er mit einer klaren Meldung ab. Gefunden beim lesenden Blick auf die Prod-Instanz, bevor dort ein
+  Backup angelegt wurde; danach auf Dev (`backup.local`) und Prod (`hassio.local`) erfolgreich getestet.
+
 ## 0.28.0 – 2026-10-25
 
 - **Backups wiederherstellen**: `ha_restore_backup` (Stufe Löschen) setzt die Konfiguration von Home Assistant und

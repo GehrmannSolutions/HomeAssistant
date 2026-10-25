@@ -125,7 +125,7 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.28.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.28.1; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
