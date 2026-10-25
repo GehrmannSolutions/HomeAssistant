@@ -417,7 +417,8 @@ Calendar entries and list items are your data, not configuration, so they are no
   configuration back to that date, changes since then lost, newer users and tokens stop working, HA restarts.
 - Right before restoring, the MCP makes a **safety backup** of the current state. If that fails, nothing is
   restored. Restoring the safety backup undoes the restore.
-- Only configuration and (optionally) the database are restored, never add-ons or folders. Encrypted backups need
+- Only configuration and (optionally) the database are restored, never add-ons or folders. On Home Assistant OS a
+  backup with a database can only be restored together with it; the MCP says so before doing anything. Encrypted backups need
   their password as a reference to *Credentials*.
 - The tool waits until Home Assistant is back and reports `restored: true/false` from HA's own restore result.
 

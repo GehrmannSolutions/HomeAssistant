@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.28.2 – 2026-10-25
+
+- **Wiederherstellen auf HA OS**: Der Supervisor stellt Home Assistant nur zusammen mit genau der Datenbank-Wahl des
+  Backups wieder her („Restore database must match backup“). Enthält das Backup eine Datenbank, geht „nur
+  Konfiguration“ dort nicht. Der MCP prüft das jetzt **vor** dem Sicherheits-Backup und sagt klar, dass
+  `restore_database=true` nötig ist; `ha_get_backup` meldet `database_can_be_kept`.
+- Gefunden beim ersten echten Wiederherstellen auf Prod (auf Wunsch): Der Versuch ohne Datenbank wurde von HA
+  abgelehnt, es wurde nichts verändert. Danach mit Datenbank: Test-Helfer, der nach dem Backup angelegt wurde, war
+  weg, HA lief nach gut einer Minute wieder vollständig; Sicherheits-Backup für das Rückgängigmachen vorhanden.
+
 ## 0.28.1 – 2026-10-25
 
 - **Backups auf HA OS**: Der lokale Speicherort heißt dort `hassio.local`, nicht `backup.local` (nur Core-Installation).

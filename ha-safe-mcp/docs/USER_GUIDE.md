@@ -125,7 +125,7 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.28.1; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.28.2; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
@@ -410,7 +410,7 @@ Restoring replaces Home Assistant's configuration (and, unless you pass `"restor
 3. The MCP first creates a **safety backup** of the current state (nothing is restored if that fails), then asks HA to restore and waits for the restart (up to 15 minutes). The result names `restored` (true/false, from HA's own result) and `safety_backup`.
 4. To undo, restore the safety backup the same way.
 
-Add-ons and folders are never restored by the MCP; use HA's **Settings → System → Backups** for those.
+On Home Assistant OS the database choice must match the backup: a backup that contains a database can only be restored together with it (`ha_get_backup` shows `database_can_be_kept`). Add-ons and folders are never restored by the MCP; use HA's **Settings → System → Backups** for those.
 
 ## 4. Pitfalls and troubleshooting
 

@@ -1065,7 +1065,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_restore_backup(backup_id: BackupId, restore_database: Annotated[bool, Field(
             description="true = also replace the history database (recorder) with the backup's; false = keep the "
-                        "current history. Use false whenever the user wants to keep history, data or the database"
+                        "current history. Use false whenever the user wants to keep history, data or the database; not possible on "
+                        "Home Assistant OS when the backup contains a database (see database_can_be_kept)"
             )] = True, password: dict | None = None) -> dict:
         """Restore Home Assistant's configuration (and with restore_database=true also its history database)
         from a backup. Far-reaching: replaces the current configuration, HA restarts, changes since the backup

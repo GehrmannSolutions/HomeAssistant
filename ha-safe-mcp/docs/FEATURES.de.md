@@ -425,7 +425,8 @@ Kalendertermine und Listeneinträge sind deine Daten, keine Konfiguration, desha
   funktionieren nicht mehr, HA startet neu.
 - Direkt vor dem Wiederherstellen legt der MCP ein **Sicherheits-Backup** des aktuellen Stands an. Klappt das nicht,
   wird nichts wiederhergestellt. Wer das Sicherheits-Backup zurückspielt, macht das Wiederherstellen rückgängig.
-- Zurückgesetzt werden nur die Konfiguration und (wahlweise) die Datenbank, nie Add-ons oder Ordner. Verschlüsselte
+- Zurückgesetzt werden nur die Konfiguration und (wahlweise) die Datenbank, nie Add-ons oder Ordner. Auf Home
+  Assistant OS geht ein Backup mit Datenbank nur zusammen mit ihr; das sagt der MCP, bevor er irgendetwas tut. Verschlüsselte
   Backups brauchen ihr Passwort als Verweis auf *Zugangsdaten*.
 - Das Werkzeug wartet, bis Home Assistant wieder läuft, und meldet `restored: true/false` aus dem eigenen Ergebnis
   von HA.

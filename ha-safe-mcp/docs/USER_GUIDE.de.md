@@ -125,7 +125,7 @@ Ein entfernter Client wird doppelt begrenzt:
 
 1. **Auf dem Server (verbindlich):** die Stufe des Clients unter **MCP-Clients** (oder die auf der Zustimmungsseite gewählte), begrenzt durch die
    Schalter der Instanz. Werkzeuge oberhalb der Stufe werden dem Client gar nicht erst angezeigt. Anzahl der Werkzeuge, die ein Client sieht
-   (Version 0.28.1; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
+   (Version 0.28.2; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
 
    | Stufe | Angezeigte Werkzeuge | als nur lesend markiert | als schreibend/löschend markiert |
    |---|---|---|---|
@@ -410,7 +410,7 @@ Beim Wiederherstellen wird die Konfiguration von Home Assistant (und, wenn du ni
 3. Der MCP legt zuerst ein **Sicherheits-Backup** des aktuellen Stands an (klappt das nicht, wird nichts wiederhergestellt), bittet dann HA um das Wiederherstellen und wartet den Neustart ab (bis zu 15 Minuten). Das Ergebnis nennt `restored` (true/false, aus dem eigenen Ergebnis von HA) und `safety_backup`.
 4. Zum Rückgängigmachen stellst du das Sicherheits-Backup genauso wieder her.
 
-Add-ons und Ordner stellt der MCP nie wieder her; dafür nutzt du in HA **Einstellungen → System → Backups**.
+Auf Home Assistant OS muss die Datenbank-Wahl zum Backup passen: Ein Backup mit Datenbank lässt sich nur zusammen mit ihr wiederherstellen (`ha_get_backup` zeigt `database_can_be_kept`). Add-ons und Ordner stellt der MCP nie wieder her; dafür nutzt du in HA **Einstellungen → System → Backups**.
 
 ## 4. Stolperfallen und Fehlerbehebung
 

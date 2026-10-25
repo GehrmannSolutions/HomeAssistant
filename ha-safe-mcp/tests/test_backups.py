@@ -325,3 +325,20 @@ async def test_create_refuses_when_there_is_no_local_agent(tmp_path):
     with pytest.raises(RuntimeError, match="local"):
         await make(tmp_path, ws).create_backup("MCP Test")
     assert "backup/generate" not in [kind for kind, _ in ws.calls]
+
+
+async def test_on_home_assistant_os_the_database_choice_must_match_the_backup(tmp_path):
+    """Supervisor (hassio/backup.py): 'Restore database must match backup' - found on prod. Refuse before the
+    safety backup so nothing is created for nothing."""
+    supervised = {**OLD, "agents": {"hassio.local": {"protected": False, "size": 10}}}
+    ws = FakeWS([info(supervised)], agents=("hassio.local",))
+    with pytest.raises(ValueError, match="restore_database=true"):
+        await make(tmp_path, ws, delete=True).restore_backup("aaaa1111", restore_database=False)
+    assert [kind for kind, _ in ws.calls] == ["backup/info"]
+
+
+async def test_get_backup_tells_whether_the_database_can_be_kept(tmp_path):
+    supervised = {**OLD, "agents": {"hassio.local": {"protected": False, "size": 10}}}
+    result = await make(tmp_path, FakeWS([info(supervised)], agents=("hassio.local",))).get_backup("aaaa1111")
+    assert result["database_can_be_kept"] is False
+    assert (await make(tmp_path, FakeWS([info(OLD)])).get_backup("aaaa1111"))["database_can_be_kept"] is True

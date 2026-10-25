@@ -187,11 +187,17 @@ class HABackups:
                  "Home Assistant restarts and is unavailable for a while; add-ons and folders are not touched."]
         return lines
 
+    @staticmethod
+    def _database_can_be_kept(agent: str | None, reduced: dict) -> bool:
+        """The Supervisor restores HA only with exactly the backup's database choice (hassio/backup.py)."""
+        return not (str(agent or "").startswith("hassio.") and reduced.get("database_included"))
+
     async def get_backup(self, backup_id: str) -> dict:
         backup_id = self._backup_id(backup_id)
         _, backup = await self._listed(backup_id)
         reduced = self._reduce(backup)
-        return {"backup": reduced, "restore_impact": self.restore_impact(reduced)}
+        return {"backup": reduced, "restore_impact": self.restore_impact(reduced),
+                "database_can_be_kept": self._database_can_be_kept(self._agent(backup), reduced)}
 
     async def restore_backup(self, backup_id: str, restore_database: bool = True, password=None) -> dict:
         backup_id = self._backup_id(backup_id)
@@ -209,6 +215,10 @@ class HABackups:
         agent = self._agent(backup)
         if agent is None:
             raise ValueError("Backup has no storage location this MCP can restore from")
+        if not restore_database and not self._database_can_be_kept(agent, reduced):
+            raise ValueError("On Home Assistant OS the database must be restored together with the configuration "
+                             "when the backup contains one: call again with restore_database=true (the history "
+                             "since the backup is then lost)")
         used: dict[str, str] = {}
         payload = {"backup_id": backup_id, "agent_id": agent, "restore_homeassistant": True,
                    "restore_database": restore_database}
