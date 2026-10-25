@@ -298,11 +298,11 @@ async def test_ingress_backend_creates_missing_nested_folders_when_listing_them_
     respx_mock.post(base + "/api/newfolder").mock(side_effect=newfolder)
     respx_mock.post(base + "/api/save").mock(side_effect=save)
     backend = IngressFiles(HAClient(URL, "t"), IngressWS())
-    assert await backend.read_raw("www/floorplan/hestia/eg.svg") is None
+    assert await backend.read_raw("www/floorplan/plans/eg.svg") is None
     assert await backend.listdir("www/floorplan") is None
-    await backend.write_raw("www/floorplan/hestia/eg.svg", "<svg/>")
-    assert folders == ["/homeassistant/www/floorplan", "/homeassistant/www/floorplan/hestia"]
-    assert saved == {"/homeassistant/www/floorplan/hestia/eg.svg": "<svg/>"}
+    await backend.write_raw("www/floorplan/plans/eg.svg", "<svg/>")
+    assert folders == ["/homeassistant/www/floorplan", "/homeassistant/www/floorplan/plans"]
+    assert saved == {"/homeassistant/www/floorplan/plans/eg.svg": "<svg/>"}
 
 
 async def test_without_file_access_the_tools_say_how_to_get_it(monkeypatch):
