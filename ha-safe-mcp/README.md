@@ -27,6 +27,8 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
   and custom events.
 - Weather forecast (daily, hourly) from Home Assistant's weather entities.
 - Read-only views of add-ons, system health, HACS, Zigbee devices and Thread networks.
+- Read and edit configuration files (YAML, packages, custom components) with credential masking, config check,
+  automatic revert and undo; via the File editor add-on or a local config directory.
 - Blueprints (import from URL), themes and dashboard resources.
 - Updates, configuration check, reload and restart (restart only after a passing check).
 - Calendars and to-do lists: read events and items, add, change, tick off, delete.

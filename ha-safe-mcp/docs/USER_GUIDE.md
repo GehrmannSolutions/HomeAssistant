@@ -114,19 +114,19 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.25.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.26.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 61 | 61 | 0 |
-   | Steuern | 68 | 61 | 7 |
-   | Konfiguration ändern | 109 | 61 | 48 |
-   | Löschen | 128 | 61 | 67 |
+   | Nur lesen | 63 | 63 | 0 |
+   | Steuern | 70 | 63 | 7 |
+   | Konfiguration ändern | 113 | 63 | 50 |
+   | Löschen | 133 | 63 | 70 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (61)" and "write/delete
-   tools (48)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
+   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (63)" and "write/delete
+   tools (50)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
 alone, so set the server level to what the client really needs and use the client settings as an extra layer (or
@@ -232,6 +232,29 @@ title/system options/disabled state. Each such tool result carries a `change_id`
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
   backups and generic REST writes. A dashboard without an earlier stored config (HA's auto-generated default) cannot
   be reset this way.
+
+### Configuration files (YAML, packages, custom components)
+
+For everything the UI cannot express: `configuration.yaml`, packages, template sensors, custom components.
+
+- **Access**: on HA OS / Supervised the official **File editor** add-on must be installed and started (nothing else
+  to set up; the MCP talks to it through Supervisor ingress). For a container install set `HA_CONFIG_DIR` in the
+  environment of the MCP process (e.g. the systemd unit) to the config directory; it is deliberately not a web UI
+  setting.
+- `ha_list_config_files` (folder listing) and `ha_read_config_file` are read tools. `ha_edit_config_file`
+  (replace a unique piece of text) and `ha_write_config_file` (create or replace a file) need the admin level,
+  `ha_delete_config_file` the delete level.
+- **Never accessible**, not even for reading: `secrets.yaml`, hidden folders (`.storage`, ...), databases, logs,
+  key and credential files, `deps/`, `tts/`, `backups/`. Paths are relative to the config folder; no `..`.
+- **Credentials in files** (`password: ...`, `token`, `api_key`, passwords in URLs) are shown as `__REDACTED_n__`
+  and written back unchanged; a model never sees them. New credentials go into `secrets.yaml` (by you) and are
+  referenced with `!secret name`.
+- **Safety net**: YAML/JSON is parsed before writing; for YAML files Home Assistant's configuration check runs
+  before and after the write. If the write adds an error or a warning (e.g. "Setup of package ... failed"), the
+  previous file is restored (a new file is removed) and the tool reports why. Every write is journaled and can be
+  undone with `ha_undo_change`.
+- **Not active yet**: a written file takes effect after `ha_reload` (e.g. `automation`, `input_boolean`, `core`
+  for packages, `all`) or, for integrations set up in YAML for the first time, `ha_restart`.
 
 ### Add-ons, system, HACS, Zigbee and Thread (read-only)
 

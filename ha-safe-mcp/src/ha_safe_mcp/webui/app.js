@@ -1000,7 +1000,7 @@ const backupPage = {
 const CHANGE_KINDS = {
   automation: "Automation", script: "Skript", scene: "Szene", dashboard: "Dashboard",
   dashboard_config: "Dashboard-Ansichten", helper: "Helfer", entity: "Entität", area: "Bereich", floor: "Etage",
-  device: "Gerät", integration: "Integration", label: "Label", category: "Kategorie", zone: "Zone",
+  device: "Gerät", integration: "Integration", label: "Label", category: "Kategorie", zone: "Zone", file: "Datei",
 };
 
 const changePage = {

@@ -55,6 +55,9 @@ ENTITY_UPDATE = frozenset({"name", "area_id", "icon", "aliases", "labels", "cate
 
 
 SUPERVISOR_READ = frozenset({"/addons", "/core/info", "/supervisor/info", "/os/info", "/host/info"})
+# the only other Supervisor calls: reach the File editor add-on through ingress (config_files.py)
+SUPERVISOR_CALLS = frozenset({(endpoint, "get") for endpoint in SUPERVISOR_READ}) | {
+    ("/addons/core_configurator/info", "get"), ("/ingress/session", "post")}
 # actions on data (not configuration): need writes enabled only; the caller checks the domain
 CONTROL_TYPES = frozenset({"calendar/event/update"})
 
@@ -70,9 +73,10 @@ class HAWebSocket:
         subscription's events after the result for up to 10 s and return {"result": ..., "events": [...]}."""
         if command_type in CONTROL_TYPES and not self.client.allow_write:
             raise ValueError("Writes are disabled")
-        if command_type == "supervisor/api" and (not isinstance(payload, dict) or payload.get("method") != "get"
-                                                 or payload.get("endpoint") not in SUPERVISOR_READ):
-            raise ValueError("supervisor proxy: only reading add-ons and system info is allowed")
+        if command_type == "supervisor/api" and (not isinstance(payload, dict) or (
+                payload.get("endpoint"), payload.get("method")) not in SUPERVISOR_CALLS):
+            raise ValueError("supervisor proxy: only reading add-ons and system info and opening the File editor "
+                             "session are allowed")
         if command_type not in READ_TYPES | CONTROL_TYPES | WRITE_TYPES | DELETE_TYPES:
             raise ValueError("websocket command not allowed")
         if command_type in WRITE_TYPES | DELETE_TYPES and (not self.client.allow_write or not self.allow_admin_write):

@@ -20,7 +20,7 @@ MAX_ENTRIES = 1000
 CHANGE_ID = re.compile(r"^\d{8}T\d{12}Z-[0-9a-f]{8}$")
 STAMP = "%Y%m%dT%H%M%S%fZ"
 KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "helper", "entity", "area", "floor",
-         "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource")
+         "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource", "file")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
 AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
@@ -144,10 +144,10 @@ class Changes:
     """Journaled writes and undo over the gated admin/scenes/registry/integrations objects."""
 
     def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None,
-                 customize=None):
+                 customize=None, config_files=None):
         self.journal = journal
         self.admin, self.scenes, self.registry, self.integrations = admin, scenes, registry, integrations
-        self.organizer, self.customize = organizer, customize
+        self.organizer, self.customize, self.config_files = organizer, customize, config_files
 
     # ------------------------------------------------------------------ read the current state
     async def _or_none(self, reader: Callable[[], Awaitable[Any]]):
@@ -208,6 +208,9 @@ class Changes:
             return before
         if kind == "zone":
             return _pick(await self.organizer.find_zone(target), ZONE_FIELDS)
+        if kind == "file":
+            content = await self.config_files.read_raw(target)
+            return None if content is None else {"content": content}
         if kind == "blueprint":
             domain, path = target.split("/", 1)
             meta = await self.customize.find_blueprint(domain, path)
@@ -351,6 +354,8 @@ class Changes:
             return await self._restore_category(target, before)
         if kind == "zone":
             return await self._restore_zone(target, before)
+        if kind == "file":
+            return await self.config_files.restore(target, before), target
         if kind == "blueprint":
             domain, path = target.split("/", 1)
             if before is None:

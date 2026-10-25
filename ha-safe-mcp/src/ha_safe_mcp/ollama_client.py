@@ -30,7 +30,7 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_release_notes", "ha_check_config", "ha_list_blueprints", "ha_list_themes",
                         "ha_list_dashboard_resources", "ha_get_weather_forecast", "ha_list_addons",
                         "ha_get_system_info", "ha_list_hacs_repositories", "ha_list_zigbee_devices",
-                        "ha_list_thread_networks"})
+                        "ha_list_thread_networks", "ha_list_config_files", "ha_read_config_file"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -49,7 +49,8 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_update_todo_item", "ha_remove_todo_items", "ha_reload", "ha_skip_update",
                          "ha_install_update", "ha_restart", "ha_preview_blueprint", "ha_save_blueprint",
                          "ha_delete_blueprint", "ha_set_theme", "ha_add_dashboard_resource",
-                         "ha_delete_dashboard_resource", "ha_fire_event"})
+                         "ha_delete_dashboard_resource", "ha_fire_event", "ha_edit_config_file",
+                         "ha_write_config_file", "ha_delete_config_file"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
                            "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
@@ -57,6 +58,7 @@ DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_d
                           "ha_delete_scene", "ha_delete_script", "ha_delete_label", "ha_delete_category",
                           "ha_delete_zone", "ha_delete_calendar_event", "ha_remove_todo_items",
                           "ha_install_update", "ha_restart", "ha_delete_blueprint", "ha_delete_dashboard_resource",
+                          "ha_delete_config_file",
                           # an undo may remove what a change created, so it never runs without a card unless
                           # deletes may run without one
                           "ha_undo_change"})
@@ -103,7 +105,7 @@ WRITE_BLOCKED = ("Schreibaufruf nicht freigegeben; keine Aktion ausgeführt. Zum
                  "'Aktionen erlauben' setzen und die Anfrage erneut senden.")
 HA_ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_ALLOW_DELETE", "HA_ALLOWED_DOMAINS",
                "HA_CREDENTIALS_DIR", "HA_AUDIT", "HA_AUDIT_DIR", "HA_CHANGES_DIR",
-               "HA_AUDIT_CLIENT")
+               "HA_AUDIT_CLIENT", "HA_CONFIG_DIR")
 HISTORY_TURNS = 12
 HISTORY_CHARS = 4000
 PREVIEW_CHARS = 300
@@ -162,6 +164,9 @@ TOOL_TOPICS = (
     (r"\bevent|ereignis|feuer|signal senden", {"ha_fire_event", "ha_get_automation", "ha_search_entities"}),
     (r"wetter|vorhersage|regen|schnee|sonnig|bew[öo]lkt|gewitter|forecast|\bwind",
      {"ha_get_weather_forecast"}),
+    (r"\.ya?ml\b|\byaml|datei|configuration|konfigurationsdatei|\bpackages?\b|custom_components|ordner|verzeichnis",
+     {"ha_list_config_files", "ha_read_config_file", "ha_edit_config_file", "ha_write_config_file",
+      "ha_check_config", "ha_reload"}),
     (r"blueprint|vorlage f[üu]r automation|bauplan",
      {"ha_list_blueprints", "ha_preview_blueprint", "ha_save_blueprint", "ha_delete_blueprint", "ha_save_automation",
       "ha_validate_automation"}),

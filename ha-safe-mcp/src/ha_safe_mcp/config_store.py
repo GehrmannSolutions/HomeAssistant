@@ -76,9 +76,14 @@ class Settings:
     def mcp_env(self) -> dict[str, str]:
         """Exactly the variables the MCP server reads; nothing else reaches the child process."""
         flag = lambda value: "true" if value else "false"  # noqa: E731
-        return {"HA_URL": self.ha_url, "HA_TOKEN": self.ha_token, "HA_ALLOW_WRITE": flag(self.allow_write),
-                "HA_ALLOW_ADMIN_WRITE": flag(self.allow_admin_write), "HA_ALLOW_DELETE": flag(self.allow_delete),
-                "HA_ALLOWED_DOMAINS": ",".join(self.allowed_domains)}
+        env = {"HA_URL": self.ha_url, "HA_TOKEN": self.ha_token, "HA_ALLOW_WRITE": flag(self.allow_write),
+               "HA_ALLOW_ADMIN_WRITE": flag(self.allow_admin_write), "HA_ALLOW_DELETE": flag(self.allow_delete),
+               "HA_ALLOWED_DOMAINS": ",".join(self.allowed_domains)}
+        # operator setting of the UI process (systemd unit), deliberately not editable in the web UI
+        config_dir = os.environ.get("HA_CONFIG_DIR", "").strip()
+        if config_dir:
+            env["HA_CONFIG_DIR"] = config_dir
+        return env
 
 
 def _flag(value) -> bool:

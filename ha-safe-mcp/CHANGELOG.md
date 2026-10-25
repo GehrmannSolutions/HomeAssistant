@@ -3,6 +3,21 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.26.0 – 2026-10-25
+
+- **Konfigurationsdateien lesen und bearbeiten**: `ha_list_config_files`, `ha_read_config_file`,
+  `ha_edit_config_file`, `ha_write_config_file`, `ha_delete_config_file`. Zugriff über das File-editor-Add-on
+  (Supervisor-Ingress) oder `HA_CONFIG_DIR`. `secrets.yaml`, `.storage`, Datenbanken, Logs und Schlüsseldateien sind
+  gesperrt; Zugangsdaten in Dateien erscheinen als `__REDACTED_n__` und werden unverändert zurückgeschrieben.
+  YAML-/JSON-Syntaxprüfung vor dem Schreiben, HA-Konfigurationsprüfung davor und danach; neue Fehler **oder
+  Warnungen** stellen die alte Datei automatisch wieder her. Journal-Art `file` mit Undo.
+- Lehre aus dem Dev-Test: Ein Paket mit unbekannter Integration meldet HA als `valid` mit Warnung – deshalb zählen
+  neue Warnungen als Fehlschlag.
+- Getestet auf Dev (Paket + `configuration.yaml`, Reload, absichtlich kaputte Änderung, Undo) und auf Prod über das
+  Add-on mit einer eigenen, nirgends eingebundenen Testdatei (danach per Undo entfernt). Chat (qwen3-coder) liest
+  `configuration.yaml` korrekt.
+- Abhängigkeit PyYAML für die Syntaxprüfung.
+
 ## 0.25.0 – 2026-10-25
 
 - **Read-only ecosystem views**: `ha_list_addons`, `ha_get_system_info` (Supervisor installs), `ha_list_hacs_repositories`,

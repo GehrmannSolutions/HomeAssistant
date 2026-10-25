@@ -271,6 +271,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .customize import HACustomize
     from .weather import HAWeather
     from .ecosystem import HAEcosystem
+    from .config_files import ConfigFiles, mask
     from .overview import HAOverview
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -285,12 +286,15 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     customize = HACustomize(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     weather = HAWeather(client)
     ecosystem = HAEcosystem(client, admin.ws)
+    config_files = ConfigFiles(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
+                               checker=system.check_config)
     backups = HABackups(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
                         credentials=integrations.credentials)
     diagnostics = HADiagnostics(client, admin.ws)
     overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
-                      integrations=integrations, organizer=organizer, customize=customize)
+                      integrations=integrations, organizer=organizer, customize=customize,
+                      config_files=config_files)
 
     async def journaled(tool_name: str, kind: str, target, writer, **options):
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
@@ -503,6 +507,40 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         except (RuntimeError, ValueError) as exc:
             result["references_to_old_id"] = f"not checked: {exc}"
         return result
+
+    @tool()
+    async def ha_list_config_files(path: str = "") -> dict:
+        """List a folder of the Home Assistant config directory ('' = top level, e.g. 'packages'): files with size
+        and whether they can be read, sub-folders. Hidden folders (.storage) are not shown."""
+        return await config_files.list(path)
+
+    @tool()
+    async def ha_read_config_file(path: str) -> dict:
+        """Read a text file of the HA config directory, e.g. 'configuration.yaml', 'packages/heating.yaml',
+        'custom_components/x/sensor.py'. Inline credentials appear as __REDACTED_n__ placeholders; keep them unchanged
+        when editing. secrets.yaml, .storage, databases and logs are never readable."""
+        return await config_files.read(path)
+
+    @tool()
+    async def ha_edit_config_file(path: str, old_text: str, new_text: str, replace_all: bool = False) -> dict:
+        """Replace old_text (copied exactly from ha_read_config_file, unique unless replace_all) with new_text in a
+        config file. YAML is syntax-checked and HA's config check runs; a change that adds errors is reverted.
+        Journaled (undo with ha_undo_change). Not active until ha_reload or ha_restart. Admin write required."""
+        return await journaled("ha_edit_config_file", "file", path,
+                               lambda: config_files.edit(path, old_text, new_text, replace_all))
+
+    @tool()
+    async def ha_write_config_file(path: str, content: str) -> dict:
+        """Create a config file or replace its whole content (e.g. a new package 'packages/x.yaml'; packages need
+        'homeassistant: packages: !include_dir_named packages' in configuration.yaml). Keep __REDACTED_n__
+        placeholders; new credentials go into secrets.yaml (by the user) and are referenced with !secret. Same checks,
+        journal and activation as ha_edit_config_file. Admin write required."""
+        return await journaled("ha_write_config_file", "file", path, lambda: config_files.write(path, content))
+
+    @tool()
+    async def ha_delete_config_file(path: str) -> dict:
+        """Delete a config file (journaled, undo restores it). Admin write and delete required."""
+        return await journaled("ha_delete_config_file", "file", path, lambda: config_files.delete(path))
 
     @tool()
     async def ha_list_addons() -> list[dict]:
@@ -1115,7 +1153,11 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_get_change(change_id: str) -> dict:
         """Show one journaled change including the stored previous state ('before'; null = did not exist)."""
-        return changes.journal.get(change_id)
+        entry = changes.journal.get(change_id)
+        before = entry.get("before")
+        if entry.get("kind") == "file" and isinstance(before, dict) and isinstance(before.get("content"), str):
+            entry = {**entry, "before": {"content": mask(before["content"])[0]}}
+        return entry
 
     @tool()
     async def ha_undo_change(change_id: str, force: bool = False) -> dict:
