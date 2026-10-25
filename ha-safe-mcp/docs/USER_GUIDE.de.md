@@ -125,7 +125,7 @@ Ein entfernter Client wird doppelt begrenzt:
 
 1. **Auf dem Server (verbindlich):** die Stufe des Clients unter **MCP-Clients** (oder die auf der Zustimmungsseite gewählte), begrenzt durch die
    Schalter der Instanz. Werkzeuge oberhalb der Stufe werden dem Client gar nicht erst angezeigt. Anzahl der Werkzeuge, die ein Client sieht
-   (Version 0.29.0; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
+   (Version 0.29.1; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
 
    | Stufe | Angezeigte Werkzeuge | als nur lesend markiert | als schreibend/löschend markiert |
    |---|---|---|---|

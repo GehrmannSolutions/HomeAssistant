@@ -268,6 +268,43 @@ async def test_ingress_backend_reads_writes_and_creates_folders(respx_mock):
     assert folders == ["/homeassistant/packages"] and saved == {"/homeassistant/packages/heat.yaml": "a: 1\n"}
 
 
+@respx.mock(assert_all_called=False)
+async def test_ingress_backend_creates_missing_nested_folders_when_listing_them_is_not_json(respx_mock):
+    """Found on prod: for a folder that does not exist the real add-on answers listdir without JSON."""
+    base = URL + "/api/hassio_ingress/tok"
+    tree = {"/homeassistant": [{"name": "www", "type": "dir", "size": None}], "/homeassistant/www": []}
+    saved, folders = {}, []
+
+    def listdir(request):
+        path = request.url.params["path"]
+        if path not in tree:
+            return httpx.Response(200, text="")  # what the add-on really returns
+        return httpx.Response(200, json={"content": tree[path], "abspath": path, "error": None})
+
+    def newfolder(request):
+        form = dict(httpx.QueryParams(request.content.decode()))
+        new = form["path"] + "/" + form["name"]
+        folders.append(new)
+        tree[form["path"]].append({"name": form["name"], "type": "dir"})
+        tree[new] = []
+        return httpx.Response(200, json={"error": False})
+
+    def save(request):
+        form = dict(httpx.QueryParams(request.content.decode()))
+        saved[form["filename"]] = form["text"]
+        return httpx.Response(200, json={"error": False, "message": "File saved successfully"})
+
+    respx_mock.get(base + "/api/listdir").mock(side_effect=listdir)
+    respx_mock.post(base + "/api/newfolder").mock(side_effect=newfolder)
+    respx_mock.post(base + "/api/save").mock(side_effect=save)
+    backend = IngressFiles(HAClient(URL, "t"), IngressWS())
+    assert await backend.read_raw("www/floorplan/hestia/eg.svg") is None
+    assert await backend.listdir("www/floorplan") is None
+    await backend.write_raw("www/floorplan/hestia/eg.svg", "<svg/>")
+    assert folders == ["/homeassistant/www/floorplan", "/homeassistant/www/floorplan/hestia"]
+    assert saved == {"/homeassistant/www/floorplan/hestia/eg.svg": "<svg/>"}
+
+
 async def test_without_file_access_the_tools_say_how_to_get_it(monkeypatch):
     monkeypatch.delenv("HA_CONFIG_DIR", raising=False)
 
@@ -314,3 +351,9 @@ async def test_get_change_never_shows_secrets_of_files(tmp_path, monkeypatch):
     result = await server.call_tool("ha_get_change", {"change_id": change_id})
     text = str(result)
     assert "hunter2" not in text and "topsecret" not in text and "__REDACTED_1__" in text
+
+
+def test_files_under_www_are_active_right_away():
+    from ha_safe_mcp.config_files import NEXT, next_step
+    assert next_step("www/floorplan/eg.svg").startswith("active right away: Home Assistant serves it as /local/floorplan/eg.svg")
+    assert next_step("packages/heat.yaml") == NEXT

@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.29.1 – 2026-10-25
+
+- **Konfigurationsdateien über den File-Editor (HA OS):** Eine neue Datei in einem noch nicht vorhandenen Ordner
+  (z. B. `www/floorplan/neu/plan.svg`) scheiterte mit einem unverständlichen JSON-Fehler, weil das Add-on für fehlende
+  Ordner keine JSON-Antwort liefert. Jetzt legt der MCP die Ordner an. Gefunden beim Hochladen der Grundrisse auf
+  Prod.
+- Dateien unter `www/` sind sofort als `/local/...` aktiv; der Hinweis „neu laden“ kam dort fälschlich und nennt jetzt
+  die Adresse und den Tipp gegen Browser-Cache.
+
 ## 0.29.0 – 2026-10-25
 
 Wunsch „alles im MCP möglich, auch destruktive Dinge“: die bisher geparkten Punkte.

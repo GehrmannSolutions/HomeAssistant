@@ -52,6 +52,14 @@ NEXT = ("not active yet: reload the affected part with ha_reload (e.g. 'automati
         "changes to integrations configured in YAML or to homeassistant: need ha_restart")
 
 
+def next_step(path: str) -> str:
+    """What makes a change active: files under www/ are served right away as /local/..., YAML needs a reload."""
+    if path.startswith("www/"):
+        return (f"active right away: Home Assistant serves it as /local/{path[4:]} (browsers may cache it: add a "
+                "query like ?v=2 to the URL in the dashboard after changes)")
+    return NEXT
+
+
 def _sensitive(key: str) -> bool:
     k = key.strip("\"' ").lower()
     return bool(set(re.split(r"[_.\-\s]+", k)) & SENSITIVE_PARTS) or any(s in k for s in SENSITIVE_SUBSTRINGS)
@@ -283,7 +291,11 @@ class IngressFiles:
         return self.base
 
     async def _list_abs(self, path: str) -> list[dict] | None:
-        data = (await self._call("GET", "listdir", params={"path": path})).json()
+        response = await self._call("GET", "listdir", params={"path": path})
+        try:
+            data = response.json()
+        except ValueError:  # the add-on answers a missing folder without JSON
+            return None
         if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("content"), list):
             return None
         return data["content"]
@@ -426,7 +438,7 @@ class ConfigFiles:
             if after_check["result"] != "valid" or after_check["warnings"]:
                 after_check["note"] = "these errors or warnings existed before this change"
             result["config_check"] = after_check
-        result["next"] = NEXT
+        result["next"] = next_step(path)
         return result
 
     async def write(self, path: str, content: str) -> dict:
@@ -462,7 +474,7 @@ class ConfigFiles:
             raise ValueError("deleting files needs the delete level (HA_ALLOW_DELETE)")
         path = check_file(path)
         await self.backend.delete_raw(path)
-        return {"path": path, "deleted": True, "next": NEXT}
+        return {"path": path, "deleted": True, "next": next_step(path)}
 
     # ------------------------------------------------------------------ undo (changes.py)
     async def restore(self, path: str, before) -> dict:
@@ -473,4 +485,4 @@ class ConfigFiles:
             return await self.delete(path)
         self._check_admin()
         await self.backend.write_raw(path, before["content"])
-        return {"path": path, "restored": True, "next": NEXT}
+        return {"path": path, "restored": True, "next": next_step(path)}
