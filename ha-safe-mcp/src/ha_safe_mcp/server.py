@@ -265,6 +265,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .energy import HAEnergy
     from .removal import HARemoval
     from .assist import HAAssist
+    from .hacs import HAHacs
     from .registry import HARegistry
     from .scenes import HAScenes
     from .changes import Changes, journal_from_env
@@ -297,12 +298,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     diagnostics = HADiagnostics(client, admin.ws)
     energy = HAEnergy(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     assist = HAAssist(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
+    hacs = HAHacs(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
     removal = HARemoval(client, admin.ws, overview=overview, allow_admin_write=allow_admin_write,
                         allow_delete=allow_delete)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
                       integrations=integrations, organizer=organizer, customize=customize,
-                      config_files=config_files, energy=energy, assist=assist)
+                      config_files=config_files, energy=energy, assist=assist, hacs=hacs)
 
     async def journaled(tool_name: str, kind: str, target, writer, **options):
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
@@ -567,6 +569,43 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         """Repositories installed through HACS (custom integrations, cards, themes) with installed/available version
         and pending upgrades."""
         return await ecosystem.list_hacs(installed_only)
+
+    @tool()
+    async def ha_search_hacs(query: str = "", category: str = "", limit: int = 20,
+                             installed_only: bool = False) -> dict:
+        """Search the HACS store (custom integrations, dashboard cards = category 'plugin', themes, ...) by words in
+        name, description and topics; sorted by GitHub stars. Read only."""
+        return await hacs.search(query, category, limit, installed_only)
+
+    @tool()
+    async def ha_get_hacs_repository(repository: str) -> dict:
+        """One HACS repository ('owner/repo' or id) with stars, last update, releases, installed version and what
+        installing it means (install_impact). Show this to the user before installing. Read only."""
+        return await hacs.get(repository)
+
+    @tool()
+    async def ha_install_hacs_repository(repository: str, version: str = "") -> dict:
+        """Install or update a HACS repository ('owner/repo' or id; version = a release tag, default the newest).
+        Downloads third-party code into Home Assistant. Cards are registered as dashboard resource by HACS;
+        integrations need ha_restart. Journaled: undo removes a new install or goes back to the previous version.
+        Admin write required."""
+        return await journaled("ha_install_hacs_repository", "hacs", repository,
+                               lambda: hacs.install(repository, version or None),
+                               target_from=lambda r: r["full_name"])
+
+    @tool()
+    async def ha_remove_hacs_repository(repository: str) -> dict:
+        """Remove an installed HACS repository (its files; a card left in a dashboard shows an error). Journaled,
+        undo reinstalls the same version. Admin write and delete required."""
+        return await journaled("ha_remove_hacs_repository", "hacs", repository, lambda: hacs.remove(repository),
+                               target_from=lambda r: r["full_name"])
+
+    @tool()
+    async def ha_add_hacs_custom_repository(repository: str, category: str) -> dict:
+        """Add a GitHub repository that is not in the HACS store ('owner/repo' or https://github.com/owner/repo;
+        category: integration, plugin, theme, python_script, template, appdaemon, netdaemon). Only adds it to the
+        list; install with ha_install_hacs_repository. Admin write required."""
+        return await hacs.add_custom(repository, category)
 
     @tool()
     async def ha_list_zigbee_devices(problems_only: bool = False) -> dict:

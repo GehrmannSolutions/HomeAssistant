@@ -478,8 +478,9 @@ Flur."* Die Automation verwendet dann `{"use_blueprint": {"path": "...", "input"
 
 ## 18. Add-ons, System, HACS, Zigbee und Thread
 
-Alles nur lesend. Ohne Supervisor, HACS oder ZHA sagen die Werkzeuge das, statt mit einem Fehler abzubrechen. Es
-werden keine Geräteadressen, IP-Adressen, Hostnamen oder Netzwerkschlüssel zurückgegeben.
+Hier ist alles nur lesend, außer dem HACS-Store: dort kannst du suchen, installieren, aktualisieren und entfernen
+(siehe zweite Tabelle). Ohne Supervisor, HACS oder ZHA sagen die Werkzeuge das, statt mit einem Fehler abzubrechen.
+Es werden keine Geräteadressen, IP-Adressen, Hostnamen oder Netzwerkschlüssel zurückgegeben.
 
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
@@ -490,6 +491,25 @@ werden keine Geräteadressen, IP-Adressen, Hostnamen oder Netzwerkschlüssel zur
 | `ha_list_thread_networks` | Thread-Netzwerke (Name, Kanal, bevorzugt). | Lesen |
 
 **Beispiel**: *"Welche Zigbee-Geräte haben schlechten Empfang oder sind offline?"*
+
+**HACS-Store: Karten, eigene Integrationen und Themes installieren.** HACS ist der Community-Store für Home
+Assistant (er muss in Home Assistant schon installiert sein). Was von dort kommt, ist Code von Fremden, der mit den
+Rechten von Home Assistant läuft. Deshalb zeigt eine Installation immer eine Freigabe-Karte mit Sternen, letzter
+Aktualisierung und dem, was danach passiert.
+
+| Werkzeug | Was es tut | Stufe |
+|---|---|---|
+| `ha_search_hacs` | Sucht im Store nach Wörtern in Name, Beschreibung und Themen, wahlweise nur eine Art (`plugin` = Dashboard-Karte, `integration`, `theme`, ...); sortiert nach GitHub-Sternen. | Lesen |
+| `ha_get_hacs_repository` | Ein Repository mit Sternen, letzter Aktualisierung, Versionen, installierter Version und was die Installation bedeutet. | Lesen |
+| `ha_install_hacs_repository` | Installiert oder aktualisiert (neueste Version oder eine gewählte). Eine Karte wird sofort als Dashboard-Ressource eingetragen; eine Integration braucht einen Neustart. Im Chat immer mit Freigabe-Karte. Im Änderungsjournal: Rückgängig entfernt eine neue Installation oder geht auf die vorige Version zurück. | Konfigurieren |
+| `ha_add_hacs_custom_repository` | Fügt ein GitHub-Repository hinzu, das nicht im Store ist (nur `github.com`). Es wird nur gelistet, nicht installiert. | Konfigurieren |
+| `ha_remove_hacs_repository` | Entfernt ein installiertes Repository. Eine Karte, die noch in einem Dashboard steckt, zeigt dann einen Fehler. Rückgängig installiert dieselbe Version wieder. | Löschen |
+
+**Beispiel**: *"Installiere die Karte card-mod aus HACS."* → das Modell sucht, zeigt die Karte (5.000 Sterne,
+letzte Aktualisierung, "trägt eine Dashboard-Ressource ein"), du gibst frei, und nach einem Neuladen des Browsers
+ist die Karte nutzbar.
+
+![Freigabe-Karte für eine HACS-Installation](images/de/24-chat-hacs-install.png)
 
 ## 19. Energie: Steckdosen, Solar, Batteriespeicher
 

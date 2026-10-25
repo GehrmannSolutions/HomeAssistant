@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.30.0 – 2026-10-25
+
+- **HACS-Store im MCP** (5 neue Werkzeuge): suchen (Name, Beschreibung, Themen, nach Sternen sortiert), Details mit
+  Versionen und Klartext, was eine Installation bedeutet; installieren oder aktualisieren (Stufe Konfigurieren, im
+  Chat immer mit Freigabe-Karte mit Sternen, letzter Aktualisierung und Folgen), eigenes GitHub-Repository
+  hinzufügen (nur `github.com`), entfernen (Stufe Löschen). Installieren und Entfernen stehen im Änderungsjournal:
+  Rückgängig entfernt eine neue Installation wieder (Stufe Löschen) oder geht auf die vorige Version zurück. Karten
+  trägt HACS selbst als Dashboard-Ressource ein. Getestet auf einer echten Instanz mit HACS 2.0.5.
+- Weboberfläche: Freigabe-Karte für HACS-Installationen in Klartext.
+
 ## 0.29.1 – 2026-10-25
 
 - **Konfigurationsdateien über den File-Editor (HA OS):** Eine neue Datei in einem noch nicht vorhandenen Ordner

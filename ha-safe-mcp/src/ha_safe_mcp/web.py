@@ -383,6 +383,7 @@ def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, jou
     from .config_files import ConfigFiles
     from .customize import HACustomize
     from .energy import HAEnergy
+    from .hacs import HAHacs
     from .integrations import HAIntegrations
     from .management import HAAdmin
     from .organize import HAOrganizer
@@ -401,7 +402,8 @@ def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, jou
                    organizer=HAOrganizer(client, admin.ws, **flags), customize=HACustomize(client, admin.ws, **flags),
                    config_files=ConfigFiles(client, admin.ws, checker=HASystem(client, admin.ws, **flags).check_config,
                                             **flags),
-                   energy=HAEnergy(client, admin.ws, **flags), assist=HAAssist(client, admin.ws, **flags))
+                   energy=HAEnergy(client, admin.ws, **flags), assist=HAAssist(client, admin.ws, **flags),
+                   hacs=HAHacs(client, admin.ws, **flags))
 
 
 async def live_domain_source(settings: Settings):

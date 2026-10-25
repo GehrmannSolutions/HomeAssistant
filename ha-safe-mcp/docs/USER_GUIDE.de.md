@@ -125,14 +125,14 @@ Ein entfernter Client wird doppelt begrenzt:
 
 1. **Auf dem Server (verbindlich):** die Stufe des Clients unter **MCP-Clients** (oder die auf der Zustimmungsseite gewählte), begrenzt durch die
    Schalter der Instanz. Werkzeuge oberhalb der Stufe werden dem Client gar nicht erst angezeigt. Anzahl der Werkzeuge, die ein Client sieht
-   (Version 0.29.1; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
+   (Version 0.30.0; die Zahlen wachsen mit neuen Versionen, deshalb muss ein Client nach einem Update „Werkzeuge neu laden“):
 
    | Stufe | Angezeigte Werkzeuge | als nur lesend markiert | als schreibend/löschend markiert |
    |---|---|---|---|
-   | Nur lesen | 73 | 73 | 0 |
-   | Steuern | 80 | 73 | 7 |
-   | Konfiguration ändern | 129 | 73 | 56 |
-   | Löschen | 154 | 73 | 81 |
+   | Nur lesen | 75 | 75 | 0 |
+   | Steuern | 82 | 75 | 7 |
+   | Konfiguration ändern | 133 | 75 | 58 |
+   | Löschen | 159 | 75 | 84 |
 
 2. **Im Client (zusätzlich):** Viele Clients lassen dich Werkzeuge erlauben, bestätigen lassen oder sperren. Sie gruppieren sie anhand der Hinweise,
    die dieser Server mitschickt (`readOnlyHint`, `destructiveHint`). Beispiel Claude → Settings → Connectors → der Connector →
@@ -267,12 +267,17 @@ Für alles, was die Oberfläche nicht ausdrücken kann: `configuration.yaml`, Pa
 - **Noch nicht aktiv**: Eine geschriebene Datei wirkt erst nach `ha_reload` (z. B. `automation`, `input_boolean`, `core`
   für Pakete, `all`) oder, bei Integrationen, die zum ersten Mal in YAML eingerichtet werden, nach `ha_restart`.
 
-### Add-ons, System, HACS, Zigbee und Thread (nur lesen)
+### Add-ons, System, HACS, Zigbee und Thread (nur lesen, außer dem HACS-Store)
 
 - `ha_list_addons` (Zustand, Version, ausstehendes Update) und `ha_get_system_info` (Versionen von Core, Supervisor und OS,
   Supervisor-Zustand, Board, Speicherbelegung) brauchen eine Supervisor-Installation (HA OS / Supervised); ohne sie sagen sie das.
   Der Supervisor-Proxy ist auf diese Lese-Endpunkte beschränkt.
 - `ha_list_hacs_repositories`: was über HACS installiert ist, mit installierter und verfügbarer Version.
+- HACS-Store (schreibend): `ha_search_hacs` und `ha_get_hacs_repository` lesen; `ha_install_hacs_repository`
+  (Admin, im Chat immer mit Freigabe-Karte, im Journal) installiert oder aktualisiert;
+  `ha_add_hacs_custom_repository` (Admin, nur GitHub) fügt ein Repository außerhalb des Stores hinzu;
+  `ha_remove_hacs_repository` (Löschen) entfernt eins. Karten trägt HACS selbst als Dashboard-Ressource ein;
+  Integrationen brauchen `ha_restart`.
 - `ha_list_zigbee_devices`: ZHA-Geräte mit Verfügbarkeit, Verbindungsqualität (`lqi`, schwach unter 80), `rssi`, zuletzt gesehen
   und Rolle; `problems_only: true` listet nur nicht verfügbare oder schwache Geräte.
 - `ha_list_thread_networks`: Thread-Netzwerke (Name, Kanal, bevorzugt, Quelle).

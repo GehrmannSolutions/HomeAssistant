@@ -36,7 +36,8 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_list_thread_networks", "ha_list_config_files", "ha_read_config_file",
                         "ha_get_energy_config", "ha_find_energy_sensors", "ha_get_energy_usage",
                         "ha_get_solar_forecast", "ha_get_device_removal", "ha_list_orphaned_entities",
-                        "ha_list_assist_pipelines", "ha_list_exposed_entities", "ha_test_assist_sentences"})
+                        "ha_list_assist_pipelines", "ha_list_exposed_entities", "ha_test_assist_sentences",
+                        "ha_search_hacs", "ha_get_hacs_repository"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -59,7 +60,8 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_write_config_file", "ha_delete_config_file", "ha_save_energy_config",
                          "ha_add_energy_device", "ha_remove_energy_device", "ha_remove_device",
                          "ha_remove_entity", "ha_save_assist_pipeline", "ha_set_preferred_assist_pipeline",
-                         "ha_delete_assist_pipeline", "ha_set_exposure", "ha_set_expose_new_entities"})
+                         "ha_delete_assist_pipeline", "ha_set_exposure", "ha_set_expose_new_entities",
+                         "ha_install_hacs_repository", "ha_remove_hacs_repository", "ha_add_hacs_custom_repository"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
                            "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
@@ -68,17 +70,19 @@ DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_d
                           "ha_delete_zone", "ha_delete_calendar_event", "ha_remove_todo_items",
                           "ha_install_update", "ha_restart", "ha_delete_blueprint", "ha_delete_dashboard_resource",
                           "ha_delete_config_file", "ha_remove_energy_device", "ha_remove_device",
-                          "ha_remove_entity", "ha_delete_assist_pipeline",
+                          "ha_remove_entity", "ha_delete_assist_pipeline", "ha_remove_hacs_repository",
                           # an undo may remove what a change created, so it never runs without a card unless
                           # deletes may run without one
                           "ha_undo_change"})
 
 
 # Never run without an approval card in the web UI chat, even when the level is set to "run without approval".
-ALWAYS_ASK = frozenset({"ha_restore_backup", "ha_remove_device"})
+ALWAYS_ASK = frozenset({"ha_restore_backup", "ha_remove_device", "ha_install_hacs_repository"})
 # Read tool whose result is shown on the approval card (what exactly would happen), with its arguments.
 CARD_DETAILS = {"ha_restore_backup": ("ha_get_backup", lambda args: {"backup_id": args.get("backup_id")}),
-                "ha_remove_device": ("ha_get_device_removal", lambda args: {"device_id": args.get("device_id")})}
+                "ha_remove_device": ("ha_get_device_removal", lambda args: {"device_id": args.get("device_id")}),
+                "ha_install_hacs_repository": ("ha_get_hacs_repository",
+                                               lambda args: {"repository": args.get("repository")})}
 
 
 def write_level(name: str) -> str | None:
@@ -242,6 +246,10 @@ TOOL_TOPICS = (
      {"ha_get_energy_config", "ha_find_energy_sensors", "ha_get_energy_usage", "ha_get_solar_forecast",
       "ha_save_energy_config", "ha_add_energy_device", "ha_remove_energy_device", "ha_get_statistics",
       "ha_list_statistic_ids", "ha_search_entities"}),
+    (r"hacs|community store|custom card|karte installier|card install|install(?:ier)? .*card|plugin|"
+     r"custom integration|benutzerdefinierte integration|theme install|mushroom|bubble|card-mod|auto-entities",
+     {"ha_search_hacs", "ha_get_hacs_repository", "ha_install_hacs_repository", "ha_remove_hacs_repository",
+      "ha_add_hacs_custom_repository", "ha_list_hacs_repositories", "ha_list_dashboard_resources"}),
     (r"assist|sprach|stimme|wake ?word|aktivierungswort|pipeline|alexa|google assistant|voice|speech|"
      r"freigegeben|freigeben|exposed?|expose",
      {"ha_list_assist_pipelines", "ha_save_assist_pipeline", "ha_set_preferred_assist_pipeline",

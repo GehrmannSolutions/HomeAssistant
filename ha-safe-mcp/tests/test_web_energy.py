@@ -87,5 +87,5 @@ def test_undo_in_the_web_ui_knows_every_journal_kind(tmp_path):
     changes = live_changes(Settings(ha_url="http://ha:8123", ha_token="t"), tmp_path, AuditLog(tmp_path / "a"),
                            ChangeJournal(tmp_path / "c"))
     for name in ("admin", "scenes", "registry", "integrations", "organizer", "customize", "config_files", "energy",
-                 "assist"):
+                 "assist", "hacs"):
         assert getattr(changes, name) is not None, name

@@ -125,14 +125,14 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.29.1; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.30.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Read only | 73 | 73 | 0 |
-   | Control | 80 | 73 | 7 |
-   | Change configuration | 129 | 73 | 56 |
-   | Delete | 154 | 73 | 81 |
+   | Read only | 75 | 75 | 0 |
+   | Control | 82 | 75 | 7 |
+   | Change configuration | 133 | 75 | 58 |
+   | Delete | 159 | 75 | 84 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
@@ -267,12 +267,16 @@ For everything the UI cannot express: `configuration.yaml`, packages, template s
 - **Not active yet**: a written file takes effect after `ha_reload` (e.g. `automation`, `input_boolean`, `core`
   for packages, `all`) or, for integrations set up in YAML for the first time, `ha_restart`.
 
-### Add-ons, system, HACS, Zigbee and Thread (read-only)
+### Add-ons, system, HACS, Zigbee and Thread (read-only except the HACS store)
 
 - `ha_list_addons` (state, version, pending update) and `ha_get_system_info` (Core, Supervisor and OS versions,
   Supervisor health, board, disk usage) need a Supervisor install (HA OS / Supervised); without one they say so.
   The Supervisor proxy is limited to these read endpoints.
 - `ha_list_hacs_repositories`: what is installed through HACS with installed/available version.
+- HACS store (writes): `ha_search_hacs` and `ha_get_hacs_repository` read; `ha_install_hacs_repository` (admin,
+  always an approval card in the chat, journaled) installs or updates; `ha_add_hacs_custom_repository` (admin,
+  GitHub only) adds a repository outside the store; `ha_remove_hacs_repository` (delete) removes one. Cards are
+  registered as dashboard resource by HACS itself; integrations need `ha_restart`.
 - `ha_list_zigbee_devices`: ZHA devices with availability, link quality (`lqi`, weak below 80), `rssi`, last seen
   and role; `problems_only: true` lists only unavailable or weak devices.
 - `ha_list_thread_networks`: Thread networks (name, channel, preferred, source).

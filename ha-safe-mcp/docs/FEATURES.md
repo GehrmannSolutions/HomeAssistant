@@ -468,7 +468,8 @@ hallway."* The automation then uses `{"use_blueprint": {"path": "...", "input": 
 
 ## 18. Add-ons, system, HACS, Zigbee and Thread
 
-All read-only. Without a Supervisor, HACS or ZHA the tools say so instead of failing. No device addresses, IP
+Everything here is read-only except the HACS store: there you can search, install, update and remove (see the
+second table). Without a Supervisor, HACS or ZHA the tools say so instead of failing. No device addresses, IP
 addresses, host names or network keys are returned.
 
 | Tool | What it does | Level |
@@ -480,6 +481,23 @@ addresses, host names or network keys are returned.
 | `ha_list_thread_networks` | Thread networks (name, channel, preferred). | Read |
 
 **Example**: *"Which Zigbee devices have poor reception or are offline?"*
+
+**HACS store: install cards, custom integrations and themes.** HACS is the community store for Home Assistant
+(it must already be installed in Home Assistant). Whatever comes from there is code from strangers that runs with
+Home Assistant's rights, so installing always shows an approval card with stars, last update and what happens next.
+
+| Tool | What it does | Level |
+|---|---|---|
+| `ha_search_hacs` | Searches the store by words in name, description and topics, optionally only one kind (`plugin` = dashboard card, `integration`, `theme`, ...); sorted by GitHub stars. | Read |
+| `ha_get_hacs_repository` | One repository with stars, last update, releases, installed version and what installing it means. | Read |
+| `ha_install_hacs_repository` | Installs or updates (newest version or a chosen release). A card is registered as dashboard resource right away; an integration needs a restart. Always with an approval card in the chat. Journaled: undo removes a new install or goes back to the previous version. | Configure |
+| `ha_add_hacs_custom_repository` | Adds a GitHub repository that is not in the store (only `github.com`). It is only listed, not installed. | Configure |
+| `ha_remove_hacs_repository` | Removes an installed repository. A card still used in a dashboard then shows an error. Undo reinstalls the same version. | Delete |
+
+**Example**: *"Install the card-mod card from HACS."* → the model searches, shows the card (5,000 stars, last
+update, "registers a dashboard resource"), you approve, and the card can be used after a browser reload.
+
+![Approval card for a HACS install](images/en/24-chat-hacs-install.png)
 
 ## 19. Energy: plugs, solar, battery storage
 

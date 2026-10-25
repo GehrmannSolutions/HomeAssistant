@@ -21,7 +21,7 @@ CHANGE_ID = re.compile(r"^\d{8}T\d{12}Z-[0-9a-f]{8}$")
 STAMP = "%Y%m%dT%H%M%S%fZ"
 KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "helper", "entity", "area", "floor",
          "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource", "file", "energy",
-         "pipeline", "exposure")
+         "pipeline", "exposure", "hacs")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
 AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
@@ -145,9 +145,9 @@ class Changes:
     """Journaled writes and undo over the gated admin/scenes/registry/integrations objects."""
 
     def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None,
-                 customize=None, config_files=None, energy=None, assist=None):
+                 customize=None, config_files=None, energy=None, assist=None, hacs=None):
         self.journal = journal
-        self.energy, self.assist = energy, assist
+        self.energy, self.assist, self.hacs = energy, assist, hacs
         self.admin, self.scenes, self.registry, self.integrations = admin, scenes, registry, integrations
         self.organizer, self.customize, self.config_files = organizer, customize, config_files
 
@@ -241,6 +241,8 @@ class Changes:
                 return {"preferred": await self.assist.preferred()}
             item = await self.assist.pipeline(target)
             return None if item is None else {k: v for k, v in item.items() if k != "id"}
+        if kind == "hacs":
+            return await self.hacs.state(target)
         if kind == "exposure":
             if target.startswith("new:"):
                 return {"expose_new": await self.assist.expose_new(target[4:])}
@@ -385,6 +387,10 @@ class Changes:
                 return await self.customize.delete_resource(target), target
             created = await self.customize.add_resource(before["url"], before.get("type") or "module")
             return created, created["id"]
+        if kind == "hacs":
+            if not before or not before.get("installed"):
+                return await self.hacs.remove(target), target
+            return await self.hacs.install(target, before.get("installed_version")), target
         if kind == "pipeline":
             return await self._restore_pipeline(target, before)
         if kind == "exposure":

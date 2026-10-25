@@ -810,6 +810,7 @@ const chat = {
         el("pre", {}, `${item.name}\n${argsText(item.args)}`),
         item.details && item.details.backup ? restoreSummary(item.details.backup, (item.args || {}).restore_database !== false) : null,
         item.details && item.details.device ? removalSummary(item.details) : null,
+        item.details && item.details.repository ? hacsSummary(item.details, (item.args || {}).version) : null,
         pending
           ? el("div", { class: "actions" },
               el("button", { type: "button", class: "danger small", onclick: () => this.decide(item, true) }, t("Run", "Ausführen")),
@@ -1392,6 +1393,41 @@ function removalSummary(preview) {
     preview.can_remove === false ? `⚠ ${preview.reason}` : null,
     t("This cannot be undone by the MCP; names, areas and settings are lost, the history stays. The integration may add the device again when it finds it.",
       "Das lässt sich über den MCP nicht rückgängig machen; Namen, Bereiche und Einstellungen gehen verloren, der Verlauf bleibt. Die Integration kann das Gerät wieder anlegen, wenn sie es erneut findet."),
+  ].filter(Boolean);
+  return el("div", { class: "restore-summary" },
+    el("div", { class: "restore-facts" }, ...facts.map((line) => el("div", {}, line))),
+    el("ul", {}, ...impact.map((line) => el("li", {}, line))));
+}
+
+function hacsSummary(details, version) {
+  // the card's plain-words preview for ha_install_hacs_repository (details read with ha_get_hacs_repository)
+  const repo = details.repository || {};
+  const kind = { plugin: t("dashboard card", "Dashboard-Karte"), integration: t("custom integration", "eigene Integration"),
+                 theme: t("theme", "Theme") }[repo.category] || repo.category || "–";
+  const target = version || repo.available_version || "–";
+  const updated = repo.last_updated ? new Date(repo.last_updated).toLocaleDateString(LOCALE) : "–";
+  const facts = [
+    `${t("Repository", "Repository")}: ${repo.full_name || "–"} (${kind})`,
+    `${t("Version", "Version")}: ${repo.installed ? `${repo.installed_version || "?"} → ${target}` : target}`
+      + (repo.installed ? ` · ${t("update", "Update")}` : ` · ${t("new install", "neue Installation")}`),
+    `${t("GitHub stars", "GitHub-Sterne")}: ${repo.stars ?? "–"} · ${t("last update", "zuletzt aktualisiert")}: ${updated}`,
+  ];
+  const impact = [
+    t("Third-party code from GitHub; it runs with Home Assistant's rights.",
+      "Code von Dritten aus GitHub; er läuft mit den Rechten von Home Assistant."),
+    repo.category === "plugin"
+      ? t("HACS registers the card as dashboard resource; reload the browser to use it.",
+          "HACS trägt die Karte als Dashboard-Ressource ein; nach einem Neuladen des Browsers ist sie nutzbar.")
+      : repo.category === "integration"
+      ? t("Home Assistant must restart before the integration can be set up.",
+          "Home Assistant muss neu starten, bevor die Integration eingerichtet werden kann.")
+      : null,
+    repo.can_download === false ? `⚠ ${t("HACS cannot download it for this Home Assistant version.",
+                                         "HACS kann es für diese Home-Assistant-Version nicht herunterladen.")}` : null,
+    repo.installed
+      ? t("Undo goes back to the previous version.", "Rückgängig geht auf die vorige Version zurück.")
+      : t("Undo removes it again (needs the Delete level).",
+          "Rückgängig entfernt es wieder (braucht die Stufe Löschen)."),
   ].filter(Boolean);
   return el("div", { class: "restore-summary" },
     el("div", { class: "restore-facts" }, ...facts.map((line) => el("div", {}, line))),
