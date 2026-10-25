@@ -75,6 +75,11 @@ SUPERVISOR_CALLS = frozenset({(endpoint, "get") for endpoint in SUPERVISOR_READ}
 CONTROL_TYPES = frozenset({"calendar/event/update"})
 
 
+# Home Assistant accepts websocket messages up to 4 MiB (aiohttp default in websocket_api/http.py); dashboards with
+# pop-ups and floor plans easily pass 64 KiB. 1 MiB stays far below HA's limit and still stops runaway payloads.
+MAX_WS_PAYLOAD = 1024 * 1024
+
+
 class HAWebSocket:
     def __init__(self, client: HAClient, *, allow_admin_write: bool = False, allow_delete: bool = False):
         self.client = client
@@ -99,8 +104,9 @@ class HAWebSocket:
         payload = payload or {}
         if not isinstance(payload, dict) or {"id", "type", "access_token"} & payload.keys():
             raise ValueError("reserved websocket fields or invalid payload")
-        if len(json.dumps(payload).encode()) > 65536:
-            raise ValueError("websocket payload too large")
+        size = len(json.dumps(payload).encode())
+        if size > MAX_WS_PAYLOAD:
+            raise ValueError(f"websocket payload too large ({size // 1024} KiB, limit {MAX_WS_PAYLOAD // 1024} KiB)")
         url = urlsplit(self.client.url)
         scheme = "wss" if url.scheme == "https" else "ws"
         ws_url = f"{scheme}://{url.netloc}/api/websocket"

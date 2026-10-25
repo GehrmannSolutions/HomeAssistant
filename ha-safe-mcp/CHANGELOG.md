@@ -3,6 +3,12 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.30.2 – 2026-10-26
+
+- **Große Dashboards speichern:** WebSocket-Nachrichten durften höchstens 64 KiB groß sein; ein Dashboard mit
+  Grundriss und Raum-Popups (rund 80 KiB) wurde abgelehnt. Home Assistant selbst nimmt bis 4 MiB an; die Grenze
+  liegt jetzt bei 1 MiB, und die Meldung nennt Größe und Grenze.
+
 ## 0.30.1 – 2026-10-25
 
 Gefunden beim Test mit dem lokalen Modell gegen eine echte HACS-Instanz:

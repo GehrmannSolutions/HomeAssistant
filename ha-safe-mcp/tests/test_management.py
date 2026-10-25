@@ -213,3 +213,25 @@ async def test_current_user_reports_only_name_and_admin_flags():
         admin = HAAdmin(HAClient(f"http://127.0.0.1:{port}", "secret"))
         user = await admin.current_user()
     assert user == {"name": "Alex", "is_owner": True, "is_admin": True}
+
+
+async def test_large_dashboards_fit_but_absurd_payloads_are_refused():
+    """HA accepts websocket messages up to 4 MiB (aiohttp default); real dashboards with pop-ups exceed 64 KiB."""
+    received = []
+
+    async def handler(ws):
+        await ws.send(json.dumps({"type": "auth_required"}))
+        await ws.recv()
+        await ws.send(json.dumps({"type": "auth_ok"}))
+        message = json.loads(await ws.recv())
+        received.append(len(json.dumps(message)))
+        await ws.send(json.dumps({"id": 1, "type": "result", "success": True, "result": None}))
+
+    big = {"config": {"views": [{"cards": [{"type": "markdown", "content": "x" * 1000}] * 200}]}}  # ~210 KB
+    async with serve(handler, "127.0.0.1", 0, max_size=4 * 1024 * 1024) as server:
+        port = server.sockets[0].getsockname()[1]
+        ws = HAWebSocket(HAClient(f"http://127.0.0.1:{port}", "t", allow_write=True), allow_admin_write=True)
+        await ws.command("lovelace/config/save", big)
+    assert received and received[0] > 200_000
+    with pytest.raises(ValueError, match=r"too large \(\d+ KiB, limit 1024 KiB\)"):
+        await ws.command("lovelace/config/save", {"config": {"x": "y" * 1_100_000}})
