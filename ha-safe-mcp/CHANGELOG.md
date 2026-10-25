@@ -3,6 +3,15 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.26.1 – 2026-10-25
+
+- **Funktionsleitfaden** `docs/FEATURES.md`: alle 133 Werkzeuge in einfachen Worten, gruppiert in 20 Bereiche, mit
+  Stufe, Schutzmechanismen, Beispielen und 20 Screenshots der Web-UI (Demo-Wohnung auf der Dev-Instanz, Chat mit
+  qwen3-coder). Ein Test stellt sicher, dass jedes Werkzeug beschrieben ist und jedes Bild existiert.
+- **Automations-Abläufe verständlich**: `ha_list_traces`/`ha_get_trace` liefern zusätzlich `outcome` in einfachen
+  Worten. HA markiert jeden beendeten Lauf mit `state: stopped`; das Modell las das als Fehlschlag. Ein Lauf ohne
+  Trigger wird als manuell gestartet erklärt. Werte aus HA Core (`script_execution`).
+
 ## 0.26.0 – 2026-10-25
 
 - **Konfigurationsdateien lesen und bearbeiten**: `ha_list_config_files`, `ha_read_config_file`,

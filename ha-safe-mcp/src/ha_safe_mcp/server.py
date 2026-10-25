@@ -1076,7 +1076,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_list_traces(domain: str = "automation", item: str = "", limit: int = 20) -> list[dict]:
-        """Recent runs (traces) of automations or scripts, newest first: run_id, state, error, last_step, trigger.
+        """Recent runs (traces) of automations or scripts, newest first: run_id, outcome (the result in plain words;
+        state 'stopped' only means the run is over), error, last_step, trigger.
         domain 'automation' or 'script'; item = entity_id (e.g. 'automation.morning_light') or empty for all.
         Use it to find out why an automation did or did not run; then ha_get_trace for details."""
         return await diagnostics.list_traces(domain, item, limit)

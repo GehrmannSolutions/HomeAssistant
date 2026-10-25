@@ -26,6 +26,34 @@ TRACE_SUMMARY = ("run_id", "item_id", "state", "script_execution", "timestamp", 
 ISSUE_FIELDS = ("domain", "issue_id", "severity", "translation_key", "is_fixable", "ignored", "created",
                 "learn_more_url", "breaks_in_ha_version")
 MAX_TEXT = 2000
+# HA core 2026.10: trace/models.py sets state "running" -> "stopped" for every run; the result is
+# script_execution (helpers/script.py, components/automation/__init__.py). Plain words for models.
+OUTCOMES = {
+    "finished": "completed: the run reached its end",
+    "failed_conditions": "stopped by a condition: the conditions were not met, the actions did not run",
+    "not_triggered": "not triggered: a trigger saw a change but did not fire",
+    "cancelled": "cancelled, e.g. by a newer run (mode restart) or when it was turned off",
+    "aborted": "aborted by a step (e.g. a stop action)",
+    "error": "failed with an error (see error and the steps)",
+    "failed_single": "not started: it was already running (mode single)",
+    "failed_max_runs": "not started: too many runs at the same time (max)",
+    "disallowed_recursion_detected": "not started: it would have called itself",
+}
+
+
+def outcome(run: dict, domain: str) -> str:
+    if run.get("state") == "running":
+        return "still running"
+    execution = run.get("script_execution")
+    return OUTCOMES.get(execution, f"ended ({execution})" if execution else "ended")
+
+
+def summarize_run(run: dict, domain: str) -> dict:
+    item = {key: run.get(key) for key in TRACE_SUMMARY if key in run}
+    item["outcome"] = outcome(run, domain)
+    if domain == "automation" and "trigger" in run and not run.get("trigger"):
+        item["trigger"] = "none recorded: started manually (UI 'run', automation.trigger) or by another automation"
+    return item
 MAX_STEP_CHARS = 1500
 
 
@@ -132,7 +160,7 @@ class HADiagnostics:
         zone = await self.zone()
         result = []
         for run in runs[:max(1, min(limit, 100))]:
-            item = {key: run.get(key) for key in TRACE_SUMMARY if key in run}
+            item = summarize_run(run, domain)
             if isinstance(item.get("timestamp"), dict):
                 item["timestamp"] = {k: _local(v, zone) for k, v in item["timestamp"].items()}
             result.append(item)
@@ -156,7 +184,7 @@ class HADiagnostics:
         zone = await self.zone()
         for step in steps:
             step["timestamp"] = _local(step.get("timestamp"), zone)
-        result = {key: trace.get(key) for key in TRACE_SUMMARY if key in trace}
+        result = summarize_run(trace, domain)
         if isinstance(result.get("timestamp"), dict):
             result["timestamp"] = {k: _local(v, zone) for k, v in result["timestamp"].items()}
         result["steps"] = steps[:200]

@@ -18,6 +18,8 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 
 ## What it does
 
+**[Feature guide](docs/FEATURES.md)**: every function in plain words, with examples and screenshots.
+
 - Read states, discover entities and services; discover entities in a room; call allowed services on one or up to 20 entities of the same domain.
 - A **fixed, documented REST route catalog** plus typed tools for automations, dashboards, helpers, registry metadata, areas/floors/devices, scenes/scripts, integration config flows and settings, and Home Assistant backups.
 - Separate gates for control, admin changes, and deletion; CLI/UI per-call confirmation by default. Other MCP clients must implement their own human approval.

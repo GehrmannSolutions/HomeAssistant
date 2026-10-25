@@ -109,6 +109,25 @@ async def test_traces_are_listed_newest_first_and_accept_an_entity_id():
         await d.list_traces("light")
 
 
+def test_trace_outcomes_are_explained_in_plain_words():
+    # HA marks every finished run as state "stopped"; small models read that as a failure
+    from ha_safe_mcp.diagnostics import outcome
+    assert outcome({"state": "stopped", "script_execution": "finished"}, "automation").startswith("completed")
+    assert "condition" in outcome({"state": "stopped", "script_execution": "failed_conditions"}, "automation")
+    assert "error" in outcome({"state": "stopped", "script_execution": "error"}, "script")
+    assert outcome({"state": "running"}, "script") == "still running"
+    assert "single" in outcome({"state": "stopped", "script_execution": "failed_single"}, "script")
+
+
+async def test_listed_runs_carry_the_outcome_and_a_manual_trigger_hint():
+    d = make()
+    runs = await d.list_traces("automation", "automation.morgens")
+    assert all("outcome" in r for r in runs)
+    manual = {"state": "stopped", "script_execution": "finished", "trigger": None}
+    from ha_safe_mcp.diagnostics import summarize_run
+    assert "manually" in summarize_run(manual, "automation")["trigger"]
+
+
 async def test_a_trace_is_condensed_to_the_steps_and_the_error():
     d = make()
     trace = await d.get_trace("automation", "1700000000001", "abc123")

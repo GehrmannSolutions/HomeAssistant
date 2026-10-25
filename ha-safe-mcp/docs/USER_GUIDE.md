@@ -2,7 +2,8 @@
 
 This guide is for an installation you own or administer. Start with reads, discover IDs from **your** Home Assistant (HA), and approve changes only after checking the exact target. All entity names, IDs, area names and configuration payloads below are **illustrative placeholders**, not claims that these objects exist on your system. Do not copy a write example into a live home without replacing and checking every target.
 
-For installation and prerequisites see [INSTALL.md](INSTALL.md); for architecture and security boundaries see [TECHNICAL.md](TECHNICAL.md); for the complete current tool signatures see [TOOLS.md](TOOLS.md); for the project overview see [README.md](../README.md). The web UI currently uses **German labels**; this English guide gives those labels in parentheses so you can find them.
+For a plain-language description of every function with examples and screenshots see the
+[feature guide](FEATURES.md). For installation and prerequisites see [INSTALL.md](INSTALL.md); for architecture and security boundaries see [TECHNICAL.md](TECHNICAL.md); for the complete current tool signatures see [TOOLS.md](TOOLS.md); for the project overview see [README.md](../README.md). The web UI currently uses **German labels**; this English guide gives those labels in parentheses so you can find them.
 
 ## 1. Connect safely
 
@@ -114,7 +115,7 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.26.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.26.1; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
