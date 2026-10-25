@@ -1,12 +1,15 @@
 # Feature guide: everything ha-safe-mcp can do
 
+**English** · [Deutsch](FEATURES.de.md)
+
 This guide explains every function of ha-safe-mcp in plain words: what it does, how it is protected, and how
 you use it. The examples come from the web UI chat with a local model (Ollama, `qwen3-coder:30b`) on a small
 demo home with three lights (Stehlampe and Deckenlicht in the Wohnzimmer, Arbeitslicht in the Küche) and the
-automation "Abendlicht". The screenshots show the web UI in German, so prompts and answers are German too.
+automation "Abendlicht". The screenshots show the English web UI; the demo home keeps its German device and room
+names, so you also see how the model maps English questions to them.
 
 The screenshots are reproducible: `scripts/docs_demo_home.py` builds the demo home on a test instance and
-`scripts/doc_screenshots.py` takes the pictures. For every tool's exact parameters see the generated
+`scripts/doc_screenshots.py --lang en` takes the pictures (`--lang de` for the German guide). For every tool's exact parameters see the generated
 [tool reference](TOOLS.md). Setup and connecting clients
 are in the [user guide](USER_GUIDE.md).
 
@@ -42,22 +45,22 @@ Every tool belongs to one of four **levels**. The server only offers the levels 
 
 | Level | Web UI name | What it allows | Examples |
 |---|---|---|---|
-| **Read** | Nur lesen | Look at anything; nothing changes | states, history, logs, files |
-| **Control** | Steuern | Use devices: switch, run, add items | turn on a light, run a script, add to the shopping list |
-| **Configure** | Konfiguration ändern | Change how Home Assistant is set up | automations, dashboards, rooms, YAML files |
-| **Delete** | Löschen | Remove things and far-reaching actions | delete an automation, install an update, restart |
+| **Read** | Read only | Look at anything; nothing changes | states, history, logs, files |
+| **Control** | Control | Use devices: switch, run, add items | turn on a light, run a script, add to the shopping list |
+| **Configure** | Change configuration | Change how Home Assistant is set up | automations, dashboards, rooms, YAML files |
+| **Delete** | Delete | Remove things and far-reaching actions | delete an automation, install an update, restart |
 
 What protects you in the web UI chat:
 
-- **"Aktionen erlauben"** must be ticked in the chat, otherwise the model may only read.
+- **"Allow actions"** must be ticked in the chat, otherwise the model may only read.
 - **Approval card**: before every action the chat shows exactly what the model wants to run. Nothing happens
-  until you press *Ausführen*. A level marked "ohne Freigabe ausführen" in the settings skips the card; the
+  until you press *Run*. A level marked "run without approval" in the settings skips the card; the
   action is still shown in the chat and logged.
-- **Allowed domains**: *Steuern* only works for the device types you allowed (e.g. `light`, `switch`). Anything
+- **Allowed domains**: *Control* only works for the device types you allowed (e.g. `light`, `switch`). Anything
   else is refused even after approval (see [example](#2-switch-devices-run-scenes-and-scripts)).
-- **Change journal**: before any configuration change the previous state is saved for 30 days; *Rückgängig*
+- **Change journal**: before any configuration change the previous state is saved for 30 days; *Undo*
   restores it ([section 19](#19-change-journal-and-undo)).
-- **No passwords for the model**: logins are stored as *Zugangsdaten* and only referenced by name.
+- **No passwords for the model**: logins are stored as *Credentials* and only referenced by name.
 - Remote clients (Claude, ChatGPT, Codex) have no approval cards in this UI; whether they ask before acting is
   up to the client. Give them only the level they need.
 
@@ -65,31 +68,31 @@ What protects you in the web UI chat:
 
 **Übersicht** shows the connection to Home Assistant, the local model and which levels are switched on.
 
-![Overview page](images/01-overview.png)
+![Overview page](images/en/01-overview.png)
 
 **Einstellungen**: Home Assistant address and token (never shown again after saving), the local model, the
 levels with their "ohne Freigabe" switches and the allowed domains. Chips marked ▲ (covers, automations, locks,
 alarm) have consequences for safety or the building and should be allowed consciously.
 
-![Settings page](images/02-settings.png)
+![Settings page](images/en/02-settings.png)
 
 **Zugangsdaten**: logins for devices and services (e.g. a Shelly password). They are stored encrypted on this
 computer and never shown; in the chat you only name the alias, the model never sees the value.
 
-![Credentials page](images/15-credentials.png)
+![Credentials page](images/en/15-credentials.png)
 
 **MCP-Clients**: tokens for external AI clients, each with its own level and optional domain list. The token is
 shown once when created.
 
-![MCP clients page](images/17-clients.png)
+![MCP clients page](images/en/17-clients.png)
 
 **Dateien**: plans and scripts the model wrote in the chat, stored on this computer only (they never reach Home
 Assistant). **Protokoll**: a metadata-only log of every call (time, tool, route, status, duration; no names,
 contents or tokens), deleted after 30 days.
 
-![File manager](images/18-file-manager.png)
+![File manager](images/en/18-file-manager.png)
 
-![Audit log](images/19-audit.png)
+![Audit log](images/en/19-audit.png)
 
 **Backups** and **Änderungen** are described in [section 16](#16-backups) and [section 19](#19-change-journal-and-undo).
 
@@ -109,10 +112,10 @@ Ask about anything in your home; reading never changes anything.
 | `ha_list_entity_registry` | Registry entries of all integration-managed entities. | Read |
 | `ha_get_entity_registry` | One entity's settings: name, icon, room, labels, categories, voice-assistant aliases, hidden/disabled. | Read |
 
-**Example**: *"Welche Lampen gibt es im Wohnzimmer und welche sind an?"* The model asks for the room's
+**Example**: *"Which lamps are in the living room (Wohnzimmer) and which are on?"* The model asks for the room's
 entities and answers from the live states:
 
-![Chat: reading a room](images/03-chat-read.png)
+![Chat: reading a room](images/en/03-chat-read.png)
 
 ## 2. Switch devices, run scenes and scripts
 
@@ -128,19 +131,19 @@ every call is followed by a read-back, so a target that did not reach the expect
 confirmed instead of "done". The chat model is additionally instructed to switch the individual entities of a
 room (not a group on top of its members) and to name unavailable ones instead of switching them.
 
-**Example**: *"Schalte die Stehlampe im Wohnzimmer aus"* (with *Aktionen erlauben* ticked). The model finds the
+**Example**: *"Turn on the Stehlampe in the living room"* (with *Allow actions* ticked). The model finds the
 lamp and asks for approval:
 
-![Chat: approval card](images/04-chat-approval.png)
+![Chat: approval card](images/en/04-chat-approval.png)
 
-After *Ausführen* the MCP switches, reads the lamp back and the model reports the confirmed result:
+After *Run* the MCP switches, reads the lamp back and the model reports the confirmed result:
 
-![Chat: confirmed result](images/05-chat-confirmed.png)
+![Chat: confirmed result](images/en/05-chat-confirmed.png)
 
-**Example of a refusal**: *"Setze Milch auf die Einkaufsliste"* while `todo` is not an allowed domain. Even
+**Example of a refusal**: *"Put milk on the shopping list"* while `todo` is not an allowed domain. Even
 after approval the MCP refuses and the model explains what is missing:
 
-![Chat: domain not allowed](images/13-chat-domain-blocked.png)
+![Chat: domain not allowed](images/en/13-chat-domain-blocked.png)
 
 ## 3. Automations
 
@@ -151,7 +154,7 @@ after approval the MCP refuses and the model explains what is missing:
 | `ha_save_automation` | Validates, creates or updates an automation and reads it back. Journaled. | Configure |
 | `ha_delete_automation` | Deletes an automation. Journaled: undo recreates it. | Delete |
 
-**Example**: *"Erstelle eine Automation, die bei Sonnenuntergang die Stehlampe einschaltet, wenn sie aus ist."*
+**Example**: *"Create an automation that turns on the Stehlampe at sunset if it is off."*
 The approval card shows the full configuration, e.g.:
 
 ```json
@@ -195,7 +198,7 @@ Running them is in [section 2](#2-switch-devices-run-scenes-and-scripts) (`ha_ru
 | `ha_list_themes` | Installed themes and the current defaults. | Read |
 | `ha_set_theme` | Sets the default theme for light or dark mode. Journaled. | Configure |
 
-**Example**: *"Erstelle ein Dashboard 'Wohnzimmer' mit einer Karte für jede Lampe im Wohnzimmer."*
+**Example**: *"Create a dashboard 'Living room' with one card for each lamp in the Wohnzimmer."*
 
 ## 6. Helpers
 
@@ -209,7 +212,7 @@ Helpers are the building blocks under *Settings → Devices & services → Helpe
 | `ha_update_helper` | Changes a helper and reads it back. Journaled. | Configure |
 | `ha_delete_helper` | Deletes a helper. Journaled. | Delete |
 
-**Example**: *"Lege einen Template-Sensor an, der zählt, wie viele Lampen an sind."* The model starts the
+**Example**: *"Create a template sensor that counts how many lamps are on."* The model starts the
 template flow with `ha_start_integration_setup` and fills in the form step by step, each step with its own card.
 
 ## 7. Rooms, floors, devices and entities
@@ -226,7 +229,7 @@ template flow with `ha_start_integration_setup` and fills in the form step by st
 | `ha_update_entity_registry` | Changes an entity's name, icon, room, labels, categories, voice-assistant aliases, hidden/disabled. Journaled. | Configure |
 | `ha_rename_entity` | Changes an entity ID (`light.x` → `light.y`); HA keeps the history. Lists the automations, scripts and dashboards that still use the old ID. Journaled. | Configure |
 
-**Example**: *"Verschiebe das Arbeitslicht in die Küche und gib ihm den Alias 'Küchenlicht'."*
+**Example**: *"Move the Arbeitslicht to the Küche and give it the alias 'Kitchen light'."*
 
 ## 8. Labels, categories and zones
 
@@ -248,9 +251,9 @@ template flow with `ha_start_integration_setup` and fills in the form step by st
 
 **Example**: *"Lege ein Label 'Doku-Demo' in Blau an."* The card shows name and colour:
 
-![Chat: label approval card](images/08a-chat-label-card.png)
+![Chat: label approval card](images/en/08a-chat-label-card.png)
 
-![Chat: label created](images/08-chat-label.png)
+![Chat: label created](images/en/08-chat-label.png)
 
 ## 9. Integrations
 
@@ -274,8 +277,8 @@ Set up, configure and maintain integrations the way the HA UI does it, step by s
 | `ha_reload_integration` | Reloads one integration. | Configure |
 | `ha_delete_integration` | Removes an integration and its devices. | Delete |
 
-**Example**: first store the Shelly login under *Zugangsdaten* as alias `shelly_login`, then ask *"Füge den
-Shelly mit der IP 192.168.1.50 hinzu, Login shelly_login."* The model fills the password field with
+**Example**: first store the Shelly login under *Credentials* as alias `shelly_login`, then ask *"Add the
+Shelly with the IP 192.168.1.50, login shelly_login."* The model fills the password field with
 `{"$credential": "shelly_login", "field": "password"}`; the MCP inserts the real value, the model never sees it.
 
 ## 10. Configuration files (YAML)
@@ -303,9 +306,9 @@ How it is protected:
   failed") restores the previous file automatically, and the tool says why.
 - Every write is journaled and can be undone. A change takes effect after `ha_reload` or `ha_restart`.
 
-**Example**: *"Welche Dateien bindet die configuration.yaml ein?"*
+**Example**: *"Which files does configuration.yaml include?"*
 
-![Chat: reading configuration.yaml](images/07-chat-config-file.png)
+![Chat: reading configuration.yaml](images/en/07-chat-config-file.png)
 
 A typical edit the model sends (shown on the approval card):
 
@@ -330,13 +333,13 @@ A typical edit the model sends (shown on the approval card):
 | `ha_render_template` | Evaluates a Jinja template against the live state, e.g. `{{ states.light \| selectattr('state','eq','on') \| list \| count }}`. | Read |
 | `ha_test_condition` | Tests a condition right now without saving anything. | Read |
 
-**Example**: *"Wann und warum ist die Automation Abendlicht zuletzt gelaufen?"*
+**Example**: *"When and why did the automation Abendlicht last run?"*
 
-![Chat: automation trace](images/06-chat-debug.png)
+![Chat: automation trace](images/en/06-chat-debug.png)
 
-**Example**: *"Wann war die Stehlampe im Wohnzimmer heute an? Schau im Verlauf nach."*
+**Example**: *"When was the Stehlampe in the living room on today? Check the history."*
 
-![Chat: history](images/11-chat-history.png)
+![Chat: history](images/en/11-chat-history.png)
 
 ## 12. Overview and "where is this used?"
 
@@ -345,13 +348,13 @@ A typical edit the model sends (shown on the approval card):
 | `ha_get_overview` | A compact picture of your installation: version, entities per domain (unavailable, on), rooms, devices, automations, dashboards, failing integrations. | Read |
 | `ha_find_usages` | Where an entity or action is used: automations, scripts, scenes, groups and dashboards, with the place inside the configuration. Use it before renaming or removing something. | Read |
 
-**Example**: *"Wo wird die Stehlampe verwendet?"*
+**Example**: *"Which automations, scripts or dashboards use the Stehlampe?"*
 
-![Chat: where is it used](images/12-chat-usages.png)
+![Chat: where is it used](images/en/12-chat-usages.png)
 
-**Example**: *"Gib mir einen kurzen Überblick über mein Home Assistant."*
+**Example**: *"Give me a short overview of my Home Assistant."*
 
-![Chat: overview](images/14-chat-summary.png)
+![Chat: overview](images/en/14-chat-summary.png)
 
 ## 13. Calendars and to-do lists
 
@@ -370,7 +373,7 @@ A typical edit the model sends (shown on the approval card):
 
 Calendar entries and list items are your data, not configuration, so they are not in the change journal.
 
-**Example**: *"Was steht morgen im Kalender?"*, *"Hake Milch auf der Einkaufsliste ab."*
+**Example**: *"What is in the calendar tomorrow?"*, *"Tick off milk on the shopping list."*
 
 ## 14. Weather
 
@@ -380,7 +383,7 @@ Calendar entries and list items are your data, not configuration, so they are no
 
 **Example**: *"Wie wird das Wetter morgen?"*
 
-![Chat: weather](images/10-chat-weather.png)
+![Chat: weather](images/en/10-chat-weather.png)
 
 ## 15. Updates, configuration check, reload and restart
 
@@ -394,7 +397,7 @@ Calendar entries and list items are your data, not configuration, so they are no
 | `ha_install_update` | Installs an update, optionally with a backup first. Far-reaching, therefore the delete level. | Delete |
 | `ha_restart` | Restarts Home Assistant, only after a successful configuration check. Interrupts automations for about a minute. | Delete |
 
-**Example**: *"Gibt es Updates?"*, *"Prüfe die Konfiguration und lade danach die Automationen neu."*
+**Example**: *"Are there any updates?"*, *"Check the configuration and then reload the automations."*
 
 ## 16. Backups
 
@@ -407,7 +410,7 @@ Calendar entries and list items are your data, not configuration, so they are no
 Restoring a backup is planned (with a fresh backup right before and a clear approval card) but not available
 yet. The *Backups* page in the web UI lists the backups and can create one before you change things:
 
-![Backups page](images/16-backups.png)
+![Backups page](images/en/16-backups.png)
 
 ## 17. Blueprints
 
@@ -418,8 +421,8 @@ yet. The *Backups* page in the web UI lists the backups and can create one befor
 | `ha_save_blueprint` | Imports a blueprint; existing ones are never overwritten. Journaled: undo deletes it. | Configure |
 | `ha_delete_blueprint` | Deletes a blueprint (HA refuses while it is in use); undo imports it again from its source. | Delete |
 
-**Example**: *"Importiere den Bewegungsmelder-Blueprint von <URL> und erstelle damit eine Automation für den
-Flur."* The automation then uses `{"use_blueprint": {"path": "...", "input": {...}}}`.
+**Example**: *"Import the motion-light blueprint from <URL> and use it to create an automation for the
+hallway."* The automation then uses `{"use_blueprint": {"path": "...", "input": {...}}}`.
 
 ## 18. Add-ons, system, HACS, Zigbee and Thread
 
@@ -434,12 +437,12 @@ addresses, host names or network keys are returned.
 | `ha_list_zigbee_devices` | Zigbee devices with availability, signal quality and last contact; `problems_only` shows only unavailable or weak ones. | Read |
 | `ha_list_thread_networks` | Thread networks (name, channel, preferred). | Read |
 
-**Example**: *"Welche Zigbee-Geräte haben schlechten Empfang oder sind offline?"*
+**Example**: *"Which Zigbee devices have poor reception or are offline?"*
 
 ## 19. Change journal and undo
 
 Before every configuration change made through the MCP the previous state is stored on this computer for 30
-days. The *Änderungen* page lists them with a *Rückgängig* button; the model can do the same.
+days. The *Changes* page lists them with an *Undo* button; the model can do the same.
 
 | Tool | What it does | Level |
 |---|---|---|
@@ -450,7 +453,7 @@ days. The *Änderungen* page lists them with a *Rückgängig* button; the model 
 Not journaled: switching devices and firing events, calendar and to-do items, removing an integration, options
 dialogs, updates, restarts and backups. A newly set-up integration is journaled (undo removes it).
 
-![Change journal](images/09-changes.png)
+![Change journal](images/en/09-changes.png)
 
 ## 20. Direct REST access (advanced)
 

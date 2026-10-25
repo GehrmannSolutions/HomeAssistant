@@ -1,6 +1,10 @@
 # ha-safe-mcp
 
+**English** · [Deutsch](README.de.md)
+
 A self-hosted, safety-first [Model Context Protocol](https://modelcontextprotocol.io/) bridge to Home Assistant. Use it with a local MCP client over **stdio**, or use the optional loopback-only browser UI and a local Ollama model. It is not an unrestricted REST/WebSocket proxy. All write operations are **disabled by default**; enabling them is a deliberate choice on **your own** Home Assistant instance.
+
+The web UI is available in English and German (language switch in the header) and has a light/dark toggle.
 
 ## Get started
 
@@ -14,7 +18,7 @@ python3 -m venv .venv
 .venv/bin/ha-mcp-ui  # visit http://127.0.0.1:8765/ on the same machine
 ```
 
-The UI wizard tests your Home Assistant address and token before saving them. Configure a local, tool-capable Ollama model for chat; if using an external MCP client, Ollama is unnecessary. The UI is in German at present; the documentation is in English. **Do not expose port 8765 to your network or the internet.** The UI has no built-in account login. See the full [installation guide](docs/INSTALL.md) for a headless MCP setup, a read-only first test, and deployment options.
+The UI wizard tests your Home Assistant address and token before saving them. Configure a local, tool-capable Ollama model for chat; if using an external MCP client, Ollama is unnecessary. The UI and the documentation are available in English and German. **Do not expose port 8765 to your network or the internet.** The UI has no built-in account login. See the full [installation guide](docs/INSTALL.md) for a headless MCP setup, a read-only first test, and deployment options.
 
 ## What it does
 
@@ -38,9 +42,9 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
   meter, derivative, ...).
 - Labels, categories and zones; entity aliases, labels, categories, hiding and entity ID renames.
 - Debugging: automation/script traces, error log, logbook, history, long-term statistics, repairs, system health, template and condition tests.
-- Change journal with undo: every configuration change keeps its previous state locally (30 days) and can be undone (and redone) from the chat or the UI's **Änderungen** tab.
+- Change journal with undo: every configuration change keeps its previous state locally (30 days) and can be undone (and redone) from the chat or the UI's **Changes** tab.
 - UI credential store for integration secrets (referenced by alias), saved plans/code blocks (not executed), metadata-only request log, backup download.
-- No backup restore, arbitrary HA YAML editing, generic network discovery, arbitrary WebSocket commands, or unbounded API proxy.
+- No backup restore, editing of protected files (`secrets.yaml`, `.storage`, databases), generic network discovery, arbitrary WebSocket commands, or unbounded API proxy.
 
 ## Documentation
 

@@ -1,41 +1,56 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Zugriff freigeben – HA Safe MCP</title>
+  <title>Grant access – HA Safe MCP</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/prefs.js"></script>
   <script src="/static/domains.js" defer></script>
   <script src="/static/oauth.js" defer></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>HA Safe MCP</span></div>
+    <div class="prefs">
+      <div class="lang-switch" role="group" aria-label="Language" data-de-aria-label="Sprache">
+        <button type="button" data-lang="en" lang="en" title="English">EN</button>
+        <button type="button" data-lang="de" lang="de" title="Deutsch">DE</button>
+      </div>
+      <button type="button" class="theme-toggle" data-theme-toggle role="switch" aria-checked="false"
+              aria-label="Dark mode" data-de-aria-label="Dunkles Design">
+        <span class="theme-track" aria-hidden="true">
+          <svg class="theme-sun" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M4.8 4.8l1.7 1.7M17.5 17.5l1.7 1.7M4.8 19.2l1.7-1.7M17.5 6.5l1.7-1.7"/></svg>
+          <svg class="theme-moon" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1Z"/></svg>
+          <span class="theme-knob"></span>
+        </span>
+      </button>
+    </div>
   </header>
   <main>
     <section class="card oauth-card">
-      <h1>Zugriff freigeben</h1>
-      <p id="oauth-intro" class="muted">Anfrage wird geprüft …</p>
+      <h1 data-de="Zugriff freigeben">Grant access</h1>
+      <p id="oauth-intro" class="muted" data-de="Anfrage wird geprüft …">Checking the request …</p>
       <form id="oauth-form" hidden>
-        <p><strong id="oauth-client"></strong> möchte über den MCP-Endpunkt auf dein Home Assistant zugreifen.
-          Nach der Freigabe geht es zurück zu <code id="oauth-host"></code>.</p>
-        <label>Stufe
+        <p><strong id="oauth-client"></strong> <span data-de="möchte über den MCP-Endpunkt auf dein Home Assistant zugreifen. Nach der Freigabe geht es zurück zu">wants to access your Home Assistant through the MCP endpoint. After approval you return to</span>
+          <code id="oauth-host"></code>.</p>
+        <label><span data-de="Stufe">Level</span>
           <select name="level">
-            <option value="read" selected>Nur lesen</option>
-            <option value="control">Steuern</option>
-            <option value="admin">Konfiguration ändern</option>
-            <option value="delete">Löschen</option>
+            <option value="read" selected data-de="Nur lesen">Read only</option>
+            <option value="control" data-de="Steuern">Control</option>
+            <option value="admin" data-de="Konfiguration ändern">Change configuration</option>
+            <option value="delete" data-de="Löschen">Delete</option>
           </select>
         </label>
-        <label>Domains (optional, kommagetrennt) <input name="domains" placeholder="light, switch"></label>
-        <p class="muted">Die Stufe wird durch die Schalter unter „Einstellungen“ gedeckelt. Der Client zeigt keine
-          Freigabe-Karten dieser Oberfläche; Gerätenamen und Zustände gehen an seinen Anbieter. Widerrufen kannst du
-          den Zugriff jederzeit im Reiter „MCP-Clients“.</p>
+        <label><span data-de="Domains (optional, kommagetrennt)">Domains (optional, comma-separated)</span> <input name="domains" placeholder="light, switch"></label>
+        <p class="muted" data-de="Die Stufe wird durch die Schalter unter „Einstellungen“ gedeckelt. Der Client zeigt keine Freigabe-Karten dieser Oberfläche; Gerätenamen und Zustände gehen an seinen Anbieter. Widerrufen kannst du den Zugriff jederzeit im Reiter „MCP-Clients“.">The level is capped by the switches under "Settings". The client does not show this UI's
+          approval cards; device names and states go to its provider. You can revoke the access at any time in the
+          "MCP clients" tab.</p>
         <div class="actions">
-          <button type="button" class="secondary" data-action="deny">Ablehnen</button>
-          <button type="submit" class="primary">Freigeben</button>
+          <button type="button" class="secondary" data-action="deny" data-de="Ablehnen">Reject</button>
+          <button type="submit" class="primary" data-de="Freigeben">Approve</button>
         </div>
       </form>
       <div class="result" id="oauth-result" role="status" aria-live="polite"></div>

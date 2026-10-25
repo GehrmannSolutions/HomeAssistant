@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +7,7 @@
   <title>HA Safe MCP</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/prefs.js"></script>
   <script src="/static/domains.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
@@ -16,96 +17,110 @@
       <img src="/static/icon.svg" alt="" width="28" height="28">
       <span>HA Safe MCP</span>
     </div>
-    <nav class="tabs" aria-label="Bereiche" hidden>
-      <button type="button" class="tab" data-view="home">Übersicht</button>
+    <nav class="tabs" aria-label="Sections" data-de-aria-label="Bereiche" hidden>
+      <button type="button" class="tab" data-view="home" data-de="Übersicht">Overview</button>
       <button type="button" class="tab" data-view="chat">Chat</button>
-      <button type="button" class="tab" data-view="credentials">Zugangsdaten</button>
+      <button type="button" class="tab" data-view="credentials" data-de="Zugangsdaten">Credentials</button>
       <button type="button" class="tab" data-view="backups">Backups</button>
-      <button type="button" class="tab" data-view="changes">Änderungen</button>
-      <button type="button" class="tab" data-view="clients">MCP-Clients</button>
-      <button type="button" class="tab" data-view="files">Dateien</button>
-      <button type="button" class="tab" data-view="audit">Protokoll</button>
-      <button type="button" class="tab" data-view="settings">Einstellungen</button>
+      <button type="button" class="tab" data-view="changes" data-de="Änderungen">Changes</button>
+      <button type="button" class="tab" data-view="clients" data-de="MCP-Clients">MCP clients</button>
+      <button type="button" class="tab" data-view="files" data-de="Dateien">Files</button>
+      <button type="button" class="tab" data-view="audit" data-de="Protokoll">Audit log</button>
+      <button type="button" class="tab" data-view="settings" data-de="Einstellungen">Settings</button>
     </nav>
     <div class="mode-pill" id="mode-pill" hidden></div>
+    <div class="prefs">
+      <div class="lang-switch" role="group" aria-label="Language" data-de-aria-label="Sprache">
+        <button type="button" data-lang="en" lang="en" title="English">EN</button>
+        <button type="button" data-lang="de" lang="de" title="Deutsch">DE</button>
+      </div>
+      <button type="button" class="theme-toggle" data-theme-toggle role="switch" aria-checked="false"
+              aria-label="Dark mode" data-de-aria-label="Dunkles Design">
+        <span class="theme-track" aria-hidden="true">
+          <svg class="theme-sun" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M4.8 4.8l1.7 1.7M17.5 17.5l1.7 1.7M4.8 19.2l1.7-1.7M17.5 6.5l1.7-1.7"/></svg>
+          <svg class="theme-moon" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1Z"/></svg>
+          <span class="theme-knob"></span>
+        </span>
+      </button>
+    </div>
   </header>
 
   <main>
     <section id="view-loading" class="view">
-      <p class="muted">Lade …</p>
+      <p class="muted" data-de="Lade …">Loading …</p>
     </section>
 
     <!-- First-run setup wizard -->
     <section id="view-setup" class="view" hidden>
       <div class="card wizard">
-        <h1>Ersteinrichtung</h1>
-        <ol class="steps" aria-label="Fortschritt">
+        <h1 data-de="Ersteinrichtung">First-run setup</h1>
+        <ol class="steps" aria-label="Progress" data-de-aria-label="Fortschritt">
           <li data-step="1">Home Assistant</li>
-          <li data-step="2">Lokales Modell</li>
-          <li data-step="3">Sicherheit</li>
-          <li data-step="4">Fertig</li>
+          <li data-step="2" data-de="Lokales Modell">Local model</li>
+          <li data-step="3" data-de="Sicherheit">Safety</li>
+          <li data-step="4" data-de="Fertig">Done</li>
         </ol>
 
         <form id="step-1" class="step" data-step="1" autocomplete="off">
-          <p>Verbinde den MCP mit deiner Home-Assistant-Instanz. Den Token erstellst du in Home Assistant unter
-            <strong>Profil → Sicherheit → Langlebige Zugriffstoken</strong>.</p>
-          <label>Adresse von Home Assistant
+          <p data-de-html="Verbinde den MCP mit deiner Home-Assistant-Instanz. Den Token erstellst du in Home Assistant unter &lt;strong&gt;Profil → Sicherheit → Langlebige Zugriffstoken&lt;/strong&gt;.">Connect the MCP to your Home Assistant instance. Create the token in Home Assistant under
+            <strong>Profile → Security → Long-lived access tokens</strong>.</p>
+          <label><span data-de="Adresse von Home Assistant">Home Assistant address</span>
             <input name="ha_url" type="url" required value="http://127.0.0.1:8123" spellcheck="false">
           </label>
-          <label>Langlebiger Zugriffstoken
+          <label><span data-de="Langlebiger Zugriffstoken">Long-lived access token</span>
             <input name="token" type="password" autocomplete="new-password" spellcheck="false" placeholder="eyJ…">
-            <small class="muted" id="token-hint">Der Token wird nur lokal in <code>.env</code> (Rechte 600) gespeichert und nie angezeigt.</small>
+            <small class="muted" id="token-hint" data-de-html="Der Token wird nur lokal in &lt;code&gt;.env&lt;/code&gt; (Rechte 600) gespeichert und nie angezeigt.">The token is stored only locally in <code>.env</code> (mode 600) and never shown.</small>
           </label>
           <div class="actions">
-            <button type="submit" class="primary">Verbindung prüfen</button>
+            <button type="submit" class="primary" data-de="Verbindung prüfen">Check connection</button>
           </div>
           <div class="result" role="status" aria-live="polite"></div>
         </form>
 
         <form id="step-2" class="step" data-step="2" hidden>
-          <p>Wähle das lokale Modell, mit dem du chatten möchtest. Es läuft über Ollama auf diesem Rechner.</p>
-          <label>Adresse von Ollama
+          <p data-de="Wähle das lokale Modell, mit dem du chatten möchtest. Es läuft über Ollama auf diesem Rechner.">Choose the local model you want to chat with. It runs through Ollama on this computer.</p>
+          <label><span data-de="Adresse von Ollama">Ollama address</span>
             <input name="ollama_url" type="url" required value="http://127.0.0.1:11434" spellcheck="false">
           </label>
           <div class="actions">
-            <button type="button" class="secondary" data-action="load-models">Modelle laden</button>
+            <button type="button" class="secondary" data-action="load-models" data-de="Modelle laden">Load models</button>
           </div>
-          <label>Modell
+          <label><span data-de="Modell">Model</span>
             <select name="ollama_model" required></select>
           </label>
           <div class="result" role="status" aria-live="polite"></div>
           <div class="actions">
-            <button type="button" class="ghost" data-action="back">Zurück</button>
-            <button type="submit" class="primary">Weiter</button>
+            <button type="button" class="ghost" data-action="back" data-de="Zurück">Back</button>
+            <button type="submit" class="primary" data-de="Weiter">Next</button>
           </div>
         </form>
 
         <form id="step-3" class="step" data-step="3" hidden>
-          <p>Standard ist <strong>nur lesen</strong>. Schreibrechte kannst du jederzeit in den Einstellungen ändern;
-            im Chat musst du zusätzlich jede einzelne Aktion bestätigen.</p>
+          <p data-de-html="Standard ist &lt;strong&gt;nur lesen&lt;/strong&gt;. Schreibrechte kannst du jederzeit in den Einstellungen ändern; im Chat musst du zusätzlich jede einzelne Aktion bestätigen.">The default is <strong>read only</strong>. You can change write permissions in the settings at any time;
+            in the chat you also confirm every single action.</p>
           <div class="switches">
-            <label class="switch"><input type="checkbox" name="allow_write"> <span>Steuern erlauben</span>
-              <small class="muted">Dienste für einzelne Entitäten der erlaubten Domains (z. B. Licht an/aus).</small></label>
-            <label class="switch"><input type="checkbox" name="allow_admin_write"> <span>Konfiguration ändern erlauben</span>
-              <small class="muted">Automationen, Dashboards, Helfer, Registry. Braucht einen Admin-Token.</small></label>
-            <label class="switch"><input type="checkbox" name="allow_delete"> <span>Löschen erlauben</span>
-              <small class="muted">Automationen, Dashboards und Helfer entfernen.</small></label>
+            <label class="switch"><input type="checkbox" name="allow_write"> <span data-de="Steuern erlauben">Allow control</span>
+              <small class="muted" data-de="Dienste für einzelne Entitäten der erlaubten Domains (z. B. Licht an/aus).">Actions on single entities of the allowed domains (e.g. light on/off).</small></label>
+            <label class="switch"><input type="checkbox" name="allow_admin_write"> <span data-de="Konfiguration ändern erlauben">Allow changing configuration</span>
+              <small class="muted" data-de="Automationen, Dashboards, Helfer, Registry. Braucht einen Admin-Token.">Automations, dashboards, helpers, registry. Needs an admin token.</small></label>
+            <label class="switch"><input type="checkbox" name="allow_delete"> <span data-de="Löschen erlauben">Allow delete</span>
+              <small class="muted" data-de="Automationen, Dashboards und Helfer entfernen.">Remove automations, dashboards and helpers.</small></label>
           </div>
-          <label>Erlaubte Domains für Steuerbefehle
+          <label><span data-de="Erlaubte Domains für Steuerbefehle">Allowed domains for control actions</span>
             <input name="allowed_domains" value="light,switch,fan,climate,cover,media_player" spellcheck="false">
           </label>
           <div class="result" role="status" aria-live="polite"></div>
           <div class="actions">
-            <button type="button" class="ghost" data-action="back">Zurück</button>
-            <button type="submit" class="primary">Speichern</button>
+            <button type="button" class="ghost" data-action="back" data-de="Zurück">Back</button>
+            <button type="submit" class="primary" data-de="Speichern">Save</button>
           </div>
         </form>
 
         <div id="step-4" class="step" data-step="4" hidden>
-          <h2>Alles bereit</h2>
+          <h2 data-de="Alles bereit">All set</h2>
           <p class="result ok" id="done-summary"></p>
           <div class="actions">
-            <button type="button" class="primary" data-action="open-chat">Zum Chat</button>
+            <button type="button" class="primary" data-action="open-chat" data-de="Zum Chat">Open the chat</button>
           </div>
         </div>
       </div>
@@ -117,20 +132,20 @@
         <div class="card">
           <h2>Home Assistant</h2>
           <dl class="facts" id="ha-facts"></dl>
-          <button type="button" class="secondary" data-action="recheck">Erneut prüfen</button>
+          <button type="button" class="secondary" data-action="recheck" data-de="Erneut prüfen">Check again</button>
         </div>
         <div class="card">
-          <h2>Lokales Modell</h2>
+          <h2 data-de="Lokales Modell">Local model</h2>
           <dl class="facts" id="model-facts"></dl>
         </div>
         <div class="card">
-          <h2>Berechtigungen</h2>
+          <h2 data-de="Berechtigungen">Permissions</h2>
           <ul class="perm" id="perm-list"></ul>
-          <button type="button" class="ghost" data-view-link="settings">Ändern</button>
+          <button type="button" class="ghost" data-view-link="settings" data-de="Ändern">Change</button>
         </div>
       </div>
       <div class="card">
-        <h2>Loslegen</h2>
+        <h2 data-de="Loslegen">Get started</h2>
         <div class="chips" id="start-chips"></div>
       </div>
     </section>
@@ -143,34 +158,34 @@
     <!-- Credentials -->
     <section id="view-credentials" class="view" hidden>
       <div class="card">
-        <h2>Zugangsdaten</h2>
-        <p class="muted">Logins für Geräte und Dienste, z. B. Shelly-Passwörter. Sie liegen verschlüsselt auf diesem
-          Rechner und werden nie angezeigt. Im Chat nennst du nur den <strong>Alias</strong>; das Modell sieht nie den Wert.</p>
+        <h2 data-de="Zugangsdaten">Credentials</h2>
+        <p class="muted" data-de-html="Logins für Geräte und Dienste, z. B. Shelly-Passwörter. Sie liegen verschlüsselt auf diesem Rechner und werden nie angezeigt. Im Chat nennst du nur den &lt;strong&gt;Alias&lt;/strong&gt;; das Modell sieht nie den Wert.">Logins for devices and services, e.g. Shelly passwords. They are stored encrypted on this
+          computer and never shown. In the chat you only name the <strong>alias</strong>; the model never sees the value.</p>
         <table class="cred-table">
-          <thead><tr><th>Alias</th><th>Bezeichnung</th><th>Felder</th><th>Geändert</th><th></th></tr></thead>
+          <thead><tr><th>Alias</th><th data-de="Bezeichnung">Label</th><th data-de="Felder">Fields</th><th data-de="Geändert">Changed</th><th></th></tr></thead>
           <tbody id="cred-rows"></tbody>
         </table>
-        <p class="muted" id="cred-empty" hidden>Noch keine Zugangsdaten gespeichert.</p>
+        <p class="muted" id="cred-empty" data-de="Noch keine Zugangsdaten gespeichert." hidden>No credentials stored yet.</p>
         <div class="result" id="cred-list-result" role="status" aria-live="polite"></div>
       </div>
       <form class="card" id="cred-form" autocomplete="off">
-        <h2 id="cred-form-title">Neue Zugangsdaten</h2>
-        <label>Alias <small class="muted">(Kleinbuchstaben, Ziffern, _; z. B. <code>shelly_login</code>)</small>
+        <h2 id="cred-form-title" data-de="Neue Zugangsdaten">New credentials</h2>
+        <label>Alias <small class="muted" data-de-html="(Kleinbuchstaben, Ziffern, _; z. B. &lt;code&gt;shelly_login&lt;/code&gt;)">(lower-case letters, digits, _; e.g. <code>shelly_login</code>)</small>
           <input name="alias" required pattern="[a-z][a-z0-9_]{0,63}" spellcheck="false">
         </label>
-        <label>Bezeichnung
+        <label><span data-de="Bezeichnung">Label</span>
           <input name="label" maxlength="80">
         </label>
-        <label>Benutzername <small class="muted">(leer lassen, wenn nicht nötig; Shelly Gen2+ braucht keinen)</small>
+        <label><span data-de="Benutzername">User name</span> <small class="muted" data-de="(leer lassen, wenn nicht nötig; Shelly Gen2+ braucht keinen)">(leave empty if not needed; Shelly Gen2+ needs none)</small>
           <input name="username" autocomplete="off" spellcheck="false">
         </label>
-        <label>Passwort <small class="muted" id="cred-password-hint"></small>
+        <label><span data-de="Passwort">Password</span> <small class="muted" id="cred-password-hint"></small>
           <input name="password" type="password" autocomplete="new-password" spellcheck="false">
         </label>
         <div class="result" role="status" aria-live="polite"></div>
         <div class="actions">
-          <button type="button" class="ghost" data-action="cred-reset">Leeren</button>
-          <button type="submit" class="primary">Speichern</button>
+          <button type="button" class="ghost" data-action="cred-reset" data-de="Leeren">Clear</button>
+          <button type="submit" class="primary" data-de="Speichern">Save</button>
         </div>
       </form>
     </section>
@@ -181,19 +196,19 @@
         <div class="viewer-head">
           <h2>Backups</h2>
           <div>
-            <button type="button" class="ghost small" data-action="backups-reload">Aktualisieren</button>
-            <button type="button" class="primary small" data-action="backups-create">Backup erstellen</button>
+            <button type="button" class="ghost small" data-action="backups-reload" data-de="Aktualisieren">Refresh</button>
+            <button type="button" class="primary small" data-action="backups-create" data-de="Backup erstellen">Create backup</button>
           </div>
         </div>
-        <p class="muted">Sicherungen von Home Assistant (Konfiguration und Datenbank) über die Backup-Funktion von
-          Home Assistant selbst. Erstellen braucht „Konfiguration ändern“, Löschen „Löschen erlauben“.
-          <strong>Wiederherstellen</strong> geht bewusst nur in Home Assistant (Einstellungen → System → Backups),
-          weil es die laufende Konfiguration ersetzt und neu startet.</p>
+        <p class="muted" data-de-html="Sicherungen von Home Assistant (Konfiguration und Datenbank) über die Backup-Funktion von Home Assistant selbst. Erstellen braucht „Konfiguration ändern“, Löschen „Löschen erlauben“. &lt;strong&gt;Wiederherstellen&lt;/strong&gt; geht bewusst nur in Home Assistant (Einstellungen → System → Backups), weil es die laufende Konfiguration ersetzt und neu startet.">Backups of Home Assistant (configuration and database) through Home Assistant's own backup
+          feature. Creating needs "Change configuration", deleting "Allow delete". <strong>Restoring</strong> is
+          deliberately only possible in Home Assistant (Settings → System → Backups), because it replaces the running
+          configuration and restarts.</p>
         <table class="cred-table" id="backup-table">
-          <thead><tr><th>Name</th><th>Datum</th><th>Größe</th><th>Speicherort</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th data-de="Datum">Date</th><th data-de="Größe">Size</th><th data-de="Speicherort">Location</th><th></th></tr></thead>
           <tbody id="backup-rows"></tbody>
         </table>
-        <p class="muted" id="backup-empty" hidden>Noch keine Backups.</p>
+        <p class="muted" id="backup-empty" data-de="Noch keine Backups." hidden>No backups yet.</p>
         <div class="result" id="backup-result" role="status" aria-live="polite"></div>
       </div>
     </section>
@@ -202,22 +217,21 @@
     <section id="view-changes" class="view" hidden>
       <div class="card">
         <div class="viewer-head">
-          <h2>Änderungen</h2>
+          <h2 data-de="Änderungen">Changes</h2>
           <div>
-            <button type="button" class="ghost small" data-action="changes-reload">Aktualisieren</button>
+            <button type="button" class="ghost small" data-action="changes-reload" data-de="Aktualisieren">Refresh</button>
           </div>
         </div>
-        <p class="muted">Vor jeder Konfigurationsänderung über den MCP (Automationen, Skripte, Szenen, Dashboards,
-          Helfer, Bereiche, Etagen, Geräte, Entitäten, Integrations-Einstellungen) wird der vorherige Stand lokal
-          gespeichert und 30 Tage aufbewahrt. „Rückgängig“ schreibt ihn zurück; das Rückgängigmachen erscheint selbst
-          wieder in der Liste und lässt sich ebenso zurücknehmen. Braucht „Konfiguration ändern“; wenn dabei etwas
-          entfernt wird, zusätzlich „Löschen erlauben“. Nicht erfasst: Schalten von Geräten, Integrationen
-          hinzufügen/entfernen, Options-Dialoge und Backups.</p>
+        <p class="muted" data-de="Vor jeder Konfigurationsänderung über den MCP (Automationen, Skripte, Szenen, Dashboards, Helfer, Bereiche, Etagen, Geräte, Entitäten, Integrations-Einstellungen, Dateien) wird der vorherige Stand lokal gespeichert und 30 Tage aufbewahrt. „Rückgängig“ schreibt ihn zurück; das Rückgängigmachen erscheint selbst wieder in der Liste und lässt sich ebenso zurücknehmen. Braucht „Konfiguration ändern“; wenn dabei etwas entfernt wird, zusätzlich „Löschen erlauben“. Nicht erfasst: Schalten von Geräten, Integrationen entfernen, Options-Dialoge und Backups.">Before every configuration change through the MCP (automations, scripts, scenes, dashboards,
+          helpers, areas, floors, devices, entities, integration settings, files) the previous state is saved locally
+          and kept for 30 days. "Undo" writes it back; the undo itself appears in the list and can be taken back too.
+          Needs "Change configuration"; if something is removed, also "Allow delete". Not recorded: switching
+          devices, removing integrations, options dialogs and backups.</p>
         <table class="cred-table" id="change-table">
-          <thead><tr><th>Zeit</th><th>Was</th><th>Ziel</th><th>Vorher</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th data-de="Zeit">Time</th><th data-de="Was">What</th><th data-de="Ziel">Target</th><th data-de="Vorher">Before</th><th>Status</th><th></th></tr></thead>
           <tbody id="change-rows"></tbody>
         </table>
-        <p class="muted" id="change-empty" hidden>Noch keine Änderungen erfasst.</p>
+        <p class="muted" id="change-empty" data-de="Noch keine Änderungen erfasst." hidden>No changes recorded yet.</p>
         <div class="result" id="change-result" role="status" aria-live="polite"></div>
       </div>
     </section>
@@ -226,40 +240,40 @@
     <section id="view-clients" class="view" hidden>
       <div class="card">
         <div class="viewer-head">
-          <h2>MCP-Clients</h2>
-          <div><button type="button" class="ghost small" data-action="clients-reload">Aktualisieren</button></div>
+          <h2 data-de="MCP-Clients">MCP clients</h2>
+          <div><button type="button" class="ghost small" data-action="clients-reload" data-de="Aktualisieren">Refresh</button></div>
         </div>
-        <p class="muted">Externe KI-Clients greifen über den MCP-Endpunkt <code id="client-endpoint">…</code> zu, jeder mit
-          eigenem Token und eigener Stufe. Die Stufe wird durch die Schalter unter „Einstellungen“ gedeckelt
-          (<span id="client-instance-level">…</span>). Fremde Clients zeigen keine Freigabe-Karten dieser
-          Oberfläche; ob sie vor Aktionen nachfragen, entscheidet der Client. Vergib deshalb nur die Stufe, die der
-          Client wirklich braucht. Gerätenamen und Zustände gehen dabei an den jeweiligen Anbieter.</p>
+        <p class="muted"><span data-de="Externe KI-Clients greifen über den MCP-Endpunkt">External AI clients connect through the MCP endpoint</span>
+          <code id="client-endpoint">…</code><span data-de=", jeder mit eigenem Token und eigener Stufe. Die Stufe wird durch die Schalter unter „Einstellungen“ gedeckelt">, each with its own token and level. The level is capped by the switches under "Settings"</span>
+          (<span id="client-instance-level">…</span>). <span data-de="Fremde Clients zeigen keine Freigabe-Karten dieser Oberfläche; ob sie vor Aktionen nachfragen, entscheidet der Client. Vergib deshalb nur die Stufe, die der Client wirklich braucht. Gerätenamen und Zustände gehen dabei an den jeweiligen Anbieter.">External clients do not show this UI's approval cards; whether they ask before acting is up
+          to the client. So give each client only the level it really needs. Device names and states go to the
+          client's provider.</span></p>
         <table class="cred-table" id="client-table">
-          <thead><tr><th>Name</th><th>Stufe</th><th>Wirksam</th><th>Domains</th><th>Zuletzt genutzt</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th data-de="Stufe">Level</th><th data-de="Wirksam">Effective</th><th>Domains</th><th data-de="Zuletzt genutzt">Last used</th><th></th></tr></thead>
           <tbody id="client-rows"></tbody>
         </table>
-        <p class="muted" id="client-empty" hidden>Noch kein Client. Solange keiner eingerichtet ist, ist der Endpunkt aus.</p>
+        <p class="muted" id="client-empty" data-de="Noch kein Client. Solange keiner eingerichtet ist, ist der Endpunkt aus." hidden>No client yet. As long as none is set up, the endpoint is off.</p>
         <form id="client-form" class="inline-form">
-          <label>Name <input name="name" required maxlength="80" placeholder="z. B. Claude Code Laptop"></label>
-          <label>Stufe
+          <label>Name <input name="name" required maxlength="80" placeholder="e.g. Claude Code laptop" data-de-placeholder="z. B. Claude Code Laptop"></label>
+          <label><span data-de="Stufe">Level</span>
             <select name="level">
-              <option value="read">Nur lesen</option>
-              <option value="control">Steuern</option>
-              <option value="admin">Konfiguration ändern</option>
-              <option value="delete">Löschen</option>
+              <option value="read" data-de="Nur lesen">Read only</option>
+              <option value="control" data-de="Steuern">Control</option>
+              <option value="admin" data-de="Konfiguration ändern">Change configuration</option>
+              <option value="delete" data-de="Löschen">Delete</option>
             </select>
           </label>
-          <label>Domains (optional, kommagetrennt) <input name="domains" placeholder="light, switch" spellcheck="false"></label>
-          <button type="submit" class="primary small">Client anlegen</button>
+          <label><span data-de="Domains (optional, kommagetrennt)">Domains (optional, comma-separated)</span> <input name="domains" placeholder="light, switch" spellcheck="false"></label>
+          <button type="submit" class="primary small" data-de="Client anlegen">Create client</button>
         </form>
         <div class="token-box" id="client-token" hidden>
-          <p><strong>Token für »<span id="client-token-name"></span>«</strong>, wird nur jetzt angezeigt:</p>
+          <p><strong><span data-de="Token für »">Token for "</span><span id="client-token-name"></span><span data-de="«">"</span></strong><span data-de=", wird nur jetzt angezeigt:">, shown only now:</span></p>
           <pre id="client-token-value"></pre>
           <p class="muted">Claude Code:</p>
           <pre id="client-snippet-claude"></pre>
-          <p class="muted">Codex (Token als Umgebungsvariable):</p>
+          <p class="muted" data-de="Codex (Token als Umgebungsvariable):">Codex (token as environment variable):</p>
           <pre id="client-snippet-codex"></pre>
-          <p class="muted">Andere Clients: URL wie oben, Header <code>Authorization: Bearer &lt;Token&gt;</code>.</p>
+          <p class="muted" data-de-html="Andere Clients: URL wie oben, Header &lt;code&gt;Authorization: Bearer &amp;lt;Token&amp;gt;&lt;/code&gt;.">Other clients: URL as above, header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
         </div>
         <div class="result" id="client-result" role="status" aria-live="polite"></div>
       </div>
@@ -268,20 +282,20 @@
     <!-- Files: plans and scripts the model wrote -->
     <section id="view-files" class="view" hidden>
       <div class="card">
-        <h2>Dateien</h2>
-        <p class="muted">Pläne und Skripte, die das Modell im Chat erzeugt hat. Sie liegen nur auf diesem Rechner und
-          werden <strong>nie automatisch ausgeführt</strong>. Lesen, herunterladen oder löschen.</p>
+        <h2 data-de="Dateien">Files</h2>
+        <p class="muted" data-de-html="Pläne und Skripte, die das Modell im Chat erzeugt hat. Sie liegen nur auf diesem Rechner und werden &lt;strong&gt;nie automatisch ausgeführt&lt;/strong&gt;. Lesen, herunterladen oder löschen.">Plans and scripts the model wrote in the chat. They are stored only on this computer and are
+          <strong>never run automatically</strong>. Read, download or delete them.</p>
         <table class="cred-table" id="file-table">
-          <thead><tr><th>Name</th><th>Art</th><th>Größe</th><th>Geändert</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th data-de="Art">Kind</th><th data-de="Größe">Size</th><th data-de="Geändert">Changed</th><th></th></tr></thead>
           <tbody id="file-rows"></tbody>
         </table>
-        <p class="muted" id="file-empty" hidden>Noch keine Dateien. Bitte im Chat z. B. um einen Plan oder ein Skript.</p>
+        <p class="muted" id="file-empty" data-de="Noch keine Dateien. Bitte im Chat z. B. um einen Plan oder ein Skript." hidden>No files yet. Ask the chat for a plan or a script, for example.</p>
         <div class="result" id="file-result" role="status" aria-live="polite"></div>
       </div>
       <div class="card" id="file-viewer" hidden>
         <div class="viewer-head">
           <h2 id="file-viewer-title"></h2>
-          <button type="button" class="ghost small" data-action="file-close">Schließen</button>
+          <button type="button" class="ghost small" data-action="file-close" data-de="Schließen">Close</button>
         </div>
         <pre class="file-content" id="file-content"></pre>
       </div>
@@ -291,20 +305,21 @@
     <section id="view-audit" class="view" hidden>
       <div class="card">
         <div class="viewer-head">
-          <h2>Protokoll</h2>
+          <h2 data-de="Protokoll">Audit log</h2>
           <div>
-            <button type="button" class="ghost small" data-action="audit-reload">Aktualisieren</button>
-            <button type="button" class="danger small" data-action="audit-clear">Protokoll löschen</button>
+            <button type="button" class="ghost small" data-action="audit-reload" data-de="Aktualisieren">Refresh</button>
+            <button type="button" class="danger small" data-action="audit-clear" data-de="Protokoll löschen">Clear log</button>
           </div>
         </div>
-        <p class="muted">Kommunikation zwischen MCP und Home Assistant, datensparsam: nur Zeit, Tool, Kanal, Route als
-          Muster (z. B. <code>/api/states/{entity_id}</code>), Status und Dauer. Keine Entitäten, Namen, Inhalte,
-          Antworten oder Tokens. Einträge werden nach <strong id="audit-days">30</strong> Tagen automatisch gelöscht.</p>
+        <p class="muted"><span data-de-html="Kommunikation zwischen MCP und Home Assistant, datensparsam: nur Zeit, Tool, Kanal, Route als Muster (z. B. &lt;code&gt;/api/states/{entity_id}&lt;/code&gt;), Status und Dauer. Keine Entitäten, Namen, Inhalte, Antworten oder Tokens. Einträge werden nach">Communication between the MCP and Home Assistant, data-minimal: only time, tool, channel, route as a
+          pattern (e.g. <code>/api/states/{entity_id}</code>), status and duration. No entities, names, contents,
+          answers or tokens. Entries are deleted automatically after</span> <strong id="audit-days">30</strong>
+          <span data-de="Tagen automatisch gelöscht.">days.</span></p>
         <table class="cred-table" id="audit-table">
-          <thead><tr><th>Zeit</th><th>Tool</th><th>Kanal</th><th>Route</th><th>Status</th><th>Dauer</th></tr></thead>
+          <thead><tr><th data-de="Zeit">Time</th><th>Tool</th><th data-de="Kanal">Channel</th><th>Route</th><th>Status</th><th data-de="Dauer">Duration</th></tr></thead>
           <tbody id="audit-rows"></tbody>
         </table>
-        <p class="muted" id="audit-empty" hidden>Keine Einträge.</p>
+        <p class="muted" id="audit-empty" data-de="Keine Einträge." hidden>No entries.</p>
         <div class="result" id="audit-result" role="status" aria-live="polite"></div>
       </div>
     </section>
@@ -312,37 +327,44 @@
     <!-- Settings -->
     <section id="view-settings" class="view" hidden>
       <form class="card" id="settings-form" autocomplete="off">
-        <h2>Einstellungen</h2>
-        <label>Adresse von Home Assistant
+        <h2 data-de="Einstellungen">Settings</h2>
+        <label><span data-de="Adresse von Home Assistant">Home Assistant address</span>
           <input name="ha_url" type="url" required spellcheck="false">
         </label>
-        <label>Neuer Token <small class="muted">(leer lassen, um den gespeicherten zu behalten)</small>
+        <label><span data-de="Neuer Token">New token</span> <small class="muted" data-de="(leer lassen, um den gespeicherten zu behalten)">(leave empty to keep the stored one)</small>
           <input name="token" type="password" autocomplete="new-password" spellcheck="false">
         </label>
-        <label>Adresse von Ollama
+        <label><span data-de="Adresse von Ollama">Ollama address</span>
           <input name="ollama_url" type="url" required spellcheck="false">
         </label>
-        <label>Modell
+        <label><span data-de="Modell">Model</span>
           <select name="ollama_model" required></select>
         </label>
         <div class="switches levels">
-          <label class="switch"><input type="checkbox" name="allow_write"> <span>Steuern erlauben</span></label>
-          <label class="switch auto"><input type="checkbox" name="auto_write"> <span>ohne Freigabe ausführen</span></label>
-          <label class="switch"><input type="checkbox" name="allow_admin_write"> <span>Konfiguration ändern erlauben</span></label>
-          <label class="switch auto"><input type="checkbox" name="auto_admin_write"> <span>ohne Freigabe ausführen</span></label>
-          <label class="switch"><input type="checkbox" name="allow_delete"> <span>Löschen erlauben</span></label>
-          <label class="switch auto"><input type="checkbox" name="auto_delete"> <span>ohne Freigabe ausführen</span></label>
+          <label class="switch"><input type="checkbox" name="allow_write"> <span data-de="Steuern erlauben">Allow control</span></label>
+          <label class="switch auto"><input type="checkbox" name="auto_write"> <span data-de="ohne Freigabe ausführen">run without approval</span></label>
+          <label class="switch"><input type="checkbox" name="allow_admin_write"> <span data-de="Konfiguration ändern erlauben">Allow changing configuration</span></label>
+          <label class="switch auto"><input type="checkbox" name="auto_admin_write"> <span data-de="ohne Freigabe ausführen">run without approval</span></label>
+          <label class="switch"><input type="checkbox" name="allow_delete"> <span data-de="Löschen erlauben">Allow delete</span></label>
+          <label class="switch auto"><input type="checkbox" name="auto_delete"> <span data-de="ohne Freigabe ausführen">run without approval</span></label>
         </div>
-        <p class="muted small">„Erlauben“: das Modell darf diese Aktionen vorschlagen, jede braucht deine Freigabe-Karte.
-          „Ohne Freigabe“: zusätzlich sofort ausführen; die Aktion steht trotzdem im Chat und im Protokoll. Im Chat
-          bleibt das Häkchen „Aktionen erlauben“ nötig.</p>
-        <label>Erlaubte Domains für Steuerbefehle
+        <p class="muted small" data-de="„Erlauben“: das Modell darf diese Aktionen vorschlagen, jede braucht deine Freigabe-Karte. „Ohne Freigabe“: zusätzlich sofort ausführen; die Aktion steht trotzdem im Chat und im Protokoll. Im Chat bleibt das Häkchen „Aktionen erlauben“ nötig.">"Allow": the model may propose these actions, each needs your approval card.
+          "Without approval": also run them right away; the action still shows in the chat and in the audit log. In the
+          chat the "Allow actions" checkbox is still needed.</p>
+        <label><span data-de="Erlaubte Domains für Steuerbefehle">Allowed domains for control actions</span>
           <input name="allowed_domains" spellcheck="false">
+        </label>
+        <label class="appearance"><span data-de="Design (nur dieser Browser)">Appearance (this browser only)</span>
+          <select data-theme-select>
+            <option value="system" data-de="Wie das System">Like the system</option>
+            <option value="light" data-de="Hell">Light</option>
+            <option value="dark" data-de="Dunkel">Dark</option>
+          </select>
         </label>
         <div class="result" role="status" aria-live="polite"></div>
         <div class="actions">
-          <button type="button" class="secondary" data-action="load-models">Modelle neu laden</button>
-          <button type="submit" class="primary">Prüfen und speichern</button>
+          <button type="button" class="secondary" data-action="load-models" data-de="Modelle neu laden">Reload models</button>
+          <button type="submit" class="primary" data-de="Prüfen und speichern">Check and save</button>
         </div>
       </form>
     </section>
@@ -350,17 +372,17 @@
 
   <!-- Floating chat bubble -->
   <div class="bubble" id="bubble" hidden>
-    <div class="bubble-panel" id="bubble-panel" role="dialog" aria-label="Schnell-Chat" hidden>
+    <div class="bubble-panel" id="bubble-panel" role="dialog" aria-label="Quick chat" data-de-aria-label="Schnell-Chat" hidden>
       <div class="bubble-head">
-        <strong>Assistent</strong>
+        <strong data-de="Assistent">Assistant</strong>
         <div>
-          <button type="button" class="icon" data-action="expand" title="Im großen Chat öffnen" aria-label="Im großen Chat öffnen">⤢</button>
-          <button type="button" class="icon" data-action="close-bubble" title="Schließen" aria-label="Schließen">✕</button>
+          <button type="button" class="icon" data-action="expand" title="Open in the large chat" aria-label="Open in the large chat" data-de-title="Im großen Chat öffnen" data-de-aria-label="Im großen Chat öffnen">⤢</button>
+          <button type="button" class="icon" data-action="close-bubble" title="Close" aria-label="Close" data-de-title="Schließen" data-de-aria-label="Schließen">✕</button>
         </div>
       </div>
       <div class="chat-shell compact" data-chat-root="bubble"></div>
     </div>
-    <button type="button" class="bubble-button" id="bubble-button" aria-label="Chat öffnen" aria-expanded="false">
+    <button type="button" class="bubble-button" id="bubble-button" aria-label="Open chat" data-de-aria-label="Chat öffnen" aria-expanded="false">
       <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm3 6.5a1.5 1.5 0 1 0 0 .01Zm5 0a1.5 1.5 0 1 0 0 .01Zm5 0a1.5 1.5 0 1 0 0 .01Z"/></svg>
       <span class="badge" id="bubble-badge" hidden></span>
     </button>
@@ -369,15 +391,15 @@
   <template id="chat-template">
     <div class="messages" aria-live="polite"></div>
     <form class="composer">
-      <textarea name="message" rows="1" placeholder="Frag etwas zu deinem Zuhause …" maxlength="4000" required></textarea>
+      <textarea name="message" rows="1" placeholder="Ask something about your home …" data-de-placeholder="Frag etwas zu deinem Zuhause …" maxlength="4000" required></textarea>
       <div class="composer-row">
-        <label class="write-toggle" title="Erlaubt dem Modell Aktionen vorzuschlagen; jede Aktion musst du einzeln bestätigen">
-          <input type="checkbox" name="allow_write"> <span>Aktionen erlauben</span>
+        <label class="write-toggle">
+          <input type="checkbox" name="allow_write"> <span data-de="Aktionen erlauben">Allow actions</span>
         </label>
         <span class="spacer"></span>
-        <button type="button" class="ghost small" data-action="clear">Neu</button>
-        <button type="button" class="secondary small" data-action="stop" hidden>Stopp</button>
-        <button type="submit" class="primary small">Senden</button>
+        <button type="button" class="ghost small" data-action="clear" data-de="Neu">New</button>
+        <button type="button" class="secondary small" data-action="stop" data-de="Stopp" hidden>Stop</button>
+        <button type="submit" class="primary small" data-de="Senden">Send</button>
       </div>
     </form>
   </template>

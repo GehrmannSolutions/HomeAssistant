@@ -63,7 +63,7 @@ def _iso(moment: datetime) -> str:
 
 def _clip(value, limit: int):
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
-    return text if len(text) <= limit else text[:limit] + " …(gekürzt)"
+    return text if len(text) <= limit else text[:limit] + " …(truncated)"
 
 
 def _entities(entity_ids) -> list[str]:

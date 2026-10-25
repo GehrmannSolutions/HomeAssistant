@@ -7,6 +7,9 @@ import pytest
 from ha_safe_mcp.chat_runs import RunBusy, RunManager, friendly_error
 from ha_safe_mcp.config_store import Settings
 
+# these tests check the German messages (the UI language German); English is covered in test_i18n.py
+pytestmark = pytest.mark.usefixtures("german")
+
 SETTINGS = Settings(ha_token="t" * 30)
 
 

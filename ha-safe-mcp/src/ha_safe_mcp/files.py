@@ -12,6 +12,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .i18n import L
+
 KINDS = ("plan", "script")
 EXTENSIONS = ("md", "txt", "yaml", "yml", "json", "sh", "py", "jinja")
 NAME = re.compile(rf"^[a-z0-9][a-z0-9_-]{{0,63}}(?:\.[a-z0-9_-]{{1,16}})?\.(?:{'|'.join(EXTENSIONS)})$")
@@ -46,25 +48,27 @@ class FileStore:
     def _ensure(self, kind: str) -> Path:
         for path in (self.directory, self.directory / kind):
             if path.is_symlink():
-                raise FileError("Ablageordner ist ein symbolischer Link")
+                raise FileError(L("The storage folder is a symbolic link", "Ablageordner ist ein symbolischer Link"))
             path.mkdir(parents=True, exist_ok=True, mode=0o700)
             os.chmod(path, 0o700)
         return self.directory / kind
 
     def _path(self, kind: str, name: str) -> Path:
         if kind not in KINDS:
-            raise FileError("Unbekannte Dateiart (erlaubt: plan, script)")
+            raise FileError(L("Unknown file kind (allowed: plan, script)", "Unbekannte Dateiart (erlaubt: plan, script)"))
         if not isinstance(name, str) or not NAME.fullmatch(name):
-            raise FileError("Ungültiger Dateiname: nur Kleinbuchstaben, Ziffern, - und _, "
-                            f"Endung {', '.join(EXTENSIONS)}")
+            raise FileError(L(f"Invalid file name: only lower-case letters, digits, - and _, extension "
+                              f"{', '.join(EXTENSIONS)}",
+                              f"Ungültiger Dateiname: nur Kleinbuchstaben, Ziffern, - und _, Endung "
+                              f"{', '.join(EXTENSIONS)}"))
         return self.directory / kind / name
 
     def _regular(self, kind: str, name: str) -> Path:
         path = self._path(kind, name)
         if path.is_symlink() or (self.directory / kind).is_symlink() or self.directory.is_symlink():
-            raise FileError("Datei nicht gefunden")
+            raise FileError(L("File not found", "Datei nicht gefunden"))
         if not path.is_file():
-            raise FileError("Datei nicht gefunden")
+            raise FileError(L("File not found", "Datei nicht gefunden"))
         return path
 
     def _info(self, kind: str, path: Path) -> dict:
@@ -98,10 +102,11 @@ class FileStore:
             raise FileError("Inhalt muss Text sein")
         data = content.encode("utf-8")
         if len(data) > self.max_bytes:
-            raise FileError(f"Datei zu groß (höchstens {self.max_bytes // 1024} KB)")
+            raise FileError(L(f"File too large (at most {self.max_bytes // 1024} KB)",
+                              f"Datei zu groß (höchstens {self.max_bytes // 1024} KB)"))
         folder = self._ensure(kind)
         if path.is_symlink():
-            raise FileError("Ziel ist ein symbolischer Link")
+            raise FileError(L("The target is a symbolic link", "Ziel ist ein symbolischer Link"))
         if path.exists() and not overwrite:
             stem, dot, ext = name.rpartition(".")
             for number in range(2, 1000):
@@ -112,7 +117,8 @@ class FileStore:
             else:
                 raise FileError("Kein freier Dateiname gefunden")
         if not path.exists() and len(self.entries()) >= self.max_files:
-            raise FileError(f"Ablage voll (höchstens {self.max_files} Dateien); bitte alte Dateien löschen")
+            raise FileError(L(f"Storage full (at most {self.max_files} files); please delete old files",
+                              f"Ablage voll (höchstens {self.max_files} Dateien); bitte alte Dateien löschen"))
         fd, temp = tempfile.mkstemp(dir=folder, prefix=".tmp-")
         try:
             with os.fdopen(fd, "wb") as handle:

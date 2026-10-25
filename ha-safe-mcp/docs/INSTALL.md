@@ -1,5 +1,7 @@
 # Install ha-safe-mcp on your own Home Assistant
 
+**English** · [Deutsch](INSTALL.de.md)
+
 Run commands from the **`ha-safe-mcp/` subdirectory** of a clone, never the repository root. The repository does not include a preconfigured HA installation. Python 3.11 or newer is required. Install and configure Home Assistant separately; a local Ollama server with a tool-capable model is optional (needed only for chat).
 
 ## 1. Install the package
@@ -32,7 +34,7 @@ Ensure your local Ollama service is running with a model that supports tool call
 
 Follow the HA URL/token test, Ollama model selection and safety steps. The default settings file is `ha-safe-mcp/.env` (created with mode 0600). The token is not returned to the browser after saving. `--read-only` is an additional **hard cap**: saved write settings cannot override it. Omit the cap only when deliberately testing permitted actions on an appropriate HA instance. `--max-level control` permits only service calls for allowed domains (if enabled in settings); `--max-level full` permits the configured admin/delete levels as well. Leave the service bound to `127.0.0.1`.
 
-The web UI language and some messages are currently **German**. The UI is a local application, not an MCP HTTP endpoint; it spawns a stdio MCP process for chat.
+The web UI is in English by default and can be switched to German in its header. The UI is a local application, not an MCP HTTP endpoint; it spawns a stdio MCP process for chat.
 
 ### B. Headless stdio MCP client (Ollama not required)
 
@@ -71,7 +73,7 @@ ollama pull qwen2.5-coder:7b
 .venv/bin/ha-ollama-chat 'List available lights using current Home Assistant state.'
 ```
 
-This uses `.env` via the MCP child process. With writes explicitly enabled in `.env`, add `--allow-write` to expose write tools; the CLI still asks for exact `JA` **for each** proposed write. Tool routing is keyword-based and may miss complex tasks. The CLI chat text is not itself an HA command and must not contain secrets.
+This uses `.env` via the MCP child process. With writes explicitly enabled in `.env`, add `--allow-write` to expose write tools; the CLI still asks for exact `YES` **for each** proposed write. Tool routing is keyword-based and may miss complex tasks. The CLI chat text is not itself an HA command and must not contain secrets.
 
 ## 4. Permission switches and isolation
 
@@ -81,9 +83,9 @@ This uses `.env` via the MCP child process. With writes explicitly enabled in `.
 | `HA_ALLOW_ADMIN_WRITE` | `false` | In addition to write, allow configuration changes; HA still requires its own admin rights where applicable. |
 | `HA_ALLOW_DELETE` | `false` | In addition to both above, allow destructive delete tools. |
 | `HA_ALLOWED_DOMAINS` | `light,switch,fan,climate,cover,media_player` | Service-call target domain allowlist, **not** a general limit on admin mutations. Narrow it before granting control. What domains are and which ones are risky: [USER_GUIDE.md](USER_GUIDE.md#domains-what-the-allowed-list-means-and-how-to-choose-it). |
-| `HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` | `false` | In **UI chat only**, skip the approval card for that allowed level; the chat "Aktionen erlauben" checkbox remains required. Avoid for routine use. |
+| `HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` | `false` | In **UI chat only**, skip the approval card for that allowed level; the chat "Allow actions" checkbox remains required. Avoid for routine use. |
 
-A generic MCP client does **not** inherit the UI approval cards or CLI `JA`: enforce per-call human approval in that client. The server settings gate operations, not consent. Running a separate UI with `--read-only --env-file /path/to/instance.env` also caps writes **in code**; use a separate non-admin HA token and XDG directories when isolating multiple installations. `--max-level control` does **not** restrict which individual lights or devices can be controlled within an allowed domain. For truly read-only operation, combine the hard cap with minimal HA privileges.
+A generic MCP client does **not** inherit the UI approval cards or CLI `YES`: enforce per-call human approval in that client. The server settings gate operations, not consent. Running a separate UI with `--read-only --env-file /path/to/instance.env` also caps writes **in code**; use a separate non-admin HA token and XDG directories when isolating multiple installations. `--max-level control` does **not** restrict which individual lights or devices can be controlled within an allowed domain. For truly read-only operation, combine the hard cap with minimal HA privileges.
 
 The UI binds to loopback and has Host, Origin, and CSRF checks; **it has no standalone login**. `--allow-remote` turns off the loopback gate and is unsafe by itself. `--public-host` is an *optional* Cloudflare Access deployment mode requiring `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN`, a valid Access application/policy and a correctly configured reverse tunnel; it verifies signed Access JWTs on every request. It is not a generic authentication mode and does not set up Cloudflare for you. Do not publish the raw origin. See [technical documentation](TECHNICAL.md).
 

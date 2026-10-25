@@ -14,6 +14,7 @@ import httpx
 
 from .config_store import Settings
 from .ollama_client import write_level
+from .i18n import L
 
 Runner = Callable[..., Awaitable[str]]
 MAX_EVENTS = 500
@@ -30,19 +31,24 @@ def _flatten(error: BaseException) -> BaseException:
 
 
 def friendly_error(error: BaseException) -> str:
-    """German, user-facing and free of payloads: never echo raw exception text."""
+    """User-facing (UI language) and free of payloads: never echo raw exception text."""
     error = _flatten(error)
     if isinstance(error, PermissionError):
-        return "Schreibaktion nicht freigegeben – diese Aktion wurde nicht ausgeführt."
+        return L("Action not approved: it was not carried out.",
+                 "Schreibaktion nicht freigegeben – diese Aktion wurde nicht ausgeführt.")
     if isinstance(error, httpx.HTTPStatusError):
-        return f"Das lokale Modell (Ollama) antwortete mit HTTP {error.response.status_code}. Ist das Modell installiert?"
+        return L(f"The local model (Ollama) answered with HTTP {error.response.status_code}. Is the model installed?",
+                 f"Das lokale Modell (Ollama) antwortete mit HTTP {error.response.status_code}. "
+                 "Ist das Modell installiert?")
     if isinstance(error, httpx.RequestError):
-        return "Ollama ist nicht erreichbar. Läuft der Dienst unter der eingestellten Adresse?"
+        return L("Ollama cannot be reached. Is it running at the configured address?",
+                 "Ollama ist nicht erreichbar. Läuft der Dienst unter der eingestellten Adresse?")
     if isinstance(error, RuntimeError) and str(error).startswith("Tool iteration limit"):
-        return "Das Modell hat nach mehreren Tool-Runden keine verifizierte Antwort geliefert."
+        return L("The model gave no verified answer after several tool rounds.",
+                 "Das Modell hat nach mehreren Tool-Runden keine verifizierte Antwort geliefert.")
     if isinstance(error, RuntimeError) and str(error).startswith("Home Assistant"):
         return str(error)
-    return f"Unerwarteter Fehler ({type(error).__name__})."
+    return L(f"Unexpected error ({type(error).__name__}).", f"Unerwarteter Fehler ({type(error).__name__}).")
 
 
 class ChatRun:
@@ -139,7 +145,7 @@ class RunManager:
 
     def start(self, settings: Settings, prompt: str, history: list[dict], *, allow_write: bool) -> ChatRun:
         if self.active is not None and not self.active.finished:
-            raise RunBusy("Es läuft bereits eine Anfrage")
+            raise RunBusy(L("A request is already running", "Es läuft bereits eine Anfrage"))
         run = ChatRun(self, allow_write, frozenset(settings.auto_levels()) if allow_write else frozenset())
         self.runs[run.id] = run
         while len(self.runs) > self.keep:
@@ -162,12 +168,13 @@ class RunManager:
         status = "ok"
         try:
             answer = await self.runner(settings, prompt, history, run.allow_write, run.approve, run.emit)
-            await run.emit({"type": "answer", "content": answer or "(keine Antwort)"})
+            await run.emit({"type": "answer", "content": answer or L("(no answer)", "(keine Antwort)")})
             if answer and self.on_answer is not None:
                 try:
                     saved = self.on_answer(prompt, answer)
                 except Exception:  # noqa: BLE001 - storing a copy must never fail the chat
-                    await run.emit({"type": "note", "content": "Erzeugte Dateien konnten nicht gespeichert werden."})
+                    await run.emit({"type": "note", "content": L("Generated files could not be saved.",
+                                                                      "Erzeugte Dateien konnten nicht gespeichert werden.")})
                 else:
                     if saved:
                         await run.emit({"type": "files_saved", "files": saved})

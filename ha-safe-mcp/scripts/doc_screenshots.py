@@ -3,9 +3,9 @@
 Start a separate UI without --public-host (loopback only) against a *test* instance that has the demo home from
 docs_demo_home.py, e.g. on port 18765, then:
 
-    python scripts/doc_screenshots.py [--url http://127.0.0.1:18765/] <scenario> ... | all
+    python scripts/doc_screenshots.py [--url http://127.0.0.1:18765/] [--lang en|de] <scenario> ... | all
 
-Needs Playwright (pip install playwright pillow; playwright install chromium). Images go to docs/images/,
+Needs Playwright (pip install playwright pillow; playwright install chromium). Images go to docs/images/<lang>/ (English UI and prompts for the English docs, German for the German ones),
 chat transcripts to $TMPDIR/doc_screenshots.json so the answers can be checked against Home Assistant.
 """
 import json
@@ -72,18 +72,23 @@ class UI:
             const last = m.children[m.children.length - 1];
             const r = root.getBoundingClientRect(); const lr = last.getBoundingClientRect();
             return {{x: r.left, y: r.top, width: r.width, height: Math.min(lr.bottom, r.bottom) - r.top + 16}}; }}""")
-        self.page.screenshot(path=str(IMAGES / f"{name}.png"), clip=box)
+        self.page.screenshot(path=str(IMAGES / LANG / f"{name}.png"), clip=box)
         print("saved", name, int(box["width"]), int(box["height"]))
 
-    def element_shot(self, name, selector):
-        self.page.locator(selector).first.screenshot(path=str(IMAGES / f"{name}.png"))
-        size = Image.open(IMAGES / f"{name}.png").size
+    def element_shot(self, name, selector, max_height=None):
+        # The sticky header would cover the top of elements taller than the viewport.
+        self.page.evaluate("document.querySelector('.topbar').style.position = 'static'")  # CSP blocks style tags
+        self.page.locator(selector).first.screenshot(path=str(IMAGES / LANG / f"{name}.png"))
+        image = Image.open(IMAGES / LANG / f"{name}.png")
+        if max_height and image.size[1] > max_height:  # very long lists (audit log): keep the head of the page
+            image.crop((0, 0, image.size[0], max_height)).save(IMAGES / LANG / f"{name}.png", optimize=True)
+        size = Image.open(IMAGES / LANG / f"{name}.png").size
         print("saved", name, size)
 
 
 def log(name, prompt, state):
     data = json.loads(LOG.read_text()) if LOG.exists() else {}
-    data[name] = {"prompt": prompt, "text": state["text"]}
+    data[f"{LANG}/{name}"] = {"prompt": prompt, "text": state["text"]}
     LOG.write_text(json.dumps(data, ensure_ascii=False, indent=1))
 
 
@@ -98,36 +103,52 @@ def chat(ui, name, prompt, allow_write=False, approve=False, card_name=None):
     print(name, "->", st["text"][-300:].replace("\n", " | "))
 
 
+LANG = "en"
+
+
+def P(en, de):  # noqa: N802 - prompt in the language of the run
+    return de if LANG == "de" else en
+
+
 SCENARIOS = {
     "overview": lambda ui: (ui.view("home"), ui.element_shot("01-overview", "#view-home")),
     "settings": lambda ui: (ui.view("settings"), ui.element_shot("02-settings", "#view-settings")),
-    "read": lambda ui: chat(ui, "03-chat-read", "Welche Lampen gibt es im Wohnzimmer und welche sind an?"),
-    "switch": lambda ui: chat(ui, "05-chat-confirmed", "Schalte die Stehlampe im Wohnzimmer aus",
+    "read": lambda ui: chat(ui, "03-chat-read", P("Which lamps are in the living room (Wohnzimmer) and which are on?",
+                                                  "Welche Lampen gibt es im Wohnzimmer und welche sind an?")),
+    "switch": lambda ui: chat(ui, "05-chat-confirmed", P("Turn on the Stehlampe in the living room",
+                                                        "Schalte die Stehlampe im Wohnzimmer aus"),
                               allow_write=True, approve=True, card_name="04-chat-approval"),
-    "debug": lambda ui: chat(ui, "06-chat-debug", "Wann und warum ist die Automation Abendlicht zuletzt gelaufen?"),
-    "files": lambda ui: chat(ui, "07-chat-config-file", "Welche Dateien bindet die configuration.yaml ein?"),
-    "label": lambda ui: chat(ui, "08-chat-label", "Lege ein Label 'Doku-Demo' in Blau an", allow_write=True,
-                             approve=True, card_name="08a-chat-label-card"),
+    "debug": lambda ui: chat(ui, "06-chat-debug", P("When and why did the automation Abendlicht last run?",
+                                                   "Wann und warum ist die Automation Abendlicht zuletzt gelaufen?")),
+    "files": lambda ui: chat(ui, "07-chat-config-file", P("Which files does configuration.yaml include?",
+                                                         "Welche Dateien bindet die configuration.yaml ein?")),
+    "label": lambda ui: chat(ui, "08-chat-label", P("Create a blue label 'Docs demo'", "Lege ein Label 'Doku-Demo' in Blau an"),
+                             allow_write=True, approve=True, card_name="08a-chat-label-card"),
     "changes": lambda ui: (ui.view("changes"), ui.element_shot("09-changes", "#view-changes")),
-    "weather": lambda ui: chat(ui, "10-chat-weather", "Wie wird das Wetter morgen?"),
-    "history": lambda ui: chat(ui, "11-chat-history", "Wann war die Stehlampe im Wohnzimmer heute an? Schau im Verlauf nach."),
-    "usages": lambda ui: chat(ui, "12-chat-usages", "Wo wird die Stehlampe verwendet?"),
-    "blocked": lambda ui: chat(ui, "13-chat-domain-blocked", "Setze Milch auf die Einkaufsliste", allow_write=True,
-                               approve=True),
-    "summary": lambda ui: chat(ui, "14-chat-summary", "Gib mir einen kurzen Überblick über mein Home Assistant."),
+    "weather": lambda ui: chat(ui, "10-chat-weather", P("What will the weather be like tomorrow?", "Wie wird das Wetter morgen?")),
+    "history": lambda ui: chat(ui, "11-chat-history", P("When was the Stehlampe in the living room on today? Check the history.",
+                                                       "Wann war die Stehlampe im Wohnzimmer heute an? Schau im Verlauf nach.")),
+    "usages": lambda ui: chat(ui, "12-chat-usages", P("Which automations, scripts or dashboards use the Stehlampe?", "Wo wird die Stehlampe verwendet?")),
+    "blocked": lambda ui: chat(ui, "13-chat-domain-blocked", P("Put milk on the shopping list", "Setze Milch auf die Einkaufsliste"),
+                               allow_write=True, approve=True),
+    "summary": lambda ui: chat(ui, "14-chat-summary", P("Give me a short overview of my Home Assistant.",
+                                                       "Gib mir einen kurzen Überblick über mein Home Assistant.")),
     "credentials": lambda ui: (ui.view("credentials"), ui.element_shot("15-credentials", "#view-credentials")),
     "backups": lambda ui: (ui.view("backups"), ui.element_shot("16-backups", "#view-backups")),
     "clients": lambda ui: (ui.view("clients"), ui.element_shot("17-clients", "#view-clients")),
     "filemanager": lambda ui: (ui.view("files"), ui.element_shot("18-file-manager", "#view-files")),
-    "audit": lambda ui: (ui.view("audit"), ui.element_shot("19-audit", "#view-audit")),
+    "audit": lambda ui: (ui.view("audit"), ui.element_shot("19-audit", "#view-audit", max_height=760)),
 }
 
 
 def main(names):
-    IMAGES.mkdir(parents=True, exist_ok=True)
+    (IMAGES / LANG).mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 1200}, locale="de-DE")
+        context = browser.new_context(viewport={"width": 1280, "height": 1200},
+                                      locale="de-DE" if LANG == "de" else "en-GB")
+        context.add_init_script(f"localStorage.setItem('ha-mcp-lang', '{LANG}'); localStorage.setItem('ha-mcp-theme', 'light');")
+        page = context.new_page()
         page.goto(URL)  # noqa: F821 - module global, may be set from --url
         page.wait_for_timeout(2500)
         ui = UI(page)
@@ -141,6 +162,10 @@ def main(names):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if args[:1] == ["--url"]:
-        URL, args = args[1], args[2:]
+    while args[:1] in (["--url"], ["--lang"]):
+        if args[0] == "--url":
+            URL = args[1]
+        else:
+            LANG = args[1] if args[1] in ("en", "de") else "en"
+        args = args[2:]
     main(args)

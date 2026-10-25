@@ -9,6 +9,8 @@ from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 
+from .i18n import L
+
 PLACEHOLDER_TOKEN = "YOUR_HOME_ASSISTANT_LONG_LIVED_ACCESS_TOKEN"
 DEFAULT_DOMAINS = ("light", "switch", "fan", "climate", "cover", "media_player")
 DOMAIN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -19,24 +21,26 @@ ENV_KEYS = ("HA_URL", "HA_TOKEN", "HA_ALLOW_WRITE", "HA_ALLOW_ADMIN_WRITE", "HA_
 
 
 class SetupError(ValueError):
-    """User-facing validation error; messages are German and never contain secrets."""
+    """User-facing validation error; messages follow the UI language (i18n.L) and never contain secrets."""
 
 
 def normalize_url(raw: str, label: str) -> str:
     parsed = urlsplit(str(raw or "").strip())
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password
             or parsed.path not in {"", "/"} or parsed.query or parsed.fragment):
-        raise SetupError(f"{label}-Adresse muss eine einfache http(s)-Adresse ohne Pfad und Zugangsdaten sein")
+        raise SetupError(L(f"{label} address must be a plain http(s) address without path or credentials",
+                           f"{label}-Adresse muss eine einfache http(s)-Adresse ohne Pfad und Zugangsdaten sein"))
     try:
         parsed.port
     except ValueError:
-        raise SetupError(f"{label}-Adresse hat einen ungültigen Port") from None
+        raise SetupError(L(f"{label} address has an invalid port", f"{label}-Adresse hat einen ungültigen Port")) from None
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def validate_token(token: str) -> str:
     if not TOKEN_CHARS.fullmatch(token):
-        raise SetupError("Token ist ungültig: erwartet wird ein langlebiger Home-Assistant-Zugriffstoken")
+        raise SetupError(L("Invalid token: expected a Home Assistant long-lived access token",
+                           "Token ist ungültig: erwartet wird ein langlebiger Home-Assistant-Zugriffstoken"))
     return token
 
 
@@ -88,52 +92,56 @@ class Settings:
 
 def _flag(value) -> bool:
     if not isinstance(value, bool):
-        raise SetupError("Schalter müssen true oder false sein")
+        raise SetupError(L("Switches must be true or false", "Schalter müssen true oder false sein"))
     return value
 
 
 def resolve_token(current: Settings, ha_url: str, token: str) -> str:
     """A blank token keeps the stored one only for the URL it was issued for."""
-    url = normalize_url(ha_url, "Home-Assistant")
+    url = normalize_url(ha_url, "Home Assistant")
     if token:
         return validate_token(token)
     if current.configured and url == current.ha_url:
         return current.ha_token
-    raise SetupError("Für eine neue Home-Assistant-Adresse bitte den Token erneut eingeben")
+    raise SetupError(L("Please enter the token again for a new Home Assistant address",
+                       "Für eine neue Home-Assistant-Adresse bitte den Token erneut eingeben"))
 
 
 def merge_settings(current: Settings, data: dict) -> Settings:
     if not isinstance(data, dict):
-        raise SetupError("Ungültige Eingabe")
-    ha_url = normalize_url(data.get("ha_url", current.ha_url), "Home-Assistant")
+        raise SetupError(L("Invalid input", "Ungültige Eingabe"))
+    ha_url = normalize_url(data.get("ha_url", current.ha_url), "Home Assistant")
     token = resolve_token(current, ha_url, str(data.get("token") or "").strip())
     ollama_url = normalize_url(data.get("ollama_url", current.ollama_url), "Ollama")
     model = str(data.get("ollama_model", current.ollama_model)).strip()
     if not MODEL.fullmatch(model):
-        raise SetupError("Modellname ist ungültig")
+        raise SetupError(L("Invalid model name", "Modellname ist ungültig"))
     raw_domains = data.get("allowed_domains", list(current.allowed_domains))
     if isinstance(raw_domains, str):
         raw_domains = raw_domains.split(",")
     if not isinstance(raw_domains, list):
-        raise SetupError("Domain-Liste ist ungültig")
+        raise SetupError(L("Invalid domain list", "Domain-Liste ist ungültig"))
     domains = tuple(dict.fromkeys(str(item).strip() for item in raw_domains if str(item).strip()))
     if any(not DOMAIN.fullmatch(item) for item in domains):
-        raise SetupError("Domain-Liste enthält ungültige Einträge")
+        raise SetupError(L("The domain list contains invalid entries", "Domain-Liste enthält ungültige Einträge"))
     allow_write = _flag(data.get("allow_write", current.allow_write))
     allow_admin = _flag(data.get("allow_admin_write", current.allow_admin_write))
     allow_delete = _flag(data.get("allow_delete", current.allow_delete))
     if allow_admin and not allow_write:
-        raise SetupError("Konfigurationsänderungen setzen 'Steuern erlauben' voraus")
+        raise SetupError(L("Changing configuration requires 'Allow control'",
+                           "Konfigurationsänderungen setzen 'Steuern erlauben' voraus"))
     if allow_delete and not allow_admin:
-        raise SetupError("Löschen setzt 'Konfiguration ändern erlauben' voraus")
+        raise SetupError(L("Delete requires 'Allow changing configuration'",
+                           "Löschen setzt 'Konfiguration ändern erlauben' voraus"))
     autos = {}
-    for key, allowed, label in (("auto_write", allow_write, "Steuern"),
-                                ("auto_admin_write", allow_admin, "Konfiguration ändern"),
-                                ("auto_delete", allow_delete, "Löschen")):
+    for key, allowed, label in (("auto_write", allow_write, L("Allow control", "Steuern erlauben")),
+                                ("auto_admin_write", allow_admin,
+                                 L("Allow changing configuration", "Konfiguration ändern erlauben")),
+                                ("auto_delete", allow_delete, L("Allow delete", "Löschen erlauben"))):
         if key in data:
             value = _flag(data[key])
             if value and not allowed:
-                raise SetupError(f"'Ohne Freigabe' setzt '{label} erlauben' voraus")
+                raise SetupError(L(f"'Without approval' requires '{label}'", f"'Ohne Freigabe' setzt '{label}' voraus"))
             autos[key] = value
         else:
             autos[key] = getattr(current, key) and allowed
@@ -146,9 +154,15 @@ def _as_bool(value) -> bool:
     return str(value or "").strip().lower() == "true"
 
 
-READ_ONLY_REFUSAL = "Diese Instanz ist fest auf nur lesen eingestellt (--read-only); Schalter bleiben aus"
-CONTROL_ONLY_REFUSAL = ("Diese Instanz erlaubt höchstens Steuern (--max-level control); Konfiguration ändern und "
-                        "Löschen bleiben aus")
+def read_only_refusal() -> str:
+    return L("This instance is fixed to read only (--read-only); the switches stay off",
+             "Diese Instanz ist fest auf nur lesen eingestellt (--read-only); Schalter bleiben aus")
+
+
+def control_only_refusal() -> str:
+    return L("This instance allows control at most (--max-level control); changing configuration and delete stay off",
+             "Diese Instanz erlaubt höchstens Steuern (--max-level control); Konfiguration ändern und Löschen "
+             "bleiben aus")
 MAX_LEVELS = ("read", "control", "full")
 
 
@@ -194,11 +208,11 @@ class SettingsStore:
 
     def save(self, settings: Settings) -> Settings:
         if not settings.configured:
-            raise SetupError("Ohne Token kann nicht gespeichert werden")
+            raise SetupError(L("Cannot save without a token", "Ohne Token kann nicht gespeichert werden"))
         if self.read_only and (settings.allow_write or settings.allow_admin_write or settings.allow_delete):
-            raise SetupError(READ_ONLY_REFUSAL)
+            raise SetupError(read_only_refusal())
         if self.max_level == "control" and (settings.allow_admin_write or settings.allow_delete):
-            raise SetupError(CONTROL_ONLY_REFUSAL)
+            raise SetupError(control_only_refusal())
         flag = lambda value: "true" if value else "false"  # noqa: E731
         values = {"HA_URL": settings.ha_url, "HA_TOKEN": settings.ha_token,
                   "HA_ALLOW_WRITE": flag(settings.allow_write),
@@ -210,7 +224,7 @@ class SettingsStore:
                   "HA_ALLOWED_DOMAINS": ",".join(settings.allowed_domains),
                   "OLLAMA_URL": settings.ollama_url, "OLLAMA_MODEL": settings.ollama_model}
         if any("\n" in value or "\r" in value for value in values.values()):
-            raise SetupError("Ungültige Zeichen in den Einstellungen")
+            raise SetupError(L("Invalid characters in the settings", "Ungültige Zeichen in den Einstellungen"))
         lines, written = [], set()
         if self.path.exists():
             for line in self.path.read_text(encoding="utf-8").splitlines():

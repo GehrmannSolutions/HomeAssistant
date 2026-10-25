@@ -1,3 +1,4 @@
+import pytest
 """Domain overview for the UI pickers: which domains the connected HA really has, with counts and risk notes."""
 from ha_safe_mcp.chat_runs import RunManager
 from ha_safe_mcp.config_store import SettingsStore
@@ -5,6 +6,9 @@ from ha_safe_mcp.domains import DOMAIN_INFO, summarize
 from ha_safe_mcp.web import create_app
 from test_remote import http, running
 from test_web import FakeChecks, configure
+
+# these tests check the German messages (the UI language German); English is covered in test_i18n.py
+pytestmark = pytest.mark.usefixtures("german")
 
 STATES = [{"entity_id": e} for e in ("light.a", "light.b", "lock.door", "sensor.t", "sensor.h", "sensor.x",
                                      "switch.plug", "foo_bar.thing")]
@@ -26,7 +30,7 @@ def test_summary_counts_marks_actions_risks_and_allowed():
 
 def test_well_known_risky_domains_carry_a_note():
     for domain in ("lock", "alarm_control_panel", "cover", "update", "button", "valve", "siren"):
-        assert DOMAIN_INFO[domain][1], domain
+        assert DOMAIN_INFO[domain]["en"][1] and DOMAIN_INFO[domain]["de"][1], domain
 
 
 async def test_domains_endpoint_reads_the_connected_ha(tmp_path):

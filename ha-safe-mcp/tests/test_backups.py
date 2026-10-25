@@ -9,6 +9,9 @@ from ha_safe_mcp.backups import HABackups
 from ha_safe_mcp.credentials import CredentialStore
 from ha_safe_mcp.server import HAClient
 
+# these tests check the German messages (the UI language German); English is covered in test_i18n.py
+pytestmark = pytest.mark.usefixtures("german")
+
 URL = "http://ha:8123"
 SECRET = "Backup-Schl3ssel!"
 OLD = {"backup_id": "aaaa1111", "name": "Alt", "date": "2026-10-20T10:00:00+00:00", "protected": False,

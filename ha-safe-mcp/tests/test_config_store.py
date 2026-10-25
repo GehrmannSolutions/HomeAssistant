@@ -5,6 +5,9 @@ import pytest
 
 from ha_safe_mcp.config_store import Settings, SettingsStore, SetupError, merge_settings, resolve_token
 
+# these tests check the German messages (the UI language German); English is covered in test_i18n.py
+pytestmark = pytest.mark.usefixtures("german")
+
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.test-token-value.signature_part"
 
 

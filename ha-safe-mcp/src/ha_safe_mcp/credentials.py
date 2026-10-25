@@ -16,6 +16,8 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .i18n import L
+
 ALIAS = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 FIELD = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 MAX_VALUE = 4096
@@ -67,9 +69,10 @@ class CredentialStore:
         try:
             data = json.loads(fernet.decrypt(self.data_path.read_bytes()))
         except (InvalidToken, ValueError):
-            raise CredentialError("Zugangsdaten-Speicher ist beschädigt oder der Schlüssel passt nicht") from None
+            raise CredentialError(L("The credential store is damaged or the key does not match",
+                                    "Zugangsdaten-Speicher ist beschädigt oder der Schlüssel passt nicht")) from None
         if not isinstance(data, dict):
-            raise CredentialError("Zugangsdaten-Speicher ist beschädigt")
+            raise CredentialError(L("The credential store is damaged", "Zugangsdaten-Speicher ist beschädigt"))
         return data
 
     def _store(self, data: dict):
@@ -86,7 +89,8 @@ class CredentialStore:
 
     def save(self, alias: str, label: str, fields: dict) -> dict:
         if not isinstance(alias, str) or not ALIAS.fullmatch(alias):
-            raise CredentialError("Alias: Kleinbuchstaben, Ziffern und _, beginnt mit einem Buchstaben")
+            raise CredentialError(L("Alias: lower-case letters, digits and _, starting with a letter",
+                                    "Alias: Kleinbuchstaben, Ziffern und _, beginnt mit einem Buchstaben"))
         label = str(label or "").strip()[:MAX_LABEL] or alias
         if not isinstance(fields, dict) or not 1 <= len(fields) <= MAX_FIELDS:
             raise CredentialError(f"1 bis {MAX_FIELDS} Felder angeben")
@@ -95,9 +99,9 @@ class CredentialStore:
         merged = {}
         for name, value in fields.items():
             if not isinstance(name, str) or not FIELD.fullmatch(name):
-                raise CredentialError("Feldnamen: Kleinbuchstaben, Ziffern und _")
+                raise CredentialError(L("Field names: lower-case letters, digits and _", "Feldnamen: Kleinbuchstaben, Ziffern und _"))
             if not isinstance(value, str) or len(value) > MAX_VALUE or "\n" in value or "\r" in value:
-                raise CredentialError("Werte: eine Zeile, höchstens 4096 Zeichen")
+                raise CredentialError(L("Values: one line, at most 4096 characters", "Werte: eine Zeile, höchstens 4096 Zeichen"))
             if value == "":
                 if name not in current:
                     raise CredentialError(f"Feld '{name}' braucht einen Wert")
@@ -117,7 +121,8 @@ class CredentialStore:
     def value(self, alias: str, field: str) -> str:
         item = self._load().get(alias)
         if item is None or field not in item["fields"]:
-            raise CredentialError(f"Zugangsdatum '{alias}.{field}' existiert nicht")
+            raise CredentialError(L(f"Credential '{alias}.{field}' does not exist",
+                                    f"Zugangsdatum '{alias}.{field}' existiert nicht"))
         return item["fields"][field]
 
 

@@ -1,9 +1,11 @@
 # User guide: use ha-safe-mcp with your Home Assistant
 
+**English** · [Deutsch](USER_GUIDE.de.md)
+
 This guide is for an installation you own or administer. Start with reads, discover IDs from **your** Home Assistant (HA), and approve changes only after checking the exact target. All entity names, IDs, area names and configuration payloads below are **illustrative placeholders**, not claims that these objects exist on your system. Do not copy a write example into a live home without replacing and checking every target.
 
 For a plain-language description of every function with examples and screenshots see the
-[feature guide](FEATURES.md). For installation and prerequisites see [INSTALL.md](INSTALL.md); for architecture and security boundaries see [TECHNICAL.md](TECHNICAL.md); for the complete current tool signatures see [TOOLS.md](TOOLS.md); for the project overview see [README.md](../README.md). The web UI currently uses **German labels**; this English guide gives those labels in parentheses so you can find them.
+[feature guide](FEATURES.md). For installation and prerequisites see [INSTALL.md](INSTALL.md); for architecture and security boundaries see [TECHNICAL.md](TECHNICAL.md); for the complete current tool signatures see [TOOLS.md](TOOLS.md); for the project overview see [README.md](../README.md). This guide quotes the labels of the English web UI; the [German guide](USER_GUIDE.de.md) uses those of the German UI.
 
 ## 1. Connect safely
 
@@ -13,14 +15,22 @@ For a plain-language description of every function with examples and screenshots
 
 ### First-run browser setup
 
-Run `ha-mcp-ui` from the installed environment (for example `.venv/bin/ha-mcp-ui`) and visit `http://localhost:8765/` on the same computer. The wizard (**Ersteinrichtung**) has four stages:
+Run `ha-mcp-ui` from the installed environment (for example `.venv/bin/ha-mcp-ui`) and visit `http://localhost:8765/` on the same computer. The wizard (**First-run setup**) has four stages:
 
-1. **Home Assistant:** enter its root URL and token; click **Verbindung prüfen**. This tests the connection before saving and displays HA and token-user information. Do not paste a token into the chat.
-2. **Lokales Modell:** supply your Ollama URL, load installed models (**Modelle laden**) and choose one that supports tools. The configured model is for the UI chat, not a requirement for a generic MCP client.
-3. **Sicherheit:** begin read-only. **Steuern erlauben** allows control; **Konfiguration ändern erlauben** also requires control and an HA admin token; **Löschen erlauben** also requires configuration access. Limit **Erlaubte Domains für Steuerbefehle** to domains you intend to control.
-4. **Fertig:** settings are saved to the project's `.env` with mode 0600. The UI does not display the saved token again. Open **Einstellungen** later to change settings; leaving the token field empty retains it only if the HA URL is unchanged. Saving tests HA again. UI chats use new settings on their next request; separately running MCP clients must be restarted after `.env` changes.
+1. **Home Assistant:** enter its root URL and token; click **Check connection**. This tests the connection before saving and displays HA and token-user information. Do not paste a token into the chat.
+2. **Local model:** supply your Ollama URL, load installed models (**Load models**) and choose one that supports tools. The configured model is for the UI chat, not a requirement for a generic MCP client.
+3. **Safety:** begin read-only. **Allow control** allows control; **Allow changing configuration** also requires control and an HA admin token; **Allow delete** also requires configuration access. Limit **Allowed domains for control actions** to domains you intend to control.
+4. **Done:** settings are saved to the project's `.env` with mode 0600. The UI does not display the saved token again. Open **Settings** later to change settings; leaving the token field empty retains it only if the HA URL is unchanged. Saving tests HA again. UI chats use new settings on their next request; separately running MCP clients must be restarted after `.env` changes.
 
-On the **Übersicht** overview, inspect HA connectivity and permissions. **Chat** and the floating chat bubble share a browser conversation; **Neu** clears it, **Stopp** cancels a running request. The UI can process only one active chat request at a time. If you need a hard ceiling for a separate installation, start the UI with `--read-only` (equivalent to `--max-level read`), or `--max-level control` to forbid admin changes and deletion even when an env file asks for them. Keep separate env files and XDG directories if operating separate instances. These flags cap this UI's child MCP process; they do not change a separately launched MCP server or HA account permissions.
+On the **Overview** overview, inspect HA connectivity and permissions. **Chat** and the floating chat bubble share a browser conversation; **New** clears it, **Stop** cancels a running request. The UI can process only one active chat request at a time. If you need a hard ceiling for a separate installation, start the UI with `--read-only` (equivalent to `--max-level read`), or `--max-level control` to forbid admin changes and deletion even when an env file asks for them. Keep separate env files and XDG directories if operating separate instances. These flags cap this UI's child MCP process; they do not change a separately launched MCP server or HA account permissions.
+
+### Language and light/dark mode
+
+The web UI is in English by default. The `EN | DE` switch in the header changes it to German and back; error
+messages and hints from the server follow the same language. The sun/moon switch next to it toggles light and
+dark mode. Without a choice the UI follows your system setting; *Settings → Appearance → Like the system* goes
+back to that. Both choices are stored only in this browser. The model answers in the language you write in; if that is unclear, in the
+language of the switch.
 
 ### Connect another MCP client
 
@@ -44,16 +54,16 @@ The stdio server loads **only** `.env` in its current working directory (`Path.c
 The web UI also serves the MCP endpoint `/mcp` (Streamable HTTP), e.g. `http://localhost:8765/mcp` or, behind a
 reverse proxy, `https://<your-host>/mcp`.
 
-1. Open **MCP-Clients** in the UI, enter a name, pick a level (**Nur lesen**, **Steuern**, **Konfiguration ändern**,
-   **Löschen**) and optionally a domain list, then **Client anlegen**. The token (`hsm_…`) is shown **once**; the UI
+1. Open **MCP clients** in the UI, enter a name, pick a level (**Read only**, **Control**, **Change configuration**,
+   **Delete**) and optionally a domain list, then **Create client**. The token (`hsm_…`) is shown **once**; the UI
    prints ready-made commands:
    - Claude Code: `claude mcp add --transport http ha-safe-mcp <endpoint> --header "Authorization: Bearer <token>"`
    - Codex: `export HA_SAFE_MCP_TOKEN='<token>'` and
      `codex mcp add ha-safe-mcp --url <endpoint> --bearer-token-env-var HA_SAFE_MCP_TOKEN`
    - other clients: the endpoint URL plus the header `Authorization: Bearer <token>`.
-2. The client's level is **capped by the instance switches** in **Einstellungen** (shown as "Wirksam"). The domain
+2. The client's level is **capped by the instance switches** in **Settings** (shown as "Effective"). The domain
    list narrows the instance's allowed domains further. Tools above the client's level are not even listed for it.
-3. Change a client's level in the table at any time; **Entfernen** revokes its token immediately.
+3. Change a client's level in the table at any time; **Remove** revokes its token immediately.
 
 Notes:
 
@@ -61,8 +71,8 @@ Notes:
 - Foreign clients do not show this UI's approval cards and ignore the "ohne Freigabe" switches; whether they ask
   before acting is up to the client (tools carry `readOnlyHint`/`destructiveHint` so clients can ask before writes).
   Give each client only the level it needs.
-- Every client gets its own MCP server process with its capped rights; its tool calls appear in **Protokoll** with
-  the client's random ID and its configuration changes in **Änderungen**, like chat actions.
+- Every client gets its own MCP server process with its capped rights; its tool calls appear in **Audit log** with
+  the client's random ID and its configuration changes in **Changes**, like chat actions.
 - Device names and states go to the provider of the AI client you connect.
 - **Behind Cloudflare Access** (or another login proxy): the proxy's browser login cannot be completed by MCP
   clients. Add a bypass for exactly the paths `/mcp` and `/.well-known/oauth-*` (Cloudflare: a self-hosted
@@ -74,10 +84,10 @@ Notes:
 In the client, add a custom MCP server / connector with the URL `https://<your-host>/mcp` and choose OAuth (no
 client ID or secret needed: the client registers itself). The client then opens the consent page
 `/oauth/authorize` in your browser, behind your UI login. It shows the client's name and where you will be sent
-back; pick the level and optional domains and press **Freigeben** (or **Ablehnen**).
+back; pick the level and optional domains and press **Approve** (or **Reject**).
 
-- The grant becomes an entry of kind OAuth in **MCP-Clients**, capped by the instance switches like any token
-  client. Authorizing the same client again replaces its level and tokens. **Entfernen** revokes it.
+- The grant becomes an entry of kind OAuth in **MCP clients**, capped by the instance switches like any token
+  client. Authorizing the same client again replaces its level and tokens. **Remove** revokes it.
 - Access tokens last one hour; the client refreshes them with a rotating refresh token (60 days).
 - Technically: OAuth 2.1 with dynamic client registration and mandatory PKCE (S256); discovery documents at
   `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server`; token and
@@ -92,7 +102,7 @@ ollama pull qwen2.5-coder:7b
 .venv/bin/ha-ollama-chat 'Use ha_search_entities to find available lights; report only IDs actually found.'
 ```
 
-The CLI exposes read tools by default. For a deliberate write, enable the matching server permission first and run `ha-ollama-chat --allow-write '...'`. It prints the proposed tool name and **full JSON arguments** and requires the exact input `JA` **for each write call**. Anything else declines it. Never enter `JA` until you have checked the entity ID, service and payload; there is no dry run. `--allow-write` alone cannot bypass disabled server permissions. The model selects a limited set of tools by prompt keywords and explicit tool names, and has a bounded number of tool rounds: if it misses a tool, name that tool directly or use a full MCP client. The CLI's prompts/approval text, like the UI, may currently be German.
+The CLI exposes read tools by default. For a deliberate write, enable the matching server permission first and run `ha-ollama-chat --allow-write '...'`. It prints the proposed tool name and **full JSON arguments** and requires the exact input `YES` **for each write call**. Anything else declines it. Never enter `YES` until you have checked the entity ID, service and payload; there is no dry run. `--allow-write` alone cannot bypass disabled server permissions. The model selects a limited set of tools by prompt keywords and explicit tool names, and has a bounded number of tool rounds: if it misses a tool, name that tool directly or use a full MCP client. The CLI's prompts and approval text are in English.
 
 ## 2. Understand permissions and approvals
 
@@ -105,28 +115,28 @@ The CLI exposes read tools by default. For a deliberate write, enable the matchi
 
 Default write and auto flags are all `false`. The default control-domain list is `light,switch,fan,climate,cover,media_player`; it is **not** a global restriction on what an automation or script may subsequently do. A service call accepts one entity ID or a list of at most 20 same-domain entity IDs, with no alternative `area_id`/`device_id` targets in `service_data`. A room can be resolved first with `ha_list_area_entities` instead of passing a room directly to the action. `scene` and `script` must be deliberately added to the domain list before their activation tools work; a script can itself invoke actions outside that list. Use especially narrow permissions for `switch`, `script` and any domain controlling sensitive equipment.
 
-In **Chat**, enabling **Steuern erlauben** in settings is not enough: tick **Aktionen erlauben** under the message box for that request. By default every proposed write shows a **Freigabe erforderlich** card with tool name and JSON arguments. **Ausführen** approves *this call once*; **Ablehnen** rejects it. Unanswered cards expire after 120 seconds; **Stopp** rejects pending approvals. Multiple write calls require multiple decisions.
+In **Chat**, enabling **Allow control** in settings is not enough: tick **Allow actions** under the message box for that request. By default every proposed write shows an **Approval required** card with tool name and JSON arguments. **Run** approves *this call once*; **Reject** rejects it. Unanswered cards expire after 120 seconds; **Stop** rejects pending approvals. Multiple write calls require multiple decisions.
 
-Under **Einstellungen**, each level has a separate **ohne Freigabe ausführen** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Aktionen erlauben** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `JA` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
+Under **Settings**, each level has a separate **run without approval** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Allow actions** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `YES` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
 
 ### Two layers of permissions: server level and client settings
 
 A remote client is limited twice:
 
-1. **Server side (binding):** the client's level in **MCP-Clients** (or chosen on the consent page), capped by the
+1. **Server side (binding):** the client's level in **MCP clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.26.1; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.27.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Nur lesen | 63 | 63 | 0 |
-   | Steuern | 70 | 63 | 7 |
-   | Konfiguration ändern | 113 | 63 | 50 |
-   | Löschen | 133 | 63 | 70 |
+   | Read only | 63 | 63 | 0 |
+   | Control | 70 | 63 | 7 |
+   | Change configuration | 113 | 63 | 50 |
+   | Delete | 133 | 63 | 70 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Konfiguration ändern** shows "read-only tools (63)" and "write/delete
+   *Tool permissions*: a client with level **Change configuration** shows "read-only tools (63)" and "write/delete
    tools (50)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
@@ -136,14 +146,14 @@ to require a confirmation, e.g. *Ask* instead of *Blocked*).
 ### Domains: what the allowed list means and how to choose it
 
 A **domain** is the part of an entity ID before the dot: `light` in `light.living_room`, `lock` in
-`lock.front_door`. The allowed-domain list (`HA_ALLOWED_DOMAINS`, **Einstellungen → Erlaubte Domains für
-Steuerbefehle**) decides which entities the control tools may target: `ha_call_service`, `ha_activate_scene`
+`lock.front_door`. The allowed-domain list (`HA_ALLOWED_DOMAINS`, **Settings → Allowed domains for
+control actions**) decides which entities the control tools may target: `ha_call_service`, `ha_activate_scene`
 (needs `scene`) and `ha_run_script` (needs `script`). It does **not** limit configuration changes: an automation
-saved with "Konfiguration ändern" may still act on any entity when it runs.
+saved with "Change configuration" may still act on any entity when it runs.
 
 - Any Home Assistant domain can be entered (lowercase, e.g. `light`). Which ones exist depends on the
   integrations of *your* HA. The default is `light, switch, fan, climate, cover, media_player`.
-- **Find them:** in **Einstellungen**, **MCP-Clients** and on the OAuth consent page the UI lists the domains your
+- **Find them:** in **Settings**, **MCP clients** and on the OAuth consent page the UI lists the domains your
   HA actually has, with the number of entities, as clickable chips (the text field stays editable and is the value
   that is saved). In a chat or MCP client, `ha_list_services` lists the domains that offer actions.
 - Clients (token or OAuth) can only **narrow** the instance list: their picker shows only the allowed domains, and
@@ -209,7 +219,7 @@ Pass this to `ha_save_scene` with admin write; it validates target entities, sto
 ### Add or change an integration using credential references
 
 1. `ha_list_integration_types` `{"query":"<integration domain>"}` checks available UI setup handlers; `ha_list_discovered` `{}` shows what **HA itself** discovered, not a network scan by this MCP. `ha_list_integrations` `{}` shows existing `entry_id`s and support flags.
-2. If a form needs a password/token/PIN, use the UI's **Zugangsdaten** tab to save it under a local alias such as `example_device_login`; `ha_list_credentials` shows alias and field names, **not values**. Never place a secret in a chat, approval payload, tool argument, issue, or example command. Secret form fields accept a reference like `{"$credential":"example_device_login","field":"password"}` instead of plaintext. The local server resolves it immediately before sending it to HA. In an illustrative form step, `{"flow_id":"<flow_id from previous result>","data":{"password":{"$credential":"example_device_login","field":"password"}}}` is valid **only if** the returned schema actually has a `password` field; other forms differ.
+2. If a form needs a password/token/PIN, use the UI's **Credentials** tab to save it under a local alias such as `example_device_login`; `ha_list_credentials` shows alias and field names, **not values**. Never place a secret in a chat, approval payload, tool argument, issue, or example command. Secret form fields accept a reference like `{"$credential":"example_device_login","field":"password"}` instead of plaintext. The local server resolves it immediately before sending it to HA. In an illustrative form step, `{"flow_id":"<flow_id from previous result>","data":{"password":{"$credential":"example_device_login","field":"password"}}}` is valid **only if** the returned schema actually has a `password` field; other forms differ.
 3. `ha_start_integration_setup` uses a handler returned by the types list and returns a form and `flow_id`; submit only fields from its `data_schema` using `ha_integration_setup_step`. Abort an unfinished flow with `ha_abort_integration_setup`. These are admin writes, including abort. For an existing entry, `ha_start_integration_options` / `ha_integration_options_step` use an `entry_id` with `supports_options`; omit unchanged fields with shown `current` values. For `supports_reconfigure`, use `ha_start_integration_reconfigure` followed by setup steps. `ha_update_integration` can rename or change polling/new-entity preferences; `ha_set_integration_disabled` toggles availability, and `ha_reload_integration` reloads. Confirm with `ha_list_integrations`. `ha_delete_integration` is a consequential delete: it can remove its devices and entities.
 
 ### Undo a configuration change
@@ -225,9 +235,9 @@ title/system options/disabled state. Each such tool result carries a `change_id`
   undoing the undo re-applies the change.
 - If the same item was changed again later, undo refuses and names the newer changes. Undo newest first, or pass
   `"force":true` only when you really want to discard the later changes.
-- In the UI, the **Änderungen** tab lists the same journal with a **Rückgängig** button per entry. In the chat, ask
-  e.g. "Mach die letzte Änderung rückgängig".
-- Undo needs **Konfiguration ändern**; when it removes something it also needs **Löschen erlauben**. In the UI chat,
+- In the UI, the **Changes** tab lists the same journal with a **Undo** button per entry. In the chat, ask
+  e.g. "Undo the last change".
+- Undo needs **Change configuration**; when it removes something it also needs **Allow delete**. In the UI chat,
   an undo is treated like a delete for "ohne Freigabe": it always shows an approval card unless deletes may run
   without one.
 - Not journaled: device control (service calls), adding or removing integrations, options/reconfigure dialogs,
@@ -343,7 +353,7 @@ For everything the UI cannot express: `configuration.yaml`, packages, template s
 ### Organise: labels, categories, zones, entity names
 
 These change Home Assistant's configuration (admin write; deleting needs delete as well). Every change is journaled
-and can be undone in the "Änderungen" tab or with `ha_undo_change`.
+and can be undone in the "Changes" tab or with `ha_undo_change`.
 
 - **Labels** tag entities, devices and areas across rooms (e.g. "Batterie", "Urlaub"). `ha_list_labels` shows them
   with usage counts, `ha_get_label` the members. Create with `ha_create_label` (`color` is an HA theme colour such
@@ -389,7 +399,7 @@ newest entries (`limit`, `max_points`).
 
 ### Back up before changing configuration
 
-Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Zugangsdaten**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—delete backups; a download streams from HA and is not retained by MCP. **Restore is not provided here**: use HA's own **Settings → System → Backups** workflow. `ha_delete_backup` uses a listed `backup_id` and is not a restore/rollback mechanism.
+Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Credentials**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—delete backups; a download streams from HA and is not retained by MCP. **Restore is not provided here**: use HA's own **Settings → System → Backups** workflow. `ha_delete_backup` uses a listed `backup_id` and is not a restore/rollback mechanism.
 
 ## 4. Pitfalls and troubleshooting
 
@@ -397,14 +407,14 @@ Use `ha_list_backups` `{}` (HA may require an administrator even for listing). W
 |---|---|
 | `HA_TOKEN is required`, HTTP 401, or wrong HA target | Check the private `.env`, working directory, HA URL (root URL only), process-environment overrides and token. Revoke an exposed token; don't paste it into bug reports. `localhost` in a container/remote client refers to **that** container/computer. |
 | HA 403 / WebSocket unauthorized | The HA user behind the token may lack administrator or endpoint permissions. MCP switches cannot grant HA rights. Some read tools, including backups, require HA admin rights. |
-| `writes disabled`, `admin write disabled`, `delete disabled` | Enable only the specific tier required, then restart an external MCP process; in UI chat also tick **Aktionen erlauben**. Check `--read-only` / `--max-level` on the UI. |
-| Approval did not appear, or action executed without one | Check the settings' **ohne Freigabe ausführen** at the correct level. It skips review when enabled; otherwise approve each payload within 120 seconds. UI auto settings do not affect CLI `JA` or your other MCP client's confirmation policy. |
+| `writes disabled`, `admin write disabled`, `delete disabled` | Enable only the specific tier required, then restart an external MCP process; in UI chat also tick **Allow actions**. Check `--read-only` / `--max-level` on the UI. |
+| Approval did not appear, or action executed without one | Check the settings' **run without approval** at the correct level. It skips review when enabled; otherwise approve each payload within 120 seconds. UI auto settings do not affect CLI `YES` or your other MCP client's confirmation policy. |
 | `domain not allowed`, wrong target, missing entity | Discover a current ID, match its domain to the service, check `HA_ALLOWED_DOMAINS`, and avoid alternate targets in `service_data`. No tool can infer that an invented ID really exists. |
 | Room command targets the wrong things | Use `ha_list_area_entities` and its `available` array; don't call unavailable IDs or both a group and its members. Device area and an entity's own area can differ. |
 | Automation/dashboard/helper rejected or changed unexpectedly | Compare configuration IDs, entity IDs, dashboard URL paths versus collection IDs, and full helper configs. Save the previous config, inspect HA validation, and read back. Config reload can lag. |
 | Integration flow fails or secret is rejected | Follow the returned form schema/flow ID, use stored alias references for secret fields, and check the HA user's permissions. Discovery depends on **HA's** network, not this adapter's reachability. Abort abandoned flows. |
 | REST call rejected | Run `ha_rest_catalog`; only cataloged method/path pairs and route-specific query keys are accepted. `ha_rest_query` allows GET and only the catalog's template/config-check POSTs. Even these can consume HA resources. `ha_rest_write` on `/api/states/<entity_id>` sets a temporary state, **not** a persistent helper or a physical device action. |
-| UI unreachable or wrong model | Open the UI on the same machine via `http://localhost:8765/`; check its running process, Ollama service/model and UI **Einstellungen**. A foreign Host header is rejected. Do not use `--allow-remote` on an unauthenticated network. |
+| UI unreachable or wrong model | Open the UI on the same machine via `http://localhost:8765/`; check its running process, Ollama service/model and UI **Settings**. A foreign Host header is rejected. Do not use `--allow-remote` on an unauthenticated network. |
 | Model gives a stale/unsupported answer | Ask it to use a named read tool to fetch the *current* state or start a new chat. Small Ollama models get a keyword-based preselection of tools plus the local `find_tools` search (and any real tool they call by name is loaded on demand); a plausible answer is not verification. |
 
 The REST gateway is an allowlisted subset, **not** an arbitrary HTTP or WebSocket proxy. It cannot edit arbitrary HA files, schedule/restore backups, or remove an individual device from the registry. The HA token still has its underlying HA authority outside this adapter. Prefer a separate less-privileged HA account for routine reads, backups before admin changes, and manual verification in HA after consequential writes.
@@ -415,9 +425,9 @@ The REST gateway is an allowlisted subset, **not** an arbitrary HTTP or WebSocke
 |---|---|---|
 | HA settings and token | `.env` in the `ha-safe-mcp` project directory, or the UI's `--env-file` | UI writes mode 0600; keep the file out of version control. |
 | Integration/backup credential aliases, encrypted values **and local encryption key** | `~/.config/ha-safe-mcp/credentials/` (or `XDG_CONFIG_HOME` equivalent) | Directory 0700, files 0600; values not returned to UI/model. The key sits next to the data: encryption is not protection against someone with access to your user account. Back up key and encrypted data **together** if you need to recover them. |
-| Generated plans and fenced code blocks from UI chat | `~/.local/share/ha-safe-mcp/files/` (or `XDG_DATA_HOME` equivalent) | Local text files; **never automatically executed or sent to HA**. Review before using. Up to 256 KB per file and 500 files; delete via **Dateien**. |
+| Generated plans and fenced code blocks from UI chat | `~/.local/share/ha-safe-mcp/files/` (or `XDG_DATA_HOME` equivalent) | Local text files; **never automatically executed or sent to HA**. Review before using. Up to 256 KB per file and 500 files; delete via **Files**. |
 | Change journal (previous state of configuration changes) | `~/.local/state/ha-safe-mcp/changes/` (or `XDG_STATE_HOME` equivalent; `HA_CHANGES_DIR` for a separately started server) | One JSON file per change, directory 0700, files 0600, 30 days and at most 1000 entries. Contains configuration (names, entity IDs, automation content), never tokens or credential values. |
-| Audit metadata | `~/.local/state/ha-safe-mcp/audit/` (or `XDG_STATE_HOME` equivalent) | UTC time, tool, route template, status, duration/error class; no prompts, target entity IDs, payloads or tokens. 30-day retention with pruning on read/write; clear via **Protokoll**. Set `HA_AUDIT=false` for a separately started MCP server to disable its audit. |
-| UI conversation | Browser `localStorage` | Shared by main chat and bubble; **Neu** clears it. Recent user/assistant text goes to the selected local Ollama model as context; don't type secrets or sensitive data into chat. |
+| Audit metadata | `~/.local/state/ha-safe-mcp/audit/` (or `XDG_STATE_HOME` equivalent) | UTC time, tool, route template, status, duration/error class; no prompts, target entity IDs, payloads or tokens. 30-day retention with pruning on read/write; clear via **Audit log**. Set `HA_AUDIT=false` for a separately started MCP server to disable its audit. |
+| UI conversation | Browser `localStorage` | Shared by main chat and bubble; **New** clears it. Recent user/assistant text goes to the selected local Ollama model as context; don't type secrets or sensitive data into chat. |
 
-The UI's **Dateien** and **Protokoll** delete controls affect MCP-local generated files/logs, not HA configuration or HA backups. Downloaded HA backup archives reside wherever **your browser** saves downloads. Protect local backups and the browser profile too.
+The UI's **Files** and **Audit log** delete controls affect MCP-local generated files/logs, not HA configuration or HA backups. Downloaded HA backup archives reside wherever **your browser** saves downloads. Protect local backups and the browser profile too.

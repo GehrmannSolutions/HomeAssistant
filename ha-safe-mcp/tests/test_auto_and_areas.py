@@ -11,6 +11,9 @@ from ha_safe_mcp.ollama_client import write_level
 from ha_safe_mcp.registry import HARegistry
 from ha_safe_mcp.server import HAClient
 
+# these tests check the German messages (the UI language German); English is covered in test_i18n.py
+pytestmark = pytest.mark.usefixtures("german")
+
 TOKEN = "t" * 40
 URL = "http://ha:8123"
 

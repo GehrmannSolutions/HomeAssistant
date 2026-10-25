@@ -18,8 +18,9 @@
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Dark design: follows the system unless the header toggle stored a choice (prefs.js sets data-theme). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #11161c;
     --surface: #1a212a;
     --surface-2: #232c37;
@@ -29,6 +30,16 @@
     --bot-bubble: #232c37;
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c;
+  --surface: #1a212a;
+  --surface-2: #232c37;
+  --text: #e6ebf0;
+  --muted: #9aa6b2;
+  --border: #2f3a46;
+  --bot-bubble: #232c37;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 * { box-sizing: border-box; }
@@ -44,6 +55,12 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 0 4px; border-ra
   padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 1.05rem; }
+/* When the tabs do not fit next to brand and switches (narrow window, longer German labels) they get their own row
+   (app.js fitTabs). */
+@media (max-width: 1360px) and (min-width: 641px) { .brand span { display: none; } }
+.topbar.wrap-tabs { flex-wrap: wrap; row-gap: 6px; }
+.topbar.wrap-tabs .brand span { display: inline; }
+.topbar.wrap-tabs .tabs { order: 3; width: 100%; margin-left: 0; }
 .tabs { display: flex; gap: 4px; margin-left: 12px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .tab {
   border: 0; background: transparent; color: var(--muted); padding: 8px 14px;
@@ -56,6 +73,33 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 0 4px; border-ra
   background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
 }
 .mode-pill.write { color: var(--warn); border-color: var(--warn); }
+
+/* Language switch and light/dark toggle (header, all pages) */
+.prefs { margin-left: auto; display: flex; align-items: center; gap: 10px; flex: none; }
+.mode-pill:not([hidden]) + .prefs { margin-left: 4px; }
+.lang-switch { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--border); }
+.lang-switch button { padding: 3px 10px; border-radius: 999px; background: transparent; color: var(--muted);
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; border: 0; }
+.lang-switch button:hover { color: var(--text); }
+.lang-switch button.active { background: var(--surface); color: var(--text);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.18); }
+.theme-toggle { padding: 0; border: 0; background: transparent; border-radius: 999px; line-height: 0; }
+.theme-track { position: relative; display: inline-flex; align-items: center; justify-content: space-between;
+  width: 54px; height: 28px; padding: 0 7px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--border); color: var(--muted); transition: background 0.25s ease, border-color 0.25s ease; }
+.theme-track svg { position: relative; z-index: 1; transition: color 0.25s ease, opacity 0.25s ease; }
+.theme-knob { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--surface); box-shadow: 0 1px 4px rgba(16, 24, 40, 0.3); transition: transform 0.25s ease; }
+.theme-toggle[aria-checked="false"] .theme-sun { color: #e8a400; }
+.theme-toggle[aria-checked="true"] .theme-moon { color: #8ab4ff; }
+.theme-toggle[aria-checked="true"] .theme-knob { transform: translateX(26px); }
+.theme-toggle[aria-checked="true"] .theme-track { background: #0d1a2b; border-color: #2c4a72; }
+.theme-toggle:hover .theme-track { border-color: var(--accent); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-sun, .theme-moon { pointer-events: none; }
+.theme-toggle[aria-checked="false"] .theme-moon, .theme-toggle[aria-checked="true"] .theme-sun { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .theme-knob, .theme-track, .theme-track svg { transition: none; } }
 
 main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 120px; }
 .view { display: block; }
@@ -199,6 +243,7 @@ button.icon:hover { color: var(--text); background: var(--surface-2); }
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; padding: 10px 12px; }
   .tabs { margin-left: 0; order: 3; width: 100%; overflow-x: auto; }
+  .prefs { gap: 6px; }
   main { padding: 16px 12px 110px; }
   .msg { max-width: 92%; }
   .chat-shell { height: calc(100vh - 210px); }

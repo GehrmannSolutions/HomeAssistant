@@ -5,12 +5,11 @@
 
 const STORE_KEY = "ha-mcp-chat-v1";
 const MAX_ITEMS = 120;
-const STARTERS = [
-  "Welche Lichter gibt es?",
-  "Zeig mir alle Sensoren mit ihren Werten",
-  "Welche Dashboards gibt es?",
-  "Welche Helfer vom Typ input_boolean gibt es?",
-];
+const STARTERS = t(
+  ["Which lights are there?", "Show me all sensors with their values", "Which dashboards are there?",
+   "Which input_boolean helpers are there?"],
+  ["Welche Lichter gibt es?", "Zeig mir alle Sensoren mit ihren Werten", "Welche Dashboards gibt es?",
+   "Welche Helfer vom Typ input_boolean gibt es?"]);
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -32,7 +31,7 @@ function el(tag, attrs = {}, ...children) {
 }
 
 async function api(path, { method = "GET", body } = {}) {
-  const options = { method, headers: {} };
+  const options = { method, headers: { "X-UI-Language": LANG } };
   if (method !== "GET") {
     options.headers["X-HA-MCP-UI"] = "1";
     options.headers["Content-Type"] = "application/json";
@@ -42,7 +41,7 @@ async function api(path, { method = "GET", body } = {}) {
   let data = {};
   try { data = await response.json(); } catch { data = {}; }
   if (!response.ok) {
-    const error = new Error(data.error || `Fehler ${response.status}`);
+    const error = new Error(data.error || t(`Error ${response.status}`, `Fehler ${response.status}`));
     error.status = response.status;
     throw error;
   }
@@ -59,7 +58,7 @@ function busy(button, isBusy, label) {
   if (!button) return;
   if (isBusy) {
     button.dataset.label = button.textContent;
-    button.textContent = label || "Bitte warten …";
+    button.textContent = label || t("Please wait …", "Bitte warten …");
     button.disabled = true;
   } else {
     button.textContent = button.dataset.label || button.textContent;
@@ -89,6 +88,7 @@ function showView(name) {
   for (const section of $$(".view")) section.hidden = section.id !== `view-${name}`;
   for (const tab of $$(".tab")) tab.classList.toggle("active", tab.dataset.view === name);
   $(".tabs").hidden = !configured;
+  fitTabs();
   const activeTab = $(`.tab[data-view="${name}"]`);
   if (activeTab && configured) activeTab.scrollIntoView({ block: "nearest", inline: "nearest" });
   $("#bubble").hidden = !configured || name === "chat";
@@ -104,19 +104,28 @@ function showView(name) {
   if (name === "audit") auditLog.load();
 }
 
+function fitTabs() {
+  const bar = $(".topbar");
+  const tabs = $(".tabs");
+  if (!bar || !tabs) return;
+  bar.classList.remove("wrap-tabs");
+  if (!tabs.hidden && tabs.scrollWidth > tabs.clientWidth + 1) bar.classList.add("wrap-tabs");
+}
+
 function renderModePill() {
   const pill = $("#mode-pill");
   const settings = app.status && app.status.settings;
   if (!settings || !app.status.configured) { pill.hidden = true; return; }
   const capped = app.status.max_level && app.status.max_level !== "full";
-  let text = app.status.read_only ? "Nur lesen (fest)" : "Nur lesen";
-  if (settings.allow_delete) text = "Löschen erlaubt";
-  else if (settings.allow_admin_write) text = "Konfiguration erlaubt";
-  else if (settings.allow_write) text = capped ? "Steuern erlaubt (max.)" : "Steuern erlaubt";
-  if (settings.auto_write || settings.auto_admin_write || settings.auto_delete) text += " · teils ohne Freigabe";
+  let text = app.status.read_only ? t("Read only (fixed)", "Nur lesen (fest)") : t("Read only", "Nur lesen");
+  if (settings.allow_delete) text = t("Delete allowed", "Löschen erlaubt");
+  else if (settings.allow_admin_write) text = t("Configuration allowed", "Konfiguration erlaubt");
+  else if (settings.allow_write) text = capped ? t("Control allowed (max.)", "Steuern erlaubt (max.)") : t("Control allowed", "Steuern erlaubt");
+  if (settings.auto_write || settings.auto_admin_write || settings.auto_delete) text += t(" · partly without approval", " · teils ohne Freigabe");
   pill.textContent = text;
   pill.classList.toggle("write", Boolean(settings.allow_write));
   pill.hidden = false;
+  fitTabs();
 }
 
 async function refreshStatus() {
@@ -132,10 +141,10 @@ function fillModelSelect(select, models, selected) {
   select.replaceChildren();
   const names = models.map((model) => model.name);
   if (selected && !names.includes(selected)) {
-    select.append(el("option", { value: selected }, `${selected} (nicht gefunden)`));
+    select.append(el("option", { value: selected }, t(`${selected} (not found)`, `${selected} (nicht gefunden)`)));
   }
   for (const model of models) {
-    const label = `${model.name} · ${model.size_gb} GB` + (model.tools === false ? " · ohne Tool-Unterstützung" : "");
+    const label = `${model.name} · ${model.size_gb} GB` + (model.tools === false ? t(" · no tool support", " · ohne Tool-Unterstützung") : "");
     select.append(el("option", { value: model.name, disabled: model.tools === false }, label));
   }
   if (selected) select.value = selected;
@@ -148,15 +157,16 @@ function fillModelSelect(select, models, selected) {
 async function loadModels(form, button) {
   const url = form.elements.ollama_url.value.trim();
   const result = $(".result", form);
-  busy(button, true, "Lade Modelle …");
+  busy(button, true, t("Loading models …", "Lade Modelle …"));
   try {
     const data = await api("/api/setup/test-ollama", { method: "POST", body: { ollama_url: url } });
     app.models = data.models || [];
     const current = form.elements.ollama_model.value || (app.status && app.status.settings.ollama_model);
     fillModelSelect(form.elements.ollama_model, app.models, current);
     if (!data.ok) setResult(result, data.message, "err");
-    else if (!app.models.length) setResult(result, "Ollama läuft, aber es ist kein Modell installiert (z. B. »ollama pull qwen2.5-coder:7b«).", "warn");
-    else setResult(result, `${data.message} · ${app.models.length} Modell(e)`, "ok");
+    else if (!app.models.length) setResult(result, t("Ollama is running, but no model is installed (e.g. \"ollama pull qwen2.5-coder:7b\").",
+                                            "Ollama läuft, aber es ist kein Modell installiert (z. B. »ollama pull qwen2.5-coder:7b«)."), "warn");
+    else setResult(result, `${data.message} · ${app.models.length} ${t("model(s)", "Modell(e)")}`, "ok");
     return data.ok && app.models.length > 0;
   } catch (error) {
     setResult(result, error.message, "err");
@@ -228,18 +238,18 @@ const wizard = {
     const result = $(".result", form);
     const button = $("button[type='submit']", form);
     const body = { ha_url: form.elements.ha_url.value.trim(), token: form.elements.token.value.trim() };
-    if (!body.token) { setResult(result, "Bitte den Token eintragen.", "err"); return; }
-    busy(button, true, "Prüfe …");
+    if (!body.token) { setResult(result, t("Please enter the token.", "Bitte den Token eintragen."), "err"); return; }
+    busy(button, true, t("Checking …", "Prüfe …"));
     try {
       const check = await api("/api/setup/test-ha", { method: "POST", body });
       if (!check.ok) { setResult(result, check.message, "err"); return; }
       let text = check.message;
       if (check.location_name) text += ` · ${check.location_name}`;
-      if (check.user) text += ` · angemeldet als ${check.user}`;
+      if (check.user) text += t(` · signed in as ${check.user}`, ` · angemeldet als ${check.user}`);
       setResult(result, text, "ok");
       this.data = { ...body, is_admin: check.is_admin };
       const adminBox = $("#step-3").elements.allow_admin_write;
-      adminBox.title = check.is_admin === false ? "Dieser Token gehört zu keinem Admin-Benutzer" : "";
+      adminBox.title = check.is_admin === false ? t("This token does not belong to an admin user", "Dieser Token gehört zu keinem Admin-Benutzer") : "";
       setTimeout(() => this.go(2), 500);
     } catch (error) {
       setResult(result, error.message, "err");
@@ -251,7 +261,7 @@ const wizard = {
   chooseModel() {
     const form = $("#step-2");
     const model = form.elements.ollama_model.value;
-    if (!model) { setResult($(".result", form), "Bitte ein Modell wählen.", "err"); return; }
+    if (!model) { setResult($(".result", form), t("Please choose a model.", "Bitte ein Modell wählen."), "err"); return; }
     this.data.ollama_url = form.elements.ollama_url.value.trim();
     this.data.ollama_model = model;
     this.go(3);
@@ -262,7 +272,7 @@ const wizard = {
     const result = $(".result", form);
     const button = $("button[type='submit']", form);
     if (form.elements.allow_admin_write.checked && this.data.is_admin === false) {
-      setResult(result, "Für Konfigurationsänderungen braucht der Token Admin-Rechte.", "err");
+      setResult(result, t("Changing configuration needs a token with admin rights.", "Für Konfigurationsänderungen braucht der Token Admin-Rechte."), "err");
       return;
     }
     const body = {
@@ -273,15 +283,17 @@ const wizard = {
       allow_delete: form.elements.allow_delete.checked,
       allowed_domains: domainsFrom(form.elements.allowed_domains.value),
     };
-    busy(button, true, "Speichere …");
+    busy(button, true, t("Saving …", "Speichere …"));
     try {
       const saved = await api("/api/setup", { method: "POST", body });
       this.data = {};
       $("#step-1").elements.token.value = "";
       await refreshStatus();
       const settings = saved.settings;
-      $("#done-summary").textContent = `Verbunden mit ${settings.ha_url}. Modell: ${settings.ollama_model}. ` +
-        (settings.allow_write ? "Aktionen sind erlaubt und müssen im Chat einzeln bestätigt werden." : "Modus: nur lesen.");
+      $("#done-summary").textContent = t(`Connected to ${settings.ha_url}. Model: ${settings.ollama_model}. `,
+                                         `Verbunden mit ${settings.ha_url}. Modell: ${settings.ollama_model}. `) +
+        (settings.allow_write ? t("Actions are allowed and must be confirmed one by one in the chat.", "Aktionen sind erlaubt und müssen im Chat einzeln bestätigt werden.")
+                              : t("Mode: read only.", "Modus: nur lesen."));
       this.go(4);
       $(".tabs").hidden = false;
     } catch (error) {
@@ -303,34 +315,34 @@ async function renderHome() {
   const haFacts = $("#ha-facts");
   const modelFacts = $("#model-facts");
   haFacts.replaceChildren(); modelFacts.replaceChildren();
-  fact(haFacts, "Adresse", settings.ha_url);
-  fact(haFacts, "Status", "prüfe …");
-  fact(modelFacts, "Modell", settings.ollama_model);
+  fact(haFacts, t("Address", "Adresse"), settings.ha_url);
+  fact(haFacts, "Status", t("checking …", "prüfe …"));
+  fact(modelFacts, t("Model", "Modell"), settings.ollama_model);
   fact(modelFacts, "Ollama", settings.ollama_url);
   const perms = $("#perm-list");
   perms.replaceChildren(
-    el("li", { class: "read" }, "✓ Lesen"),
-    el("li", { class: settings.allow_write ? "on" : "off" }, settings.allow_write ? "✓ Steuern" : "– Steuern"),
-    el("li", { class: settings.allow_admin_write ? "on" : "off" }, settings.allow_admin_write ? "✓ Konfiguration ändern" : "– Konfiguration ändern"),
-    el("li", { class: settings.allow_delete ? "on" : "off" }, settings.allow_delete ? "✓ Löschen" : "– Löschen"),
-    el("li", { class: "off" }, `Domains: ${settings.allowed_domains.join(", ") || "keine"}`),
+    el("li", { class: "read" }, t("✓ Read", "✓ Lesen")),
+    el("li", { class: settings.allow_write ? "on" : "off" }, (settings.allow_write ? "✓ " : "– ") + t("Control", "Steuern")),
+    el("li", { class: settings.allow_admin_write ? "on" : "off" }, (settings.allow_admin_write ? "✓ " : "– ") + t("Change configuration", "Konfiguration ändern")),
+    el("li", { class: settings.allow_delete ? "on" : "off" }, (settings.allow_delete ? "✓ " : "– ") + t("Delete", "Löschen")),
+    el("li", { class: "off" }, `Domains: ${settings.allowed_domains.join(", ") || t("none", "keine")}`),
   );
   const chips = $("#start-chips");
   chips.replaceChildren(...STARTERS.map((text) => el("button", { type: "button", class: "chip", onclick: () => { showView("chat"); chat.send(text, "main"); } }, text)));
   try {
     const check = await api("/api/setup/test-ha", { method: "POST", body: { ha_url: settings.ha_url, token: "" } });
     haFacts.replaceChildren();
-    fact(haFacts, "Adresse", settings.ha_url);
-    fact(haFacts, "Status", check.ok ? `verbunden (${check.version})` : check.message);
-    if (check.location_name) fact(haFacts, "Zuhause", check.location_name);
-    if (check.user) fact(haFacts, "Token von", check.user + (check.is_admin ? " (Admin)" : ""));
+    fact(haFacts, t("Address", "Adresse"), settings.ha_url);
+    fact(haFacts, "Status", check.ok ? t(`connected (${check.version})`, `verbunden (${check.version})`) : check.message);
+    if (check.location_name) fact(haFacts, t("Home", "Zuhause"), check.location_name);
+    if (check.user) fact(haFacts, t("Token of", "Token von"), check.user + (check.is_admin ? " (Admin)" : ""));
   } catch (error) {
     haFacts.lastChild.textContent = error.message;
   }
   try {
     const ollama = await api("/api/setup/test-ollama", { method: "POST", body: { ollama_url: settings.ollama_url } });
     const model = (ollama.models || []).find((item) => item.name === settings.ollama_model);
-    fact(modelFacts, "Status", !ollama.ok ? ollama.message : model ? `bereit (${model.size_gb} GB${model.tools ? ", Tools" : ""})` : "Modell nicht installiert");
+    fact(modelFacts, "Status", !ollama.ok ? ollama.message : model ? t(`ready (${model.size_gb} GB${model.tools ? ", tools" : ""})`, `bereit (${model.size_gb} GB${model.tools ? ", Tools" : ""})`) : t("model not installed", "Modell nicht installiert"));
   } catch (error) {
     fact(modelFacts, "Status", error.message);
   }
@@ -385,7 +397,7 @@ function initSettings() {
   for (const name of ["allow_write", "allow_admin_write", "allow_delete"]) form.elements[name].addEventListener("change", syncSettingsSwitches);
   for (const name of ["auto_write", "auto_admin_write", "auto_delete"]) {
     form.elements[name].addEventListener("change", (event) => {
-      if (event.target.checked && !window.confirm("Aktionen dieser Stufe werden dann ohne Freigabe-Karte sofort ausgeführt. Einschalten?")) event.target.checked = false;
+      if (event.target.checked && !window.confirm(t("Actions of this level then run right away without an approval card. Turn on?", "Aktionen dieser Stufe werden dann ohne Freigabe-Karte sofort ausgeführt. Einschalten?"))) event.target.checked = false;
     });
   }
   $("[data-action='load-models']", form).addEventListener("click", (event) => loadModels(form, event.currentTarget));
@@ -400,12 +412,12 @@ function initSettings() {
       auto_write: form.elements.auto_write.checked, auto_admin_write: form.elements.auto_admin_write.checked,
       auto_delete: form.elements.auto_delete.checked,
     };
-    busy(button, true, "Prüfe und speichere …");
+    busy(button, true, t("Checking and saving …", "Prüfe und speichere …"));
     try {
       await api("/api/settings", { method: "POST", body });
       form.elements.token.value = "";
       await refreshStatus();
-      setResult($(".result", form), "Gespeichert. Neue Chat-Anfragen nutzen die neuen Einstellungen.", "ok");
+      setResult($(".result", form), t("Saved. New chat requests use the new settings.", "Gespeichert. Neue Chat-Anfragen nutzen die neuen Einstellungen."), "ok");
     } catch (error) {
       setResult($(".result", form), error.message, "err");
     } finally {
@@ -446,10 +458,10 @@ const credentials = {
       el("td", {}, el("code", {}, item.alias)),
       el("td", {}, item.label),
       el("td", {}, item.fields.join(", ")),
-      el("td", {}, new Date(item.updated * 1000).toLocaleString("de-DE")),
+      el("td", {}, new Date(item.updated * 1000).toLocaleString(LOCALE)),
       el("td", { class: "row-actions" },
-        el("button", { type: "button", class: "ghost small", onclick: () => this.edit(item) }, "Ändern"),
-        el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Löschen"))));
+        el("button", { type: "button", class: "ghost small", onclick: () => this.edit(item) }, t("Change", "Ändern")),
+        el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, t("Delete", "Löschen")))));
     $("#cred-rows").replaceChildren(...rows);
     $("#cred-empty").hidden = this.items.length > 0;
     $(".cred-table").hidden = this.items.length === 0;
@@ -462,7 +474,7 @@ const credentials = {
     form.elements.alias.readOnly = false;
     form.elements.username.placeholder = "";
     form.elements.password.required = true;
-    $("#cred-form-title").textContent = "Neue Zugangsdaten";
+    $("#cred-form-title").textContent = t("New credentials", "Neue Zugangsdaten");
     $("#cred-password-hint").textContent = "";
     setResult($(".result", form), "");
   },
@@ -475,9 +487,9 @@ const credentials = {
     form.elements.alias.readOnly = true;
     form.elements.label.value = item.label;
     form.elements.password.required = false;
-    $("#cred-form-title").textContent = `Zugangsdaten ändern: ${item.alias}`;
-    $("#cred-password-hint").textContent = "(leer lassen, um das gespeicherte zu behalten)";
-    form.elements.username.placeholder = item.fields.includes("username") ? "(gespeichert; leer = behalten)" : "";
+    $("#cred-form-title").textContent = t(`Change credentials: ${item.alias}`, `Zugangsdaten ändern: ${item.alias}`);
+    $("#cred-password-hint").textContent = t("(leave empty to keep the stored one)", "(leer lassen, um das gespeicherte zu behalten)");
+    form.elements.username.placeholder = item.fields.includes("username") ? t("(stored; empty = keep)", "(gespeichert; leer = behalten)") : "";
     form.elements.label.focus();
   },
 
@@ -491,13 +503,13 @@ const credentials = {
     const known = this.editing ? this.editing.fields : [];
     if (username || known.includes("username")) fields.username = username;
     if (password || known.includes("password")) fields.password = password;
-    if (!Object.keys(fields).length) { setResult(result, "Mindestens Benutzername oder Passwort angeben.", "err"); return; }
-    busy(button, true, "Speichere …");
+    if (!Object.keys(fields).length) { setResult(result, t("Enter at least a user name or a password.", "Mindestens Benutzername oder Passwort angeben."), "err"); return; }
+    busy(button, true, t("Saving …", "Speichere …"));
     try {
       const saved = await api("/api/credentials", { method: "POST",
         body: { alias: form.elements.alias.value.trim(), label: form.elements.label.value.trim(), fields } });
       this.reset();
-      setResult($(".result", form), `Gespeichert. Im Chat: »${saved.credential.alias}«.`, "ok");
+      setResult($(".result", form), t(`Saved. In the chat: "${saved.credential.alias}".`, `Gespeichert. Im Chat: »${saved.credential.alias}«.`), "ok");
       await this.load();
     } catch (error) {
       setResult(result, error.message, "err");
@@ -508,7 +520,7 @@ const credentials = {
   },
 
   async remove(item) {
-    if (!window.confirm(`Zugangsdaten »${item.alias}« löschen? Integrationen in Home Assistant behalten ihre Kopie.`)) return;
+    if (!window.confirm(t(`Delete credentials "${item.alias}"? Integrations in Home Assistant keep their copy.`, `Zugangsdaten »${item.alias}« löschen? Integrationen in Home Assistant behalten ihre Kopie.`))) return;
     try {
       await api(`/api/credentials/${encodeURIComponent(item.alias)}`, { method: "DELETE" });
       if (this.editing && this.editing.alias === item.alias) this.reset();
@@ -614,7 +626,7 @@ const chat = {
     if (!text || this.running) return;
     const history = this.history();
     const source = this.roots[from];
-    this.typing = "Sende …";
+    this.typing = t("Sending …", "Sende …");
     this.render();
     try {
       const started = await api("/api/chat", { method: "POST", body: { message: text, history, allow_write: this.allowWrite } });
@@ -645,13 +657,13 @@ const chat = {
       } catch (error) {
         if (error.status === 404) {
           this.running = null; this.typing = "";
-          this.add({ kind: "note", text: "Die laufende Anfrage ist nicht mehr verfügbar (UI-Server neu gestartet?)." });
+          this.add({ kind: "note", text: t("The running request is no longer available (UI server restarted?).", "Die laufende Anfrage ist nicht mehr verfügbar (UI-Server neu gestartet?).") });
           break;
         }
         failures += 1;
         if (failures >= 4) {
           this.running = null; this.typing = "";
-          this.add({ kind: "error", text: "Verbindung zum UI-Server verloren." });
+          this.add({ kind: "error", text: t("Lost the connection to the UI server.", "Verbindung zum UI-Server verloren.") });
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, 1500 * failures));
@@ -663,33 +675,33 @@ const chat = {
   handle(event) {
     switch (event.type) {
       case "thinking":
-        this.typing = event.round > 1 ? `Modell wertet Ergebnisse aus (Runde ${event.round})` : "Modell denkt nach";
+        this.typing = event.round > 1 ? t(`Model is evaluating results (round ${event.round})`, `Modell wertet Ergebnisse aus (Runde ${event.round})`) : t("Model is thinking", "Modell denkt nach");
         break;
       case "tool_call":
-        this.typing = `Rufe ${event.name} auf`;
+        this.typing = t(`Calling ${event.name}`, `Rufe ${event.name} auf`);
         this.add({ kind: "tool", name: event.name, args: event.arguments, write: event.write, status: "running" });
         return;
       case "tool_result": {
         const open = [...this.items].reverse().find((item) => item.kind === "tool" && item.name === event.name && item.status === "running");
         if (open) { open.status = event.ok ? "ok" : "failed"; open.preview = event.preview; }
         else this.items.push({ kind: "tool", name: event.name, args: {}, status: event.ok ? "ok" : "failed", preview: event.preview });
-        this.typing = "Modell denkt nach";
+        this.typing = t("Model is thinking", "Modell denkt nach");
         break;
       }
       case "approval_required":
-        this.typing = "Wartet auf deine Freigabe";
+        this.typing = t("Waiting for your approval", "Wartet auf deine Freigabe");
         this.add({ kind: "approval", runId: this.running && this.running.runId, approvalId: event.approval_id,
                    name: event.name, args: event.arguments, state: "pending", deadline: Date.now() + event.timeout * 1000 });
         if (app.view !== "chat") this.openBubble();
         return;
       case "auto_approved":
-        this.typing = "Führe aus (ohne Freigabe)";
+        this.typing = t("Running (without approval)", "Führe aus (ohne Freigabe)");
         this.add({ kind: "approval", name: event.name, args: event.arguments, state: "auto", level: event.level });
         return;
       case "approval_resolved": {
         const approval = this.items.find((item) => item.kind === "approval" && item.approvalId === event.approval_id);
         if (approval) approval.state = event.approved ? "approved" : event.reason === "timeout" ? "timeout" : "rejected";
-        this.typing = event.approved ? "Führe aus" : "";
+        this.typing = event.approved ? t("Running", "Führe aus") : "";
         break;
       }
       case "files_saved":
@@ -705,7 +717,7 @@ const chat = {
         return;
       case "done":
         this.typing = "";
-        if (event.status === "cancelled") this.items.push({ kind: "note", text: "Anfrage abgebrochen." });
+        if (event.status === "cancelled") this.items.push({ kind: "note", text: t("Request cancelled.", "Anfrage abgebrochen.") });
         this.running = null;
         break;
       default:
@@ -723,7 +735,7 @@ const chat = {
       await api(`/api/chat/${encodeURIComponent(item.runId)}/approve`, { method: "POST", body: { approval_id: item.approvalId, approved } });
     } catch (error) {
       item.state = "expired";
-      this.items.push({ kind: "error", text: `Freigabe nicht übernommen: ${error.message}` });
+      this.items.push({ kind: "error", text: t(`Approval not accepted: ${error.message}`, `Freigabe nicht übernommen: ${error.message}`) });
     }
     this.persist();
     this.render();
@@ -758,7 +770,7 @@ const chat = {
   tickCountdowns() {
     for (const node of $$(".countdown[data-deadline]")) {
       const seconds = Math.max(0, Math.round((Number(node.dataset.deadline) - Date.now()) / 1000));
-      node.textContent = seconds > 0 ? `läuft ab in ${seconds} s` : "abgelaufen";
+      node.textContent = seconds > 0 ? t(`expires in ${seconds} s`, `läuft ab in ${seconds} s`) : t("expired", "abgelaufen");
     }
   },
 
@@ -769,33 +781,35 @@ const chat = {
     if (item.kind === "error") return el("div", { class: "msg error" }, item.text);
     if (item.kind === "note") return el("div", { class: "msg note" }, item.text);
     if (item.kind === "files") {
-      return el("div", { class: "saved-files" }, "📄 Gespeichert unter Dateien: ",
+      return el("div", { class: "saved-files" }, t("📄 Saved under Files: ", "📄 Gespeichert unter Dateien: "),
         ...item.files.flatMap((file, index) => [index ? ", " : "",
           el("a", { href: "#files", onclick: (event) => { event.preventDefault(); showView("files"); } }, file.name)]));
     }
     if (item.kind === "tool") {
-      const label = { running: "läuft", ok: "ok", failed: "fehlgeschlagen" }[item.status] || item.status;
+      const label = { running: t("running", "läuft"), ok: "ok", failed: t("failed", "fehlgeschlagen") }[item.status] || item.status;
       return el("div", { class: `tool${item.write ? " write" : ""}${item.status === "failed" ? " failed" : ""}` },
         el("details", {},
           el("summary", {}, `${item.write ? "✎" : "🔎"} ${item.name} – ${label}`),
-          el("pre", {}, `Argumente: ${argsText(item.args)}`),
-          item.preview ? el("pre", {}, `Ergebnis: ${item.preview}`) : null));
+          el("pre", {}, `${t("Arguments", "Argumente")}: ${argsText(item.args)}`),
+          item.preview ? el("pre", {}, `${t("Result", "Ergebnis")}: ${item.preview}`) : null));
     }
     if (item.kind === "approval") {
       const pending = item.state === "pending";
       const stateText = {
-        approved: "✓ Freigegeben", auto: "⚡ Ohne Freigabe ausgeführt (Einstellung)", rejected: "✕ Abgelehnt", timeout: "⏱ Zeit abgelaufen – nicht ausgeführt",
-        expired: "Nicht mehr offen", "sending-yes": "Sende Freigabe …", "sending-no": "Sende Ablehnung …",
+        approved: t("✓ Approved", "✓ Freigegeben"), auto: t("⚡ Run without approval (setting)", "⚡ Ohne Freigabe ausgeführt (Einstellung)"),
+        rejected: t("✕ Rejected", "✕ Abgelehnt"), timeout: t("⏱ Timed out – not run", "⏱ Zeit abgelaufen – nicht ausgeführt"),
+        expired: t("No longer open", "Nicht mehr offen"), "sending-yes": t("Sending approval …", "Sende Freigabe …"),
+        "sending-no": t("Sending rejection …", "Sende Ablehnung …"),
       }[item.state];
       const auto = item.state === "auto";
       return el("div", { class: `approval${auto ? " auto" : ""}` },
-        el("h4", {}, auto ? "Aktion ohne Freigabe" : "Freigabe erforderlich"),
-        el("div", {}, auto ? "Das Modell führt diese Aktion aus:" : "Das Modell möchte folgende Aktion ausführen:"),
+        el("h4", {}, auto ? t("Action without approval", "Aktion ohne Freigabe") : t("Approval required", "Freigabe erforderlich")),
+        el("div", {}, auto ? t("The model runs this action:", "Das Modell führt diese Aktion aus:") : t("The model wants to run this action:", "Das Modell möchte folgende Aktion ausführen:")),
         el("pre", {}, `${item.name}\n${argsText(item.args)}`),
         pending
           ? el("div", { class: "actions" },
-              el("button", { type: "button", class: "danger small", onclick: () => this.decide(item, true) }, "Ausführen"),
-              el("button", { type: "button", class: "secondary small", onclick: () => this.decide(item, false) }, "Ablehnen"),
+              el("button", { type: "button", class: "danger small", onclick: () => this.decide(item, true) }, t("Run", "Ausführen")),
+              el("button", { type: "button", class: "secondary small", onclick: () => this.decide(item, false) }, t("Reject", "Ablehnen")),
               el("span", { class: "countdown", dataset: { deadline: String(item.deadline) } }, ""))
           : el("div", { class: "muted" }, stateText));
     }
@@ -804,7 +818,7 @@ const chat = {
 
   renderEmpty(name) {
     return el("div", { class: "empty" },
-      el("p", {}, "Frag dein lokales Modell nach Zuständen, Geräten, Automationen oder Dashboards."),
+      el("p", {}, t("Ask your local model about states, devices, automations or dashboards.", "Frag dein lokales Modell nach Zuständen, Geräten, Automationen oder Dashboards.")),
       el("div", { class: "chips" }, ...STARTERS.slice(0, name === "bubble" ? 2 : 4)
         .map((text) => el("button", { type: "button", class: "chip", onclick: () => this.send(text, name) }, text))));
   },
@@ -830,8 +844,8 @@ const chat = {
       toggle.disabled = !this.writePermitted || Boolean(this.running);
       toggle.parentElement.classList.toggle("disabled", !this.writePermitted);
       toggle.parentElement.title = this.writePermitted
-        ? "Das Modell darf Aktionen vorschlagen; jede Aktion musst du einzeln bestätigen"
-        : "In den Einstellungen zuerst 'Steuern erlauben' aktivieren";
+        ? t("The model may propose actions; you confirm each one", "Das Modell darf Aktionen vorschlagen; jede Aktion musst du einzeln bestätigen")
+        : t("First enable 'Allow control' in the settings", "In den Einstellungen zuerst 'Steuern erlauben' aktivieren");
       $("button[type='submit']", form).disabled = Boolean(this.running);
       $("[data-action='stop']", form).hidden = !this.running;
       $("[data-action='clear']", form).disabled = Boolean(this.running);
@@ -884,13 +898,13 @@ const fileManager = {
   render() {
     const rows = this.items.map((item) => el("tr", {},
       el("td", {}, el("code", {}, item.name)),
-      el("td", {}, item.kind === "plan" ? "Plan" : "Skript"),
+      el("td", {}, item.kind === "plan" ? "Plan" : t("Script", "Skript")),
       el("td", {}, formatSize(item.size)),
-      el("td", {}, new Date(item.modified).toLocaleString("de-DE")),
+      el("td", {}, new Date(item.modified).toLocaleString(LOCALE)),
       el("td", { class: "row-actions" },
-        el("button", { type: "button", class: "ghost small", onclick: () => this.open(item) }, "Lesen"),
-        el("a", { class: "button ghost small", href: fileUrl(item, true), download: item.name }, "Herunterladen"),
-        el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Löschen"))));
+        el("button", { type: "button", class: "ghost small", onclick: () => this.open(item) }, t("Read", "Lesen")),
+        el("a", { class: "button ghost small", href: fileUrl(item, true), download: item.name }, t("Download", "Herunterladen")),
+        el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, t("Delete", "Löschen")))));
     $("#file-rows").replaceChildren(...rows);
     $("#file-empty").hidden = this.items.length > 0;
     $("#file-table").hidden = this.items.length === 0;
@@ -909,12 +923,12 @@ const fileManager = {
   },
 
   async remove(item) {
-    if (!window.confirm(`Datei »${item.name}« endgültig löschen?`)) return;
+    if (!window.confirm(t(`Delete file "${item.name}" for good?`, `Datei »${item.name}« endgültig löschen?`))) return;
     try {
       await api(fileUrl(item), { method: "DELETE" });
       if ($("#file-viewer-title").textContent === item.name) $("#file-viewer").hidden = true;
       await this.load();
-      setResult($("#file-result"), `»${item.name}« gelöscht.`, "ok");
+      setResult($("#file-result"), t(`"${item.name}" deleted.`, `»${item.name}« gelöscht.`), "ok");
     } catch (error) {
       setResult($("#file-result"), error.message, "err");
     }
@@ -937,12 +951,12 @@ const backupPage = {
     const settings = this.settings();
     const createButton = $("#view-backups [data-action='backups-create']");
     createButton.disabled = !(settings.allow_write && settings.allow_admin_write);
-    createButton.title = createButton.disabled ? "Braucht in den Einstellungen „Konfiguration ändern“" : "";
-    setResult($("#backup-result"), "Lade …");
+    createButton.title = createButton.disabled ? t("Needs \"Change configuration\" in the settings", "Braucht in den Einstellungen „Konfiguration ändern“") : "";
+    setResult($("#backup-result"), t("Loading …", "Lade …"));
     try {
       const data = await api("/api/backups");
       this.render(data.backups || []);
-      setResult($("#backup-result"), data.state && data.state !== "idle" ? `Home Assistant meldet: ${data.state}` : "");
+      setResult($("#backup-result"), data.state && data.state !== "idle" ? t(`Home Assistant reports: ${data.state}`, `Home Assistant meldet: ${data.state}`) : "");
     } catch (error) {
       this.render([]);
       setResult($("#backup-result"), error.message, "err");
@@ -953,29 +967,29 @@ const backupPage = {
     const canDelete = Boolean(this.settings().allow_delete);
     const rows = items.map((item) => el("tr", {},
       el("td", {}, item.name || item.backup_id, item.protected ? " 🔒" : ""),
-      el("td", {}, item.date ? new Date(item.date).toLocaleString("de-DE") : "–"),
+      el("td", {}, item.date ? new Date(item.date).toLocaleString(LOCALE) : "–"),
       el("td", {}, typeof item.size === "number" ? formatBackupSize(item.size) : "–"),
       el("td", {}, (item.agents || []).join(", ")),
       el("td", { class: "row-actions" },
         el("a", { class: "button ghost small", href: `/api/backups/${encodeURIComponent(item.backup_id)}/download`,
-                  download: "" }, "Herunterladen"),
-        canDelete ? el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Löschen") : null)));
+                  download: "" }, t("Download", "Herunterladen")),
+        canDelete ? el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, t("Delete", "Löschen")) : null)));
     $("#backup-rows").replaceChildren(...rows);
     $("#backup-empty").hidden = items.length > 0;
     $("#backup-table").hidden = items.length === 0;
   },
 
   async create(button) {
-    const name = window.prompt("Name für das Backup:", `MCP ${new Date().toLocaleString("de-DE")}`);
+    const name = window.prompt(t("Name of the backup:", "Name für das Backup:"), `MCP ${new Date().toLocaleString(LOCALE)}`);
     if (name === null) return;
-    busy(button, true, "Erstelle Backup …");
-    setResult($("#backup-result"), "Backup läuft, das kann einige Minuten dauern …");
+    busy(button, true, t("Creating backup …", "Erstelle Backup …"));
+    setResult($("#backup-result"), t("Backup running, this can take a few minutes …", "Backup läuft, das kann einige Minuten dauern …"));
     try {
       const result = await api("/api/backups", { method: "POST", body: { name } });
-      if (result.completed) setResult($("#backup-result"), `Backup »${result.backup.name}« erstellt.`, "ok");
-      else setResult($("#backup-result"), result.note || `Backup fehlgeschlagen (${result.reason || "unbekannt"}).`, "err");
+      if (result.completed) setResult($("#backup-result"), t(`Backup "${result.backup.name}" created.`, `Backup »${result.backup.name}« erstellt.`), "ok");
+      else setResult($("#backup-result"), result.note || t(`Backup failed (${result.reason || "unknown"}).`, `Backup fehlgeschlagen (${result.reason || "unbekannt"}).`), "err");
       await this.load();
-      if (result.completed) setResult($("#backup-result"), `Backup »${result.backup.name}« erstellt.`, "ok");
+      if (result.completed) setResult($("#backup-result"), t(`Backup "${result.backup.name}" created.`, `Backup »${result.backup.name}« erstellt.`), "ok");
     } catch (error) {
       setResult($("#backup-result"), error.message, "err");
     } finally {
@@ -984,11 +998,11 @@ const backupPage = {
   },
 
   async remove(item) {
-    if (!window.confirm(`Backup »${item.name}« endgültig löschen?`)) return;
+    if (!window.confirm(t(`Delete backup "${item.name}" for good?`, `Backup »${item.name}« endgültig löschen?`))) return;
     try {
       await api(`/api/backups/${encodeURIComponent(item.backup_id)}`, { method: "DELETE" });
       await this.load();
-      setResult($("#backup-result"), `Backup »${item.name}« gelöscht.`, "ok");
+      setResult($("#backup-result"), t(`Backup "${item.name}" deleted.`, `Backup »${item.name}« gelöscht.`), "ok");
     } catch (error) {
       setResult($("#backup-result"), error.message, "err");
     }
@@ -997,11 +1011,17 @@ const backupPage = {
 
 /* ---------------------------------------------------------------- change journal */
 
-const CHANGE_KINDS = {
+const CHANGE_KINDS = t({
+  automation: "Automation", script: "Script", scene: "Scene", dashboard: "Dashboard",
+  dashboard_config: "Dashboard views", helper: "Helper", entity: "Entity", area: "Area", floor: "Floor",
+  device: "Device", integration: "Integration", label: "Label", category: "Category", zone: "Zone", file: "File",
+  blueprint: "Blueprint", theme: "Theme", resource: "Dashboard resource",
+}, {
   automation: "Automation", script: "Skript", scene: "Szene", dashboard: "Dashboard",
   dashboard_config: "Dashboard-Ansichten", helper: "Helfer", entity: "Entität", area: "Bereich", floor: "Etage",
   device: "Gerät", integration: "Integration", label: "Label", category: "Kategorie", zone: "Zone", file: "Datei",
-};
+  blueprint: "Blueprint", theme: "Theme", resource: "Dashboard-Ressource",
+});
 
 const changePage = {
   init() {
@@ -1009,7 +1029,7 @@ const changePage = {
   },
 
   async load() {
-    setResult($("#change-result"), "Lade …");
+    setResult($("#change-result"), t("Loading …", "Lade …"));
     try {
       const data = await api("/api/changes");
       this.render(data.entries || []);
@@ -1024,14 +1044,14 @@ const changePage = {
     const settings = (app.status && app.status.settings) || {};
     const canUndo = Boolean(settings.allow_write && settings.allow_admin_write);
     const rows = items.map((item) => el("tr", {},
-      el("td", {}, item.ts ? new Date(item.ts).toLocaleString("de-DE") : "–"),
+      el("td", {}, item.ts ? new Date(item.ts).toLocaleString(LOCALE) : "–"),
       el("td", {}, CHANGE_KINDS[item.kind] || item.kind, " · ", el("code", {}, item.tool || "")),
       el("td", {}, el("code", {}, item.target || "–")),
-      el("td", {}, item.existed_before ? "vorhanden" : "neu angelegt"),
-      el("td", {}, item.undone_by ? "rückgängig gemacht" : (item.undoes ? "Rücknahme" : "aktiv")),
+      el("td", {}, item.existed_before ? t("existed", "vorhanden") : t("newly created", "neu angelegt")),
+      el("td", {}, item.undone_by ? t("undone", "rückgängig gemacht") : (item.undoes ? t("undo", "Rücknahme") : t("active", "aktiv"))),
       el("td", { class: "row-actions" },
         !item.undone_by && canUndo
-          ? el("button", { type: "button", class: "ghost small", onclick: (event) => this.undo(item, event.currentTarget) }, "Rückgängig")
+          ? el("button", { type: "button", class: "ghost small", onclick: (event) => this.undo(item, event.currentTarget) }, t("Undo", "Rückgängig"))
           : null)));
     $("#change-rows").replaceChildren(...rows);
     $("#change-empty").hidden = items.length > 0;
@@ -1039,20 +1059,23 @@ const changePage = {
   },
 
   async undo(item, button) {
-    const label = `${CHANGE_KINDS[item.kind] || item.kind} »${item.target}«`;
-    if (!window.confirm(`${label}: Änderung vom ${new Date(item.ts).toLocaleString("de-DE")} rückgängig machen?`)) return;
+    const label = t(`${CHANGE_KINDS[item.kind] || item.kind} "${item.target}"`, `${CHANGE_KINDS[item.kind] || item.kind} »${item.target}«`);
+    if (!window.confirm(t(`${label}: undo the change of ${new Date(item.ts).toLocaleString(LOCALE)}?`,
+                          `${label}: Änderung vom ${new Date(item.ts).toLocaleString(LOCALE)} rückgängig machen?`))) return;
     busy(button, true, "…");
     try {
       try {
         await api(`/api/changes/${encodeURIComponent(item.id)}/undo`, { method: "POST", body: {} });
       } catch (error) {
         if (!String(error.message).startsWith("newer changes")) throw error;
-        if (!window.confirm(`${label} wurde danach noch einmal geändert. Trotzdem auf den Stand vor dieser Änderung `
-                            + "zurücksetzen? Die späteren Änderungen gehen dabei verloren (sie bleiben in der Liste).")) return;
+        if (!window.confirm(t(`${label} was changed again afterwards. Reset it to the state before this change anyway? `
+                                + "The later changes are lost (they stay in the list).",
+                              `${label} wurde danach noch einmal geändert. Trotzdem auf den Stand vor dieser Änderung `
+                                + "zurücksetzen? Die späteren Änderungen gehen dabei verloren (sie bleiben in der Liste)."))) return;
         await api(`/api/changes/${encodeURIComponent(item.id)}/undo`, { method: "POST", body: { force: true } });
       }
       await this.load();
-      setResult($("#change-result"), `${label}: vorheriger Stand wiederhergestellt.`, "ok");
+      setResult($("#change-result"), t(`${label}: previous state restored.`, `${label}: vorheriger Stand wiederhergestellt.`), "ok");
     } catch (error) {
       setResult($("#change-result"), error.message, "err");
     } finally {
@@ -1063,7 +1086,8 @@ const changePage = {
 
 /* ---------------------------------------------------------------- remote MCP clients */
 
-const CLIENT_LEVELS = { read: "Nur lesen", control: "Steuern", admin: "Konfiguration ändern", delete: "Löschen" };
+const CLIENT_LEVELS = t({ read: "Read only", control: "Control", admin: "Change configuration", delete: "Delete" },
+                        { read: "Nur lesen", control: "Steuern", admin: "Konfiguration ändern", delete: "Löschen" });
 
 const clientPage = {
   init() {
@@ -1072,12 +1096,12 @@ const clientPage = {
   },
 
   async load() {
-    setResult($("#client-result"), "Lade …");
+    setResult($("#client-result"), t("Loading …", "Lade …"));
     try {
       const data = await api("/api/clients");
       this.endpoint = data.endpoint;
       $("#client-endpoint").textContent = data.endpoint;
-      $("#client-instance-level").textContent = `zurzeit höchstens ${CLIENT_LEVELS[data.instance_level] || data.instance_level}`;
+      $("#client-instance-level").textContent = t(`currently at most ${CLIENT_LEVELS[data.instance_level] || data.instance_level}`, `zurzeit höchstens ${CLIENT_LEVELS[data.instance_level] || data.instance_level}`);
       this.render(data.clients || []);
       window.domainPicker.reset();
       window.domainPicker.attach($("#client-form").elements.domains, { scope: "allowed" });
@@ -1090,17 +1114,17 @@ const clientPage = {
 
   render(items) {
     const rows = items.map((item) => {
-      const select = el("select", { "aria-label": `Stufe für ${item.name}` },
+      const select = el("select", { "aria-label": t(`Level of ${item.name}`, `Stufe für ${item.name}`) },
         ...Object.entries(CLIENT_LEVELS).map(([value, label]) => el("option", { value, ...(value === item.level ? { selected: "" } : {}) }, label)));
       select.addEventListener("change", () => this.update(item, select.value));
       return el("tr", {},
         el("td", {}, item.name),
         el("td", {}, select),
         el("td", {}, CLIENT_LEVELS[item.effective_level] || item.effective_level),
-        el("td", {}, (item.domains || []).length ? item.domains.join(", ") : "alle erlaubten"),
-        el("td", {}, item.last_used ? new Date(item.last_used).toLocaleString("de-DE") : "noch nie"),
+        el("td", {}, (item.domains || []).length ? item.domains.join(", ") : t("all allowed", "alle erlaubten")),
+        el("td", {}, item.last_used ? new Date(item.last_used).toLocaleString(LOCALE) : t("never", "noch nie")),
         el("td", { class: "row-actions" },
-          el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, "Entfernen")));
+          el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, t("Remove", "Entfernen"))));
     });
     $("#client-rows").replaceChildren(...rows);
     $("#client-empty").hidden = items.length > 0;
@@ -1124,7 +1148,7 @@ const clientPage = {
         `export HA_SAFE_MCP_TOKEN='${result.token}'\ncodex mcp add ${slug} --url ${result.endpoint} --bearer-token-env-var HA_SAFE_MCP_TOKEN`;
       $("#client-token").hidden = false;
       await this.load();
-      setResult($("#client-result"), `Client »${name}« angelegt. Token jetzt kopieren, er wird nicht wieder angezeigt.`, "ok");
+      setResult($("#client-result"), t(`Client "${name}" created. Copy the token now, it is not shown again.`, `Client »${name}« angelegt. Token jetzt kopieren, er wird nicht wieder angezeigt.`), "ok");
     } catch (error) {
       setResult($("#client-result"), error.message, "err");
     }
@@ -1134,19 +1158,19 @@ const clientPage = {
     try {
       await api(`/api/clients/${encodeURIComponent(item.id)}`, { method: "POST", body: { level } });
       await this.load();
-      setResult($("#client-result"), `»${item.name}«: Stufe ${CLIENT_LEVELS[level]}.`, "ok");
+      setResult($("#client-result"), t(`"${item.name}": level ${CLIENT_LEVELS[level]}.`, `»${item.name}«: Stufe ${CLIENT_LEVELS[level]}.`), "ok");
     } catch (error) {
       setResult($("#client-result"), error.message, "err");
     }
   },
 
   async remove(item) {
-    if (!window.confirm(`Client »${item.name}« entfernen? Sein Token funktioniert danach nicht mehr.`)) return;
+    if (!window.confirm(t(`Remove client "${item.name}"? Its token stops working.`, `Client »${item.name}« entfernen? Sein Token funktioniert danach nicht mehr.`))) return;
     try {
       await api(`/api/clients/${encodeURIComponent(item.id)}`, { method: "DELETE" });
       $("#client-token").hidden = true;
       await this.load();
-      setResult($("#client-result"), `Client »${item.name}« entfernt.`, "ok");
+      setResult($("#client-result"), t(`Client "${item.name}" removed.`, `Client »${item.name}« entfernt.`), "ok");
     } catch (error) {
       setResult($("#client-result"), error.message, "err");
     }
@@ -1181,11 +1205,11 @@ const auditLog = {
 
   render(entries) {
     const rows = entries.map((entry) => el("tr", { class: entry.ok ? "" : "failed" },
-      el("td", {}, new Date(entry.ts).toLocaleString("de-DE")),
+      el("td", {}, new Date(entry.ts).toLocaleString(LOCALE)),
       el("td", {}, entry.tool || "–"),
       el("td", {}, entry.kind === "tool" ? "Tool" : (entry.channel || "").toUpperCase()),
       el("td", {}, entry.route ? el("code", {}, `${entry.method || ""} ${entry.route}`.trim()) : "–"),
-      el("td", {}, entry.status ? String(entry.status) : (entry.ok ? "ok" : (entry.error || "Fehler"))),
+      el("td", {}, entry.status ? String(entry.status) : (entry.ok ? "ok" : (entry.error || t("error", "Fehler")))),
       el("td", {}, `${entry.ms} ms`)));
     $("#audit-rows").replaceChildren(...rows);
     $("#audit-empty").hidden = entries.length > 0;
@@ -1193,11 +1217,11 @@ const auditLog = {
   },
 
   async clear() {
-    if (!window.confirm("Gesamtes Protokoll endgültig löschen?")) return;
+    if (!window.confirm(t("Delete the whole audit log for good?", "Gesamtes Protokoll endgültig löschen?"))) return;
     try {
       const result = await api("/api/audit", { method: "DELETE" });
       await this.load();
-      setResult($("#audit-result"), `${result.deleted} Einträge gelöscht.`, "ok");
+      setResult($("#audit-result"), t(`${result.deleted} entries deleted.`, `${result.deleted} Einträge gelöscht.`), "ok");
     } catch (error) {
       setResult($("#audit-result"), error.message, "err");
     }
@@ -1212,6 +1236,7 @@ function initShell() {
   $("#bubble [data-action='close-bubble']").addEventListener("click", () => chat.closeBubble());
   $("#bubble [data-action='expand']").addEventListener("click", () => { chat.closeBubble(); showView("chat"); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !$("#bubble-panel").hidden) chat.closeBubble(); });
+  window.addEventListener("resize", fitTabs);
   window.addEventListener("hashchange", () => { const view = location.hash.slice(1); if (view) showView(view); });
 }
 
@@ -1229,7 +1254,7 @@ async function boot() {
   try {
     await refreshStatus();
   } catch (error) {
-    $("#view-loading").replaceChildren(el("p", { class: "result err" }, `UI-Server nicht erreichbar: ${error.message}`));
+    $("#view-loading").replaceChildren(el("p", { class: "result err" }, t(`UI server not reachable: ${error.message}`, `UI-Server nicht erreichbar: ${error.message}`)));
     return;
   }
   if (!app.status.configured) {

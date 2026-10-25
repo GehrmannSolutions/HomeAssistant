@@ -1,6 +1,8 @@
 # Technical architecture and developer guide
 
-This document describes the implementation in [`src/ha_safe_mcp/`](../src/ha_safe_mcp/), not everything Home Assistant (HA) offers. For setup see [INSTALL.md](INSTALL.md), for operation see [USER_GUIDE.md](USER_GUIDE.md), and for the registered MCP tools and their switches see [TOOLS.md](TOOLS.md). The running HA Core version and the HA token's own privileges also determine whether an operation succeeds. The UI's current interface and some model-facing prompts are in German; this document does not imply English localization of the application.
+**English** · [Deutsch](TECHNICAL.de.md)
+
+This document describes the implementation in [`src/ha_safe_mcp/`](../src/ha_safe_mcp/), not everything Home Assistant (HA) offers. For setup see [INSTALL.md](INSTALL.md), for operation see [USER_GUIDE.md](USER_GUIDE.md), and for the registered MCP tools and their switches see [TOOLS.md](TOOLS.md). The running HA Core version and the HA token's own privileges also determine whether an operation succeeds. The web UI is bilingual (see [Languages](#languages-english-and-german)); prompts to the model are English.
 
 ## Processes, trust boundaries, and data flow
 
@@ -49,7 +51,7 @@ Optional HTTPS ingress: Cloudflare Access + tunnel ──> loopback web UI
 | [`overview.py`](../src/ha_safe_mcp/overview.py) | Deep search over stored automation/script/scene configs, group members and Lovelace configs (bounded concurrency); system overview from config, states, registries and config entries |
 | [`remote.py`](../src/ha_safe_mcp/remote.py) | Remote MCP endpoint: client token store, permission caps, per-client stdio children, gateway server |
 | [`changes.py`](../src/ha_safe_mcp/changes.py) | Change journal: capture previous state, journaled writes, undo through the same gated operations |
-| [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop (keyword preselection, local `find_tools` search with German topic patterns and word overlap, on-demand loading of permitted tools by name), CLI confirmation, web run/approval lifecycle |
+| [`ollama_client.py`](../src/ha_safe_mcp/ollama_client.py), [`chat_runs.py`](../src/ha_safe_mcp/chat_runs.py) | Model tool loop (keyword preselection, local `find_tools` search with English and German topic patterns and word overlap, on-demand loading of permitted tools by name), CLI confirmation, web run/approval lifecycle |
 | [`web.py`](../src/ha_safe_mcp/web.py), [`webui/`](../src/ha_safe_mcp/webui/index.html), [`access_auth.py`](../src/ha_safe_mcp/access_auth.py) | HTTP UI, bundled static frontend, optional Access JWT validation |
 | [`config_store.py`](../src/ha_safe_mcp/config_store.py), [`credentials.py`](../src/ha_safe_mcp/credentials.py), [`audit.py`](../src/ha_safe_mcp/audit.py), [`files.py`](../src/ha_safe_mcp/files.py) | Local settings, secrets, metadata logs and generated text files |
 
@@ -124,6 +126,23 @@ exact redirect URI, `response_type=code`, PKCE S256 and `resource` on every call
 valid 10 minutes, bound to client, redirect URI and challenge. The token endpoint verifies the client (none,
 `client_secret_post`, `client_secret_basic`) and PKCE, then `ClientStore.issue_oauth` creates or replaces one
 profile per OAuth client with a 1-hour access token and a rotating 60-day refresh token (both stored as SHA-256).
+
+## Languages (English and German)
+
+English is the source text and the default; German sits right next to it, so there are no separate translation
+files that can drift apart.
+
+| Layer | Mechanism |
+|---|---|
+| Web UI HTML | English text in the element, German in `data-de`, `data-de-html`, `data-de-placeholder`, `data-de-title`, `data-de-aria-label` |
+| Web UI scripts | `t("English", "Deutsch")` from `webui/prefs.js`, loaded synchronously in `<head>` before every other script |
+| Server | `i18n.L(en, de)`; the language of a request comes from the `X-UI-Language` header (set by the UI) and lives in a `ContextVar`, so chat runs started by the request inherit it; unknown or missing values mean English |
+| Local chat model | instructions are English; `language_hint()` only names the answer language, and the one sentence the model must repeat to the user verbatim follows the UI language |
+| MCP tools and remote clients | English only, independent of the UI |
+
+`prefs.js` also applies the theme before the first paint: without a stored choice `prefers-color-scheme` decides; the
+header toggle stores `light` or `dark` in `localStorage`, *Settings → Appearance → Like the system* removes it.
+`tests/test_ui_i18n.py` fails if German text appears outside `data-de*` attributes or `t()` calls.
 
 ## Web exposure model
 

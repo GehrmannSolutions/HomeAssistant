@@ -7,9 +7,9 @@ window.domainPicker = (() => {
 
   function load() {
     if (!cache) {
-      cache = fetch("/api/domains", { credentials: "same-origin" }).then(async (response) => {
+      cache = fetch("/api/domains", { credentials: "same-origin", headers: { "X-UI-Language": LANG } }).then(async (response) => {
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || `Fehler ${response.status}`);
+        if (!response.ok) throw new Error(data.error || t(`Error ${response.status}`, `Fehler ${response.status}`));
         return data;
       });
       cache.catch(() => { cache = null; });
@@ -35,12 +35,12 @@ window.domainPicker = (() => {
     }
     const box = node("div", "domain-picker");
     anchor.after(box);
-    box.append(node("span", "muted small", "Lade Domains aus Home Assistant …"));
+    box.append(node("span", "muted small", t("Loading domains from Home Assistant …", "Lade Domains aus Home Assistant …")));
     let data;
     try {
       data = await load();
     } catch (error) {
-      box.replaceChildren(node("span", "muted small", `Domains nicht abrufbar (${error.message}); bitte als Text eintragen.`));
+      box.replaceChildren(node("span", "muted small", t(`Domains not available (${error.message}); please type them as text.`, `Domains nicht abrufbar (${error.message}); bitte als Text eintragen.`)));
       return;
     }
     let items = data.domains.filter((item) => item.actions || item.allowed);
@@ -53,7 +53,8 @@ window.domainPicker = (() => {
     items.sort((a, b) => Number(selected.has(b.domain)) - Number(selected.has(a.domain)));
     if (!items.length) {
       box.replaceChildren(node("span", "muted small", scope === "allowed"
-        ? "In den Einstellungen sind keine Domains erlaubt." : "Keine schaltbaren Domains gefunden."));
+        ? t("No domains are allowed in the settings.", "In den Einstellungen sind keine Domains erlaubt.")
+        : t("No controllable domains found.", "Keine schaltbaren Domains gefunden.")));
       return;
     }
     const boxes = [];
@@ -65,9 +66,9 @@ window.domainPicker = (() => {
       boxes.push(check);
       chip.append(check, node("span", "", item.label));
       if (item.label !== item.domain) chip.append(node("code", "", item.domain));
-      chip.append(node("span", "muted small", item.missing || !item.count ? "keine Entitäten" : String(item.count)));
+      chip.append(node("span", "muted small", item.missing || !item.count ? t("no entities", "keine Entitäten") : String(item.count)));
       if (item.risk) {
-        chip.title = `Achtung: ${item.risk}`;
+        chip.title = t(`Caution: ${item.risk}`, `Achtung: ${item.risk}`);
         chip.append(node("span", "risk-note", `⚠ ${item.risk}`));
       }
       check.addEventListener("change", () => {
@@ -85,8 +86,9 @@ window.domainPicker = (() => {
     input.addEventListener("input", sync);
     sync();
     const hint = node("p", "muted small domain-hint", scope === "allowed"
-      ? "Keine Auswahl = alle in den Einstellungen erlaubten Domains."
-      : "Zahl = Entitäten in Home Assistant. ⚠ = Aktionen mit Folgen für Sicherheit oder Gebäude, nur bewusst freigeben.");
+      ? t("No selection = all domains allowed in the settings.", "Keine Auswahl = alle in den Einstellungen erlaubten Domains.")
+      : t("Number = entities in Home Assistant. ⚠ = actions with consequences for safety or the building, allow them consciously.",
+          "Zahl = Entitäten in Home Assistant. ⚠ = Aktionen mit Folgen für Sicherheit oder Gebäude, nur bewusst freigeben."));
     box.replaceChildren(...chips, hint);
   }
 

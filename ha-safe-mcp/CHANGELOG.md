@@ -3,6 +3,28 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.27.0 – 2026-10-25
+
+- **Zweisprachige Weboberfläche**: Englisch ist Standard, Deutsch per Umschalter `EN | DE` in der Kopfleiste (auch
+  auf der OAuth-Freigabeseite). Die Wahl gilt pro Browser (`localStorage`) und wird als Header `X-UI-Language` an den
+  Server geschickt; Fehlermeldungen, Hinweise und Domain-Beschreibungen kommen in derselben Sprache zurück. Englisch
+  ist der Quelltext, Deutsch steht direkt daneben (`data-de*`-Attribute im HTML, `t(en, de)` in den Skripten,
+  `L(en, de)` im Server). Texte an Modelle und MCP-Clients bleiben englisch.
+- **Hell/Dunkel-Schalter** in der Kopfleiste: ohne eigene Wahl folgt das Design dem System; der Schalter merkt sich
+  Hell oder Dunkel, unter *Einstellungen → Design* geht es zurück auf „Wie das System“. Das Design wird vor dem ersten
+  Zeichnen gesetzt, damit nichts aufblitzt.
+- **Lokaler Chat auch auf Englisch zuverlässig**: Die Anweisungen an das Ollama-Modell (Systemprompt, Hinweise zu
+  Tool-Ergebnissen, `find_tools`) sind jetzt englisch; nur die Antwortsprache und der Satz „Aktionen erlauben“ folgen
+  der Oberfläche. Die Werkzeug-Vorauswahl kennt englische Stichwörter (vorher fast nur deutsche – „where is … used“
+  oder „overview“ erreichten die passenden Werkzeuge nicht). Geprüft mit qwen3-coder:30b: je sechs typische Fragen
+  auf Englisch und Deutsch, alle mit dem richtigen Werkzeug und in der Sprache der Frage beantwortet.
+- Kopfleiste: Passen die Reiter nicht neben Logo und Schalter (schmales Fenster, längere deutsche Begriffe), bekommen
+  sie eine eigene Zeile statt abgeschnitten zu werden.
+- **Zweisprachige Doku**: README, Bedienungsanleitung, Installation, Technik und Funktionsleitfaden gibt es jetzt auch
+  auf Deutsch (`*.de.md`), jede Datei verlinkt ihre andere Sprache. Der Funktionsleitfaden hat eigene Screenshots je
+  Sprache (`docs/images/en`, `docs/images/de`); `scripts/doc_screenshots.py --lang en|de`. Tests prüfen beide
+  Leitfäden, die Bilder und die Sprachlinks sowie, dass die Oberfläche ohne deutsche Reste auf Englisch läuft.
+
 ## 0.26.1 – 2026-10-25
 
 - **Funktionsleitfaden** `docs/FEATURES.md`: alle 133 Werkzeuge in einfachen Worten, gruppiert in 20 Bereiche, mit

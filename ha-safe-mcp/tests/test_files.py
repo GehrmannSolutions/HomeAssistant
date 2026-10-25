@@ -6,6 +6,9 @@ import pytest
 
 from ha_safe_mcp.files import FileError, FileStore
 
+# these tests check the German messages (the UI language German); English is covered in test_i18n.py
+pytestmark = pytest.mark.usefixtures("german")
+
 
 def test_saved_files_are_listed_read_and_deleted(tmp_path):
     store = FileStore(tmp_path / "files")

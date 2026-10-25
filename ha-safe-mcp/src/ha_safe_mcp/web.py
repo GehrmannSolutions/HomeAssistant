@@ -30,7 +30,7 @@ from starlette.routing import Route
 
 from .chat_runs import RunBusy, RunManager
 from .access_auth import AccessTokenVerifier
-from .config_store import (READ_ONLY_REFUSAL, Settings, SettingsStore, SetupError, merge_settings, normalize_url,
+from .config_store import (read_only_refusal, Settings, SettingsStore, SetupError, merge_settings, normalize_url,
                            resolve_token)
 from .credentials import CredentialError, CredentialStore
 from .audit import AuditLog
@@ -39,6 +39,7 @@ from .files import FileError, FileStore
 from .remote import ChildPool, ClientStore, build_gateway, effective_level
 from .oauth import OAuthError, OAuthServer, metadata as oauth_metadata
 from .ollama_client import mcp_parameters_for, run_chat, sanitize_history
+from .i18n import HEADER as UI_LANGUAGE_HEADER, L, pick, ui_language
 
 UI_HEADER = "x-ha-mcp-ui"
 MAX_BODY = 64 * 1024
@@ -47,14 +48,18 @@ LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1"}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 STATIC = {"app.js": "text/javascript; charset=utf-8", "oauth.js": "text/javascript; charset=utf-8",
-          "domains.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
+          "domains.js": "text/javascript; charset=utf-8", "prefs.js": "text/javascript; charset=utf-8",
+          "app.css": "text/css; charset=utf-8",
           "icon.svg": "image/svg+xml"}
 # "pw: x", "Passwort ist x", "password=x": a secret value typed into the chat. Asking about a password
 # field ("Wie ist das Passwort-Feld ...") or naming a stored alias stays allowed.
 PLAINTEXT_SECRET = re.compile(
     r"(?i)\b(?:pw|pwd|pass|passwor[dt]|kennwort|secret|token|api[_-]?key)\b\s*(?::|=|\bist\b|\bis\b|\blautet\b)\s*\S+")
-SECRET_REFUSAL = ("Bitte keine Passwörter oder Tokens in den Chat schreiben: sie landen im Verlauf und beim Modell. "
-                  "Lege sie unter 'Zugangsdaten' an und nenne im Chat nur den Alias.")
+def secret_refusal() -> str:
+    return L("Please do not type passwords or tokens into the chat: they end up in the history and with the model. "
+             "Store them under 'Credentials' and only name the alias in the chat.",
+             "Bitte keine Passwörter oder Tokens in den Chat schreiben: sie landen im Verlauf und beim Modell. "
+             "Lege sie unter 'Zugangsdaten' an und nenne im Chat nur den Alias.")
 
 
 def _is_loopback(host: str | None) -> bool:
@@ -116,21 +121,22 @@ class LocalOnlyGuard:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         request = Request(scope)
+        ui_language.set(pick(request.headers.get(UI_LANGUAGE_HEADER)))
         host = _host_name(request.headers.get("host"))
         if host is None or (host.lower() not in self.allowed_hosts and not (self.allow_remote and host)):
-            return await _error("Ungültiger Host", 400)(scope, receive, send)
+            return await _error(L("Invalid host", "Ungültiger Host"), 400)(scope, receive, send)
         peer = scope.get("client")
         if not self.allow_remote and not (peer and _is_loopback(peer[0])):
-            return await _error("Nur lokal erreichbar", 403)(scope, receive, send)
+            return await _error(L("Only reachable locally", "Nur lokal erreichbar"), 403)(scope, receive, send)
         if self.access_verifier is not None:
             assertion = request.headers.get("cf-access-jwt-assertion", "")
             if not assertion or not await asyncio.to_thread(self.access_verifier, assertion):
-                return await _error("Cloudflare Access Anmeldung erforderlich", 403)(scope, receive, send)
+                return await _error(L("Cloudflare Access login required", "Cloudflare Access Anmeldung erforderlich"), 403)(scope, receive, send)
         if request.method not in {"GET", "HEAD"}:
             origin = request.headers.get("origin")
             expected = self.public_origin or f"{scope.get('scheme', 'http')}://{request.headers.get('host')}"
             if request.headers.get(UI_HEADER) != "1" or (origin is not None and origin != expected):
-                return await _error("Anfrage nicht erlaubt", 403)(scope, receive, send)
+                return await _error(L("Request not allowed", "Anfrage nicht erlaubt"), 403)(scope, receive, send)
         return await self.app(scope, receive, send)
 
 
@@ -176,10 +182,10 @@ class McpRouter:
         request = Request(scope, receive)
         host = _host_name(request.headers.get("host"))
         if host is None or (host.lower() not in self.allowed_hosts and not (self.allow_remote and host)):
-            return await _error("Ungültiger Host", 400)(scope, receive, send)
+            return await _error(L("Invalid host", "Ungültiger Host"), 400)(scope, receive, send)
         peer = scope.get("client")
         if not self.allow_remote and not (peer and _is_loopback(peer[0])):
-            return await _error("Nur lokal erreichbar", 403)(scope, receive, send)
+            return await _error(L("Only reachable locally", "Nur lokal erreichbar"), 403)(scope, receive, send)
 
         async def cors_send(message):
             if message["type"] == "http.response.start":
@@ -247,13 +253,13 @@ class McpRouter:
 async def _json_body(request: Request) -> dict:
     raw = await request.body()
     if len(raw) > MAX_BODY:
-        raise SetupError("Anfrage zu groß")
+        raise SetupError(L("Request too large", "Anfrage zu groß"))
     try:
         data = json.loads(raw or b"{}")
     except json.JSONDecodeError:
-        raise SetupError("Ungültiges JSON") from None
+        raise SetupError(L("Invalid JSON", "Ungültiges JSON")) from None
     if not isinstance(data, dict):
-        raise SetupError("Ungültige Eingabe")
+        raise SetupError(L("Invalid input", "Ungültige Eingabe"))
     return data
 
 
@@ -273,9 +279,9 @@ class LiveChecks:
                 api.raise_for_status()
                 config = (await http.get("/api/config")).json()
         except httpx.HTTPStatusError as exc:
-            return {"ok": False, "message": f"Home Assistant antwortete mit HTTP {exc.response.status_code}."}
+            return {"ok": False, "message": L(f"Home Assistant answered with HTTP {exc.response.status_code}.", f"Home Assistant antwortete mit HTTP {exc.response.status_code}.")}
         except (httpx.RequestError, ValueError):
-            return {"ok": False, "message": "Home Assistant ist unter dieser Adresse nicht erreichbar."}
+            return {"ok": False, "message": L("Home Assistant cannot be reached at this address.", "Home Assistant ist unter dieser Adresse nicht erreichbar.")}
         if not isinstance(config, dict):
             config = {}
         result = {"ok": True, "version": str(config.get("version", "")),
@@ -285,7 +291,7 @@ class LiveChecks:
             result.update(user=user["name"], is_admin=user["is_admin"])
         except (RuntimeError, ValueError):
             pass
-        result["message"] = f"Verbunden mit Home Assistant {result['version']}".strip()
+        result["message"] = L(f"Connected to Home Assistant {result['version']}", f"Verbunden mit Home Assistant {result['version']}").strip()
         return result
 
     async def check_ollama(self, url: str) -> dict:
@@ -303,8 +309,8 @@ class LiveChecks:
                         tools = None
                     models.append({"name": name, "size_gb": round(item.get("size", 0) / 1e9, 1), "tools": tools})
         except (httpx.HTTPError, ValueError, AttributeError):
-            return {"ok": False, "message": "Ollama ist unter dieser Adresse nicht erreichbar.", "models": []}
-        return {"ok": True, "message": f"Ollama {version} erreichbar".strip(), "version": version, "models": models}
+            return {"ok": False, "message": L("Ollama cannot be reached at this address.", "Ollama ist unter dieser Adresse nicht erreichbar."), "models": []}
+        return {"ok": True, "message": L(f"Ollama {version} reachable", f"Ollama {version} erreichbar").replace("  ", " "), "version": version, "models": models}
 
 
 PLAN_REQUEST = re.compile(r"(?i)\b(plan|planung|konzept|vorgehen|schritte|roadmap|checkliste)\w*")
@@ -420,7 +426,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def mcp_app(scope, receive, send):
         manager = mcp_sessions.get("manager")
         if manager is None:
-            return await _error("MCP-Endpunkt läuft nicht", 503)(scope, receive, send)
+            return await _error(L("MCP endpoint is not running", "MCP-Endpunkt läuft nicht"), 503)(scope, receive, send)
         return await manager.handle_request(scope, receive, send)
 
     async def index(request: Request):
@@ -441,7 +447,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def test_ha(request: Request):
         try:
             data = await _json_body(request)
-            url = normalize_url(data.get("ha_url", ""), "Home-Assistant")
+            url = normalize_url(data.get("ha_url", ""), "Home Assistant")
             token = resolve_token(store.load(), url, str(data.get("token") or "").strip())
         except SetupError as exc:
             return _error(str(exc))
@@ -464,7 +470,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
                 if not check.get("ok"):
                     return _error(check.get("message") or "Verbindung fehlgeschlagen")
                 if settings.allow_admin_write and check.get("is_admin") is False:
-                    return _error("Für 'Konfiguration ändern' braucht der Token einen Admin-Benutzer")
+                    return _error(L("'Change configuration' needs a token of an admin user", "Für 'Konfiguration ändern' braucht der Token einen Admin-Benutzer"))
                 saved = store.save(settings)
         except SetupError as exc:
             return _error(str(exc))
@@ -473,23 +479,23 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def chat_start(request: Request):
         settings = store.load()
         if not settings.configured:
-            return _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+            return _error(L("Please finish the first-run setup first", "Bitte zuerst die Ersteinrichtung abschließen"), 409)
         try:
             data = await _json_body(request)
             message = data.get("message")
             if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE:
-                raise SetupError("Nachricht fehlt oder ist zu lang")
+                raise SetupError(L("Message missing or too long", "Nachricht fehlt oder ist zu lang"))
             history = sanitize_history(data.get("history") or [])
             if PLAINTEXT_SECRET.search(message) or any(PLAINTEXT_SECRET.search(item["content"])
                                                        for item in history if item["role"] == "user"):
-                raise SetupError(SECRET_REFUSAL)
+                raise SetupError(secret_refusal())
             allow_write = data.get("allow_write", False)
             if not isinstance(allow_write, bool):
-                raise SetupError("allow_write muss true oder false sein")
+                raise SetupError(L("allow_write must be true or false", "allow_write muss true oder false sein"))
             if allow_write and getattr(store, "read_only", False):
-                raise SetupError(READ_ONLY_REFUSAL)
+                raise SetupError(read_only_refusal())
             if allow_write and not settings.allow_write:
-                raise SetupError("Schreibmodus ist aus: in den Einstellungen 'Steuern erlauben' aktivieren")
+                raise SetupError(L("Actions are off: enable 'Allow control' in the settings", "Schreibmodus ist aus: in den Einstellungen 'Steuern erlauben' aktivieren"))
         except (SetupError, ValueError) as exc:
             return _error(str(exc))
         try:
@@ -506,7 +512,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             after = max(0, int(request.query_params.get("after", "0")))
             wait = min(25.0, max(0.0, float(request.query_params.get("wait", "20"))))
         except ValueError:
-            return _error("Ungültige Parameter")
+            return _error(L("Invalid parameters", "Ungültige Parameter"))
         events = await run.wait_events(after, timeout=wait)
         return _ok({"events": events, "finished": run.finished})
 
@@ -517,9 +523,9 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             return _error(str(exc))
         approved = data.get("approved")
         if not isinstance(approved, bool) or not isinstance(data.get("approval_id"), str):
-            return _error("Ungültige Freigabe")
+            return _error(L("Invalid approval", "Ungültige Freigabe"))
         if not runs.resolve(request.path_params["run_id"], data["approval_id"], approved):
-            return _error("Freigabe nicht (mehr) offen", 404)
+            return _error(L("Approval is not (or no longer) open", "Freigabe nicht (mehr) offen"), 404)
         return _ok({"ok": True})
 
     async def chat_cancel(request: Request):
@@ -582,7 +588,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     def _backups_or_error():
         settings = store.load()
         if not settings.configured:
-            return None, None, _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+            return None, None, _error(L("Please finish the first-run setup first", "Bitte zuerst die Ersteinrichtung abschließen"), 409)
         return settings, backups_factory(settings), None
 
     async def backups_list(request: Request):
@@ -599,7 +605,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         if problem:
             return problem
         if not (settings.allow_write and settings.allow_admin_write):
-            return _error("Backups anlegen braucht in den Einstellungen 'Konfiguration ändern'", 403)
+            return _error(L("Creating backups needs 'Change configuration' in the settings", "Backups anlegen braucht in den Einstellungen 'Konfiguration ändern'"), 403)
         try:
             data = await _json_body(request)
             name = str(data.get("name") or "").strip() or time.strftime("MCP %Y-%m-%d %H:%M")
@@ -615,10 +621,10 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         if problem:
             return problem
         if not (settings.allow_write and settings.allow_admin_write and settings.allow_delete):
-            return _error("Backups löschen braucht in den Einstellungen 'Löschen erlauben'", 403)
+            return _error(L("Deleting backups needs 'Allow delete' in the settings", "Backups löschen braucht in den Einstellungen 'Löschen erlauben'"), 403)
         backup_id = request.path_params["backup_id"]
         if not BACKUP_ID.fullmatch(backup_id):
-            return _error("Ungültige Backup-ID", 400)
+            return _error(L("Invalid backup ID", "Ungültige Backup-ID"), 400)
         try:
             return _ok(await backups.delete_backup(backup_id))
         except (RuntimeError, ValueError) as exc:
@@ -630,7 +636,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
             return problem
         backup_id = request.path_params["backup_id"]
         if not BACKUP_ID.fullmatch(backup_id):
-            return _error("Ungültige Backup-ID", 400)
+            return _error(L("Invalid backup ID", "Ungültige Backup-ID"), 400)
         context = backups.download(backup_id)
         try:
             filename, stream = await context.__aenter__()
@@ -656,12 +662,12 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
     async def changes_undo(request: Request):
         settings = store.load()
         if not settings.configured:
-            return _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+            return _error(L("Please finish the first-run setup first", "Bitte zuerst die Ersteinrichtung abschließen"), 409)
         if not (settings.allow_write and settings.allow_admin_write):
-            return _error("Rückgängig machen braucht in den Einstellungen 'Konfiguration ändern'", 403)
+            return _error(L("Undo needs 'Change configuration' in the settings", "Rückgängig machen braucht in den Einstellungen 'Konfiguration ändern'"), 403)
         change_id = request.path_params["change_id"]
         if not CHANGE_ID.fullmatch(change_id):
-            return _error("Ungültige Änderungs-ID", 400)
+            return _error(L("Invalid change ID", "Ungültige Änderungs-ID"), 400)
         try:
             data = await _json_body(request)
             return _ok(await changes_factory(settings).undo(change_id, force=data.get("force") is True))
@@ -670,7 +676,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         except ValueError as exc:
             message = str(exc)
             if message == "delete disabled":
-                return _error("Dieses Rückgängigmachen entfernt etwas und braucht 'Löschen erlauben'", 403)
+                return _error(L("This undo removes something and needs 'Allow delete'", "Dieses Rückgängigmachen entfernt etwas und braucht 'Löschen erlauben'"), 403)
             if message.startswith("newer changes"):
                 return _error(message, 409)
             return _error(message, 400)
@@ -688,11 +694,11 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         from .domains import summarize
         settings = store.load()
         if not settings.configured:
-            return _error("Bitte zuerst die Ersteinrichtung abschließen", 409)
+            return _error(L("Please finish the first-run setup first", "Bitte zuerst die Ersteinrichtung abschließen"), 409)
         try:
             states, services = await (domain_source or live_domain_source)(settings)
         except (RuntimeError, httpx.HTTPError) as exc:
-            return _error(f"Home Assistant nicht erreichbar: {exc}", 502)
+            return _error(L(f"Home Assistant not reachable: {exc}", f"Home Assistant nicht erreichbar: {exc}"), 502)
         return _ok({"allowed": list(settings.allowed_domains),
                     "domains": summarize(states, services, settings.allowed_domains)})
 
@@ -855,7 +861,7 @@ def main():
                      access_verifier=verifier)
     display_url = (f"https://{args.public_host}/" if args.public_host else
                    f"http://{'localhost' if _is_loopback(args.host) else args.host}:{args.port}/")
-    print(f"ha-safe-mcp UI: {display_url}" + {"read": " (nur lesen)", "control": " (höchstens steuern)"}.get(max_level, ""))
+    print(f"ha-safe-mcp UI: {display_url}" + {"read": " (read only)", "control": " (control at most)"}.get(max_level, ""))
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning", proxy_headers=False,
                 server_header=False, date_header=False)
 

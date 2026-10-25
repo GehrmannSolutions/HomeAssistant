@@ -22,6 +22,7 @@ import httpx
 
 from .credentials import CredentialError, CredentialStore, REF_KEY, resolve_refs, scrub
 from .server import HAClient
+from .i18n import L
 
 BACKUP_ID = re.compile(r"^[0-9a-z]{6,64}$")
 AGENT_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_\-]+$")
@@ -124,7 +125,8 @@ class HABackups:
                 return {"completed": False, "backup": None, "reason": str(event.get("reason") or "unknown")}
             if time.monotonic() >= deadline:
                 return {"completed": False, "backup": None,
-                        "note": "Backup läuft noch; später mit ha_list_backups prüfen."}
+                        "note": L("Backup still running; check later with ha_list_backups.",
+                                  "Backup läuft noch; später mit ha_list_backups prüfen.")}
             await asyncio.sleep(self.poll_interval)
 
     async def delete_backup(self, backup_id: str) -> dict:
@@ -140,7 +142,7 @@ class HABackups:
         backup_id = self._backup_id(backup_id)
         listed = {item.get("backup_id"): item for item in (await self._info())["backups"] if isinstance(item, dict)}
         if backup_id not in listed:
-            raise ValueError("Backup nicht gefunden")
+            raise ValueError(L("Backup not found", "Backup nicht gefunden"))
         backup = listed[backup_id]
         agents = backup.get("agents") if isinstance(backup.get("agents"), dict) else {}
         agent = LOCAL_AGENT if LOCAL_AGENT in agents else next((a for a in agents if AGENT_ID.fullmatch(str(a))), None)

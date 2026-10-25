@@ -91,7 +91,7 @@ async def test_unknown_json_tool_request_cannot_escape_allowlist():
     session = FakeSession()
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))), base_url="http://ollama:11434") as http:
         answer = await run_chat(session, http, "small", "status")
-    assert "nicht freigegeben" in answer
+    assert "not approved" in answer
     assert session.calls == []
 
 
@@ -197,8 +197,8 @@ async def test_read_only_chat_tells_the_model_how_to_enable_actions():
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
         await run_chat(FakeSession(), http, "small", "Lege einen Helfer an")
         await run_chat(FakeSession(), http, "small", "Lege einen Helfer an", allow_write=True, approve=lambda n, a: True)
-    assert "Aktionen erlauben" in systems[0]
-    assert "Aktionen erlauben" not in systems[1]
+    assert "Allow actions" in systems[0] and "only reading tools" in systems[0]
+    assert "Allow actions" not in systems[1]
 
 
 @pytest.mark.asyncio
@@ -212,8 +212,8 @@ async def test_plans_and_drafts_are_allowed_in_read_only_chats():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
         await run_chat(FakeSession(), http, "small", "Erstelle einen Plan und gib die Automation als YAML aus")
-    assert "Pläne" in systems[0] and "Entwürfe" in systems[0]
-    assert "Codeblock" in systems[0]
+    assert "plans" in systems[0] and "drafts" in systems[0]
+    assert "code block" in systems[0]
 
 
 @pytest.mark.parametrize("history", [
@@ -373,7 +373,7 @@ def test_integration_prompts_select_integration_tools(prompt):
 def test_system_prompt_states_what_the_tools_cannot_do():
     from ha_safe_mcp.ollama_client import SYSTEM
     lowered = SYSTEM.lower()
-    assert "netzwerk" in lowered and "passw" in lowered
+    assert "network" in lowered and "passw" in lowered
 
 
 @pytest.mark.asyncio
@@ -436,7 +436,7 @@ async def test_qwen3_xml_write_call_is_blocked_without_write_mode():
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
                                  base_url="http://ollama:11434") as http:
         answer = await run_chat(session, http, "qwen3", "Lege einen Helfer an")
-    assert session.calls == [] and "Aktionen erlauben" in answer and "<function" not in answer
+    assert session.calls == [] and "Allow actions" in answer and "<function" not in answer
 
 
 def test_xml_parameter_values_follow_the_tool_schema():
@@ -460,3 +460,30 @@ def test_an_entity_id_in_the_prompt_does_not_offer_helper_management():
     assert "ha_save_scene" in scene and "ha_create_helper" not in scene
     helper = select_tool_names("Lege einen input_boolean Helfer an", available, allow_write=True)
     assert "ha_create_helper" in helper
+
+
+def test_instructions_to_the_model_are_english_and_the_user_sentence_follows_the_ui(german):
+    from ha_safe_mcp.ollama_client import SYSTEM, read_only_hint, write_blocked
+    assert SYSTEM.startswith("You are a Home Assistant assistant")
+    hint = read_only_hint()
+    assert hint.startswith(" In this chat only reading tools") and "'Aktionen erlauben'" in hint
+    assert write_blocked().startswith("Schreibaufruf nicht freigegeben")
+
+
+@pytest.mark.parametrize("prompt, tool", [
+    ("Where is the Stehlampe used?", "ha_find_usages"),
+    ("Give me a short overview of my Home Assistant.", "ha_get_overview"),
+    ("When was the lamp on today? Check the history.", "ha_get_history"),
+    ("Why did the automation not run yesterday?", "ha_list_traces"),
+    ("What will the weather be like tomorrow?", "ha_get_weather_forecast"),
+    ("Which Zigbee devices are offline?", "ha_list_zigbee_devices"),
+    ("Put milk on the shopping list", "ha_add_todo_item"),
+    ("Which files does configuration.yaml include?", "ha_read_config_file"),
+    ("Undo the last change", "ha_undo_change"),
+    ("Turn off all lamps in the kitchen", "ha_list_area_entities"),
+])
+def test_english_questions_reach_the_matching_tools(prompt, tool):
+    import re as _re
+    from ha_safe_mcp.ollama_client import TOOL_TOPICS
+    offered = {name for pattern, names in TOOL_TOPICS if _re.search(pattern, prompt, _re.IGNORECASE) for name in names}
+    assert tool in offered

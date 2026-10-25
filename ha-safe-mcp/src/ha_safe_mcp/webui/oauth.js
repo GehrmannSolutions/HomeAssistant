@@ -15,10 +15,10 @@ function oauthParams() {
 async function post(path, body) {
   const response = await fetch(path, {
     method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json", "X-HA-MCP-UI": "1" }, body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "X-HA-MCP-UI": "1", "X-UI-Language": LANG }, body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Fehler ${response.status}`);
+  if (!response.ok) throw new Error(data.error || t(`Error ${response.status}`, `Fehler ${response.status}`));
   return data;
 }
 
@@ -39,7 +39,7 @@ async function start() {
     form.hidden = false;
     window.domainPicker.attach(form.elements.domains, { scope: "allowed" });
   } catch (error) {
-    document.querySelector("#oauth-intro").textContent = "Diese Anfrage kann nicht freigegeben werden.";
+    document.querySelector("#oauth-intro").textContent = t("This request cannot be approved.", "Diese Anfrage kann nicht freigegeben werden.");
     show(error.message, "err");
     return;
   }
@@ -49,7 +49,7 @@ async function start() {
     const domains = String(data.get("domains") || "").split(",").map((d) => d.trim()).filter(Boolean);
     try {
       const result = await post(`/api/oauth/${action}`, { params, level: data.get("level"), domains });
-      show(action === "approve" ? "Freigegeben, du wirst zurückgeleitet …" : "Abgelehnt, du wirst zurückgeleitet …", "ok");
+      show(action === "approve" ? t("Approved, redirecting …", "Freigegeben, du wirst zurückgeleitet …") : t("Rejected, redirecting …", "Abgelehnt, du wirst zurückgeleitet …"), "ok");
       location.assign(result.redirect);
     } catch (error) {
       show(error.message, "err");

@@ -71,7 +71,8 @@ def test_public_cli_uses_loopback_and_requires_access(tmp_path, monkeypatch):
     assert args['app'].public_origin == 'https://ha-mcp.example.com'
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.test-token-value.signature_part"
-HEADERS = {"X-HA-MCP-UI": "1", "Origin": "http://127.0.0.1:8765"}
+# German UI: these tests check the German messages; the English default is covered in test_i18n.py
+HEADERS = {"X-HA-MCP-UI": "1", "Origin": "http://127.0.0.1:8765", "X-UI-Language": "de"}
 
 
 class FakeChecks:

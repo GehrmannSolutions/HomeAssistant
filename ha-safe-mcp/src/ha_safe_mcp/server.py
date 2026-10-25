@@ -110,7 +110,8 @@ class HAClient:
         needle = query.casefold()
         # German domain names ("Sonne", "Rollläden") find entities whose IDs and names are English (sun.sun)
         from .domains import DOMAIN_INFO
-        label_domains = {d for d, (label, _) in DOMAIN_INFO.items() if len(needle) >= 3 and needle in label.casefold()}
+        label_domains = {d for d, names in DOMAIN_INFO.items() if len(needle) >= 3
+                         and any(needle in label.casefold() for label, _ in names.values())}
         return [{"entity_id": state["entity_id"], "state": state.get("state", ""),
                  "friendly_name": str(state.get("attributes", {}).get("friendly_name", ""))}
                 for state in states if isinstance(state, dict) and isinstance(state.get("entity_id"), str)
