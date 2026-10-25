@@ -69,6 +69,26 @@ async def test_search_finds_by_name_description_and_topic_sorted_by_stars():
         await make().search("x", category="malware")
 
 
+async def test_search_is_forgiving_and_puts_name_hits_and_popular_ones_first():
+    ws = FakeWS()
+    ws.repos += [repo("601", "kalkih/mini-graph-card", stars=3900, description="Minimalistic graph card"),
+                 repo("602", "dbuezas/plotly-graph-card", stars=660, description="Plotly history graph card"),
+                 repo("603", "someone/better_thermostat", category="integration", stars=1500,
+                      description="Smart TRV control"),
+                 repo("604", "other/better-ui", category="integration", stars=9000, description="A better UI")]
+    graphs = await make(ws).search("history graphs card", category="plugin")
+    assert [r["full_name"] for r in graphs["repositories"]][:2] == ["kalkih/mini-graph-card",
+                                                                     "dbuezas/plotly-graph-card"]
+    thermostat = await make(ws).search("better thermostat")
+    assert thermostat["repositories"][0]["full_name"] == "someone/better_thermostat"
+
+
+async def test_remove_hint_fits_the_category():
+    ws = FakeWS()
+    card = await make(ws, delete=True).remove("piitaya/lovelace-mushroom")
+    assert "dashboard" in card["next"] and "integration" not in card["next"]
+
+
 async def test_without_hacs_the_answer_says_so():
     with pytest.raises(ValueError, match="HACS is not installed"):
         await make(FakeWS(hacs=False)).search("x")

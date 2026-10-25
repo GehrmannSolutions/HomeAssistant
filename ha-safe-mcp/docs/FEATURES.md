@@ -488,7 +488,7 @@ Home Assistant's rights, so installing always shows an approval card with stars,
 
 | Tool | What it does | Level |
 |---|---|---|
-| `ha_search_hacs` | Searches the store by words in name, description and topics, optionally only one kind (`plugin` = dashboard card, `integration`, `theme`, ...); sorted by GitHub stars. | Read |
+| `ha_search_hacs` | Searches the store by words in name, description and topics (half of the words are enough, fill words like "card" do not count), optionally only one kind (`plugin` = dashboard card, `integration`, `theme`, ...). Names with all words first, then the most GitHub stars. | Read |
 | `ha_get_hacs_repository` | One repository with stars, last update, releases, installed version and what installing it means. | Read |
 | `ha_install_hacs_repository` | Installs or updates (newest version or a chosen release). A card is registered as dashboard resource right away; an integration needs a restart. Always with an approval card in the chat. Journaled: undo removes a new install or goes back to the previous version. | Configure |
 | `ha_add_hacs_custom_repository` | Adds a GitHub repository that is not in the store (only `github.com`). It is only listed, not installed. | Configure |

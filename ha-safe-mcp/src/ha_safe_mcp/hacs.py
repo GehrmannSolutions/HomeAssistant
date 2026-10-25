@@ -24,7 +24,23 @@ FIELDS = ("id", "full_name", "name", "category", "description", "stars", "downlo
           "installed_version", "available_version", "pending_upgrade", "last_updated", "custom", "can_download",
           "homeassistant", "authors", "topics")
 FULL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
+FILLER = {"card", "cards", "karte", "karten", "hacs", "for", "the", "a", "an", "and", "with", "für", "fur", "die",
+          "der", "das", "ein", "eine", "und", "mit", "plugin", "plugins", "lovelace", "dashboard", "home",
+          "assistant", "custom", "integration", "integrations", "theme", "themes"}
 GITHUB = re.compile(r"^(?:https://github\.com/)?([A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}?)(?:\.git)?/?$")
+
+
+def search_words(query) -> list[str]:
+    """Meaningful words of a search, singular ('graphs' -> 'graph'); fill words like 'card' are left out."""
+    words = []
+    for word in re.split(r"[\s,;/]+", str(query or "").casefold().strip()):
+        if not word or word in FILLER:
+            continue
+        if len(word) > 4 and word.endswith("s") and not word.endswith("ss"):
+            word = word[:-1]
+        words.append(word)
+    # only fill words ("hacs card"): search for them as typed instead of returning everything
+    return words or [w for w in str(query or "").casefold().split() if w]
 
 
 class HAHacs:
@@ -73,19 +89,24 @@ class HAHacs:
     async def search(self, query: str = "", category: str = "", limit: int = 20, installed_only: bool = False) -> dict:
         if category and category not in CATEGORIES:
             raise ValueError(f"category must be one of {', '.join(CATEGORIES)}")
-        needle = str(query or "").casefold().strip()
+        words = search_words(query)
         found = []
         for item in await self._all():
             if category and item.get("category") != category:
                 continue
             if installed_only and not item.get("installed"):
                 continue
-            text = " ".join(str(item.get(k) or "") for k in ("full_name", "name", "description")) + " " + \
-                " ".join(item.get("topics") or [])
-            if needle and not all(word in text.casefold() for word in needle.split()):
+            name = f"{item.get('full_name') or ''} {item.get('name') or ''}".casefold()
+            text = name + " " + str(item.get("description") or "").casefold() + " " + \
+                " ".join(item.get("topics") or []).casefold()
+            hits = sum(1 for word in words if word in text)
+            # at least half of the words: "history graphs" also finds the popular "mini-graph-card"
+            if words and hits < (len(words) + 1) // 2:
                 continue
+            item["_name_hit"] = bool(words) and all(word in name for word in words)
             found.append(item)
-        found.sort(key=lambda i: (not i.get("installed") if installed_only else False, -(i.get("stars") or 0)))
+        # whose name has all words first (exact cards like card-mod), then the most popular
+        found.sort(key=lambda i: (not i["_name_hit"], -(i.get("stars") or 0)))
         limit = max(1, min(int(limit), 50))
         return {"repositories": [self._reduce(i) for i in found[:limit]], "total": len(found),
                 "hint": "stars and last_updated help to judge a repository; install with ha_install_hacs_repository"}
@@ -158,9 +179,15 @@ class HAHacs:
         after = await self._find(str(item["id"]))
         if after.get("installed"):
             raise RuntimeError("Removal not confirmed by read-back")
-        return {"removed": True, "full_name": item.get("full_name"), "category": item.get("category"),
-                "was_version": item.get("installed_version"),
-                "next": "an integration is gone after a restart; a card stays in dashboards as an error card"}
+        category = item.get("category")
+        follow = {"plugin": "HACS removed the dashboard resource; dashboards that still use the card show an error "
+                            "card there until it is taken out (find them with ha_find_usages)",
+                  "integration": "the integration's files are gone; restart Home Assistant (ha_restart) and delete "
+                                 "its leftover config entries",
+                  "theme": "reload themes (ha_reload 'frontend'); users who picked it fall back to the default"
+                  }.get(category, "see the repository's instructions for leftovers")
+        return {"removed": True, "full_name": item.get("full_name"), "category": category,
+                "was_version": item.get("installed_version"), "next": follow}
 
     async def add_custom(self, repository: str, category: str) -> dict:
         self._check_write()

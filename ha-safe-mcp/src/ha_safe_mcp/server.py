@@ -566,15 +566,17 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_list_hacs_repositories(installed_only: bool = True) -> dict:
-        """Repositories installed through HACS (custom integrations, cards, themes) with installed/available version
-        and pending upgrades."""
+        """What is ALREADY INSTALLED through HACS (custom integrations, cards, themes) with installed/available
+        version and pending upgrades. To find something new in the store (a card that does X), use ha_search_hacs."""
         return await ecosystem.list_hacs(installed_only)
 
     @tool()
     async def ha_search_hacs(query: str = "", category: str = "", limit: int = 20,
                              installed_only: bool = False) -> dict:
         """Search the HACS store (custom integrations, dashboard cards = category 'plugin', themes, ...) by words in
-        name, description and topics; sorted by GitHub stars. Read only."""
+        name, description and topics (at least half of the words must match; fill words like 'card' are ignored).
+        Repositories whose name has all words come first, then the most GitHub stars. The store is in English:
+        translate the user's words into short English search words (e.g. 'Verlaufsgraph' -> 'graph'). Read only."""
         return await hacs.search(query, category, limit, installed_only)
 
     @tool()

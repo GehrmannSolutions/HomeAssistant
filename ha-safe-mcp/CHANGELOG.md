@@ -3,6 +3,17 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.30.1 – 2026-10-25
+
+Gefunden beim Test mit dem lokalen Modell gegen eine echte HACS-Instanz:
+
+- **HACS-Suche verzeiht mehr:** Es reicht, wenn die Hälfte der Suchwörter passt; Füllwörter wie „card“ oder „für“
+  zählen nicht, Mehrzahl wird erkannt. Repositories mit allen Wörtern im Namen kommen zuerst, sonst die mit den
+  meisten Sternen. Vorher fand „history graphs“ die beliebte mini-graph-card nicht (sie nennt sich nur „graph card“).
+- Das Modell sucht im englischen Store mit englischen Wörtern, und es unterscheidet „was ist installiert“ von „was
+  gibt es im Store“.
+- Der Hinweis nach dem Entfernen passt zur Art: Bei einer Karte nannte er fälschlich einen Neustart „der Integration“.
+
 ## 0.30.0 – 2026-10-25
 
 - **HACS-Store im MCP** (5 neue Werkzeuge): suchen (Name, Beschreibung, Themen, nach Sternen sortiert), Details mit

@@ -499,7 +499,7 @@ Aktualisierung und dem, was danach passiert.
 
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
-| `ha_search_hacs` | Sucht im Store nach Wörtern in Name, Beschreibung und Themen, wahlweise nur eine Art (`plugin` = Dashboard-Karte, `integration`, `theme`, ...); sortiert nach GitHub-Sternen. | Lesen |
+| `ha_search_hacs` | Sucht im Store nach Wörtern in Name, Beschreibung und Themen (die Hälfte der Wörter reicht, Füllwörter wie „card“ zählen nicht), wahlweise nur eine Art (`plugin` = Dashboard-Karte, `integration`, `theme`, ...). Namen mit allen Wörtern zuerst, dann die meisten GitHub-Sterne. | Lesen |
 | `ha_get_hacs_repository` | Ein Repository mit Sternen, letzter Aktualisierung, Versionen, installierter Version und was die Installation bedeutet. | Lesen |
 | `ha_install_hacs_repository` | Installiert oder aktualisiert (neueste Version oder eine gewählte). Eine Karte wird sofort als Dashboard-Ressource eingetragen; eine Integration braucht einen Neustart. Im Chat immer mit Freigabe-Karte. Im Änderungsjournal: Rückgängig entfernt eine neue Installation oder geht auf die vorige Version zurück. | Konfigurieren |
 | `ha_add_hacs_custom_repository` | Fügt ein GitHub-Repository hinzu, das nicht im Store ist (nur `github.com`). Es wird nur gelistet, nicht installiert. | Konfigurieren |
