@@ -9,6 +9,7 @@ import os
 import re
 import sys
 from collections.abc import Awaitable, Callable
+from types import SimpleNamespace
 
 import httpx
 import jsonschema
@@ -20,7 +21,7 @@ from .i18n import L
 READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services", "ha_rest_catalog", "ha_rest_query",
                         "ha_validate_automation", "ha_get_automation", "ha_list_dashboards", "ha_get_dashboard", "ha_list_helpers",
                         "ha_list_entity_registry", "ha_list_integrations", "ha_list_integration_types",
-                        "ha_list_discovered", "ha_list_credentials", "ha_list_backups",
+                        "ha_list_discovered", "ha_list_credentials", "ha_list_backups", "ha_get_backup",
                         "ha_list_areas", "ha_list_floors", "ha_list_devices", "ha_list_scenes", "ha_get_scene",
                         "ha_list_scripts", "ha_get_script", "ha_list_area_entities", "ha_list_changes",
                         "ha_get_change", "ha_list_traces", "ha_get_trace", "ha_get_error_log", "ha_get_logbook",
@@ -38,7 +39,7 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
                          "ha_update_entity_registry", "ha_start_integration_setup", "ha_integration_setup_step",
                          "ha_abort_integration_setup", "ha_reload_integration", "ha_delete_integration",
-                         "ha_create_backup", "ha_delete_backup", "ha_create_area", "ha_update_area",
+                         "ha_create_backup", "ha_delete_backup", "ha_restore_backup", "ha_create_area", "ha_update_area",
                          "ha_delete_area", "ha_create_floor", "ha_update_floor", "ha_delete_floor",
                          "ha_update_device", "ha_save_scene", "ha_delete_scene", "ha_activate_scene",
                          "ha_save_script", "ha_delete_script", "ha_run_script", "ha_start_integration_options",
@@ -56,7 +57,7 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
                            "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
-                          "ha_delete_integration", "ha_delete_backup", "ha_delete_area", "ha_delete_floor",
+                          "ha_delete_integration", "ha_delete_backup", "ha_restore_backup", "ha_delete_area", "ha_delete_floor",
                           "ha_delete_scene", "ha_delete_script", "ha_delete_label", "ha_delete_category",
                           "ha_delete_zone", "ha_delete_calendar_event", "ha_remove_todo_items",
                           "ha_install_update", "ha_restart", "ha_delete_blueprint", "ha_delete_dashboard_resource",
@@ -64,6 +65,12 @@ DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_d
                           # an undo may remove what a change created, so it never runs without a card unless
                           # deletes may run without one
                           "ha_undo_change"})
+
+
+# Never run without an approval card in the web UI chat, even when the level is set to "run without approval".
+ALWAYS_ASK = frozenset({"ha_restore_backup"})
+# Read tool whose result is shown on the approval card (what exactly would happen), with its arguments.
+CARD_DETAILS = {"ha_restore_backup": ("ha_get_backup", lambda args: {"backup_id": args.get("backup_id")})}
 
 
 def write_level(name: str) -> str | None:
@@ -221,7 +228,7 @@ TOOL_TOPICS = (
     (r"[üu]berblick|[üu]bersicht|zusammenfassung|wie viele|anzahl|status (?:meines|des) (?:systems|hauses)|"
      r"bestandsaufnahme|inventar|overview|summary|summari[sz]e|how many|number of|inventory|status of my",
      {"ha_get_overview"}),
-    (r"backup|sicherung|wiederherstell|restore|back up", {"ha_list_backups", "ha_create_backup", "ha_delete_backup",
+    (r"backup|sicherung|wiederherstell|restore|back up", {"ha_list_backups", "ha_get_backup", "ha_create_backup", "ha_delete_backup", "ha_restore_backup",
                                                    "ha_list_credentials"}),
     (r"\brest\b|\bapi\b|histor|logbuch|template|ereignis|\bevent\b", {"ha_rest_catalog", "ha_rest_query", "ha_rest_write", "ha_rest_delete"}),
     (r"schalt|steue|turn_|\b(on|off|ein|aus)\b|licht|lampe|temperatur|switch|control|\bturn\b|\blights?\b|"
@@ -488,16 +495,36 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
             else:
                 is_write = name in WRITE_TOOLS
                 await _emit(on_event, {"type": "tool_call", "name": name, "arguments": args, "write": is_write})
-                if is_write:
-                    decision = approve(name, args) if approve else False
+                details, refused = None, None
+                if is_write and name in CARD_DETAILS:
+                    # read what exactly would happen, so the approval card can show it
+                    detail_tool, detail_args = CARD_DETAILS[name]
+                    looked_up = await session.call_tool(detail_tool, detail_args(args))
+                    if looked_up.isError:
+                        refused = "Tool error: " + _tool_text(looked_up)
+                    else:
+                        try:
+                            details = json.loads(_tool_text(looked_up))
+                        except json.JSONDecodeError:
+                            details = None
+                if refused is None and is_write:
+                    if not approve:
+                        decision = False
+                    elif details is not None:
+                        decision = approve(name, args, details=details)
+                    else:
+                        decision = approve(name, args)
                     if inspect.isawaitable(decision):
                         decision = await decision
                     if decision is not True:
                         raise PermissionError("Write requires explicit confirmation")
-                outcome = await session.call_tool(name, args)
-                result = _tool_text(outcome)
-                if outcome.isError:
-                    result = "Tool error: " + result
+                if refused is not None:
+                    outcome, result = SimpleNamespace(isError=True), refused
+                else:
+                    outcome = await session.call_tool(name, args)
+                    result = _tool_text(outcome)
+                    if outcome.isError:
+                        result = "Tool error: " + result
                 result = result[:6000]
                 await _emit(on_event, {"type": "tool_result", "name": name, "ok": not outcome.isError,
                                        "preview": result[:PREVIEW_CHARS]})
@@ -525,8 +552,10 @@ def main():
     parser.add_argument("--allow-write", action="store_true", help="Expose control tool; every call still needs confirmation")
     args = parser.parse_args()
 
-    def confirm(name: str, payload: dict) -> bool:
+    def confirm(name: str, payload: dict, details: dict | None = None) -> bool:
         print(f"Approval for {name}: {json.dumps(payload, ensure_ascii=False)}")
+        if details:
+            print(json.dumps(details, ensure_ascii=False, indent=2))
         return input("Run this single call? Type YES: ").strip() in ("YES", "JA")
 
     async def execute():

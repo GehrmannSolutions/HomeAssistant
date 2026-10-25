@@ -1050,11 +1050,30 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await backups.list_backups()
 
     @tool()
+    async def ha_get_backup(backup_id: BackupId) -> dict:
+        """One backup's details (name, date, HA version, contents, size, encrypted) plus restore_impact: what
+        restoring it would change. Read this and show it to the user before ha_restore_backup."""
+        return await backups.get_backup(backup_id)
+
+    @tool()
     async def ha_create_backup(name: str, password: dict | None = None) -> dict:
         """Create a full backup (configuration + database) on the local backup agent and wait until it is
         listed. Optional encryption password only as credential reference {"$credential": "<alias>",
-        "field": "password"}. Admin write required. Restoring is not available through this MCP."""
+        "field": "password"}. Admin write required."""
         return await backups.create_backup(name, password)
+
+    @tool()
+    async def ha_restore_backup(backup_id: BackupId, restore_database: Annotated[bool, Field(
+            description="true = also replace the history database (recorder) with the backup's; false = keep the "
+                        "current history. Use false whenever the user wants to keep history, data or the database"
+            )] = True, password: dict | None = None) -> dict:
+        """Restore Home Assistant's configuration (and with restore_database=true also its history database)
+        from a backup. Far-reaching: replaces the current configuration, HA restarts, changes since the backup
+        are lost. Before calling, show the user the backup's name, date and restore_impact from ha_get_backup
+        and get an explicit yes. A fresh safety backup is made first (restore it to undo); add-ons and folders
+        are never restored. Encrypted backups need password as credential reference {"$credential": "<alias>",
+        "field": "password"}. Waits for the restart and reports restored true/false. Delete level required."""
+        return await backups.restore_backup(backup_id, restore_database, password)
 
     @tool()
     async def ha_delete_backup(backup_id: BackupId) -> dict:

@@ -44,7 +44,8 @@ Der Einrichtungsassistent der Oberfläche testet deine Home-Assistant-Adresse un
 - Fehlersuche: Traces von Automationen/Skripten, Fehlerprotokoll, Logbuch, Verlauf, Langzeitstatistiken, Reparaturen, Systemzustand, Tests von Templates und Bedingungen.
 - Änderungsjournal mit Rückgängig: Jede Konfigurationsänderung speichert ihren vorherigen Zustand lokal (30 Tage) und kann im Chat oder im Reiter **Änderungen** der Oberfläche rückgängig gemacht (und wiederhergestellt) werden.
 - Speicher für Zugangsdaten in der Oberfläche für Geheimnisse von Integrationen (per Alias referenziert), gespeicherte Pläne/Codeblöcke (werden nicht ausgeführt), Anfrageprotokoll nur mit Metadaten, Backup-Download.
-- Keine Wiederherstellung von Backups, kein Bearbeiten geschützter Dateien (`secrets.yaml`, `.storage`, Datenbanken), keine allgemeine Netzwerkerkennung, keine beliebigen WebSocket-Befehle und kein unbegrenzter API-Proxy.
+- Backups wiederherstellen, mit Sicherheits-Backup davor (Konfiguration und Datenbank; nie Add-ons oder Ordner).
+- Kein Bearbeiten geschützter Dateien (`secrets.yaml`, `.storage`, Datenbanken), keine allgemeine Netzwerkerkennung, keine beliebigen WebSocket-Befehle und kein unbegrenzter API-Proxy.
 
 ## Dokumentation
 

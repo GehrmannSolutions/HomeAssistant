@@ -404,11 +404,31 @@ Calendar entries and list items are your data, not configuration, so they are no
 | Tool | What it does | Level |
 |---|---|---|
 | `ha_list_backups` | Backups, newest first, with size and where they are stored. | Read |
-| `ha_create_backup` | Creates a full backup and waits until it is listed; an encryption password only as a reference to *Zugangsdaten*. | Configure |
+| `ha_get_backup` | One backup in detail (date, HA version, contents, size, encrypted) and what restoring it would change. | Read |
+| `ha_create_backup` | Creates a full backup and waits until it is listed; an encryption password only as a reference to *Credentials*. | Configure |
 | `ha_delete_backup` | Deletes one backup. | Delete |
+| `ha_restore_backup` | Restores Home Assistant's configuration and, if you want, the history database from a backup; HA restarts. | Delete |
 
-Restoring a backup is planned (with a fresh backup right before and a clear approval card) but not available
-yet. The *Backups* page in the web UI lists the backups and can create one before you change things:
+**Restoring** is the most far-reaching action of the MCP, so it has the strongest protection:
+
+- It needs the **Delete** level, and in the web UI chat it **always** shows an approval card, even when the
+  Delete level is set to "run without approval".
+- The card names the backup (name, date, HA version, contents, size) and says in plain words what happens:
+  configuration back to that date, changes since then lost, newer users and tokens stop working, HA restarts.
+- Right before restoring, the MCP makes a **safety backup** of the current state. If that fails, nothing is
+  restored. Restoring the safety backup undoes the restore.
+- Only configuration and (optionally) the database are restored, never add-ons or folders. Encrypted backups need
+  their password as a reference to *Credentials*.
+- The tool waits until Home Assistant is back and reports `restored: true/false` from HA's own restore result.
+
+**Example**: *"Restore the backup from this morning, but keep the history."* The model looks the backup up with
+`ha_get_backup`, asks for approval with `restore_database: false`, and afterwards names the safety backup you can
+go back to. The card in the chat (rejected here, so nothing happened):
+
+![Chat: restore approval card](images/en/16a-restore-card.png)
+
+The *Backups* page in the web UI lists the backups and can create, download, restore and delete them; restoring
+asks first with the same explanation:
 
 ![Backups page](images/en/16-backups.png)
 

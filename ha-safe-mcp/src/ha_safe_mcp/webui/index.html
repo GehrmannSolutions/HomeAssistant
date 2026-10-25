@@ -200,10 +200,10 @@
             <button type="button" class="primary small" data-action="backups-create" data-de="Backup erstellen">Create backup</button>
           </div>
         </div>
-        <p class="muted" data-de-html="Sicherungen von Home Assistant (Konfiguration und Datenbank) über die Backup-Funktion von Home Assistant selbst. Erstellen braucht „Konfiguration ändern“, Löschen „Löschen erlauben“. &lt;strong&gt;Wiederherstellen&lt;/strong&gt; geht bewusst nur in Home Assistant (Einstellungen → System → Backups), weil es die laufende Konfiguration ersetzt und neu startet.">Backups of Home Assistant (configuration and database) through Home Assistant's own backup
-          feature. Creating needs "Change configuration", deleting "Allow delete". <strong>Restoring</strong> is
-          deliberately only possible in Home Assistant (Settings → System → Backups), because it replaces the running
-          configuration and restarts.</p>
+        <p class="muted" data-de-html="Sicherungen von Home Assistant (Konfiguration und Datenbank) über die Backup-Funktion von Home Assistant selbst. Erstellen braucht „Konfiguration ändern“, Löschen und &lt;strong&gt;Wiederherstellen&lt;/strong&gt; brauchen „Löschen erlauben“. Vor jedem Wiederherstellen legt der MCP ein Sicherheits-Backup des aktuellen Stands an; Home Assistant startet danach neu. Add-ons und Ordner werden nie zurückgesetzt.">Backups of Home Assistant (configuration and database) through Home Assistant's own backup
+          feature. Creating needs "Change configuration", deleting and <strong>restoring</strong> need "Allow delete".
+          Before every restore the MCP makes a safety backup of the current state; Home Assistant restarts afterwards.
+          Add-ons and folders are never reset.</p>
         <table class="cred-table" id="backup-table">
           <thead><tr><th>Name</th><th data-de="Datum">Date</th><th data-de="Größe">Size</th><th data-de="Speicherort">Location</th><th></th></tr></thead>
           <tbody id="backup-rows"></tbody>

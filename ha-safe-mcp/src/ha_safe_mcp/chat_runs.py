@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 
 from .config_store import Settings
-from .ollama_client import write_level
+from .ollama_client import ALWAYS_ASK, write_level
 from .i18n import L
 
 Runner = Callable[..., Awaitable[str]]
@@ -99,19 +99,22 @@ class ChatRun:
                     pass
             return fresh()
 
-    async def approve(self, name: str, arguments: dict) -> bool:
+    async def approve(self, name: str, arguments: dict, details: dict | None = None) -> bool:
         if not self.allow_write:
             return False
         level = write_level(name)
-        if level is not None and level in self.auto_levels:
+        if level is not None and level in self.auto_levels and name not in ALWAYS_ASK:
             # "enabled" level: no card, but every action stays visible in the chat and the audit log
             await self.emit({"type": "auto_approved", "name": name, "arguments": arguments, "level": level})
             return True
         approval_id = secrets.token_urlsafe(9)
         future = asyncio.get_running_loop().create_future()
         self.pending[approval_id] = future
-        await self.emit({"type": "approval_required", "approval_id": approval_id, "name": name,
-                         "arguments": arguments, "timeout": self.manager.approval_timeout})
+        event = {"type": "approval_required", "approval_id": approval_id, "name": name,
+                 "arguments": arguments, "timeout": self.manager.approval_timeout}
+        if details is not None:
+            event["details"] = details  # what exactly would happen (e.g. which backup), read before asking
+        await self.emit(event)
         reason = "user"
         try:
             decision = await asyncio.wait_for(asyncio.shield(future), self.manager.approval_timeout)

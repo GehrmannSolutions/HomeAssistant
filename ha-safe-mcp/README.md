@@ -44,7 +44,8 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 - Debugging: automation/script traces, error log, logbook, history, long-term statistics, repairs, system health, template and condition tests.
 - Change journal with undo: every configuration change keeps its previous state locally (30 days) and can be undone (and redone) from the chat or the UI's **Changes** tab.
 - UI credential store for integration secrets (referenced by alias), saved plans/code blocks (not executed), metadata-only request log, backup download.
-- No backup restore, editing of protected files (`secrets.yaml`, `.storage`, databases), generic network discovery, arbitrary WebSocket commands, or unbounded API proxy.
+- Backup restore with a safety backup first (configuration and database; never add-ons or folders).
+- No editing of protected files (`secrets.yaml`, `.storage`, databases), generic network discovery, arbitrary WebSocket commands, or unbounded API proxy.
 
 ## Documentation
 

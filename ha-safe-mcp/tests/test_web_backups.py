@@ -1,4 +1,4 @@
-"""Web UI backup page: list, create (admin write), download (streamed), delete (delete switch); no restore."""
+"""Web UI backup page: list, create (admin write), download (streamed), delete and restore (delete switch)."""
 import contextlib
 
 import pytest
@@ -11,7 +11,7 @@ from test_web import HEADERS, FakeChecks, client, configure
 
 class FakeBackups:
     def __init__(self):
-        self.created, self.deleted = [], []
+        self.created, self.deleted, self.restored = [], [], []
 
     async def list_backups(self):
         return {"state": "idle", "agents": ["backup.local"],
@@ -24,6 +24,10 @@ class FakeBackups:
     async def delete_backup(self, backup_id):
         self.deleted.append(backup_id)
         return {"deleted": True, "agent_errors": {}}
+
+    async def restore_backup(self, backup_id, restore_database=True, password=None):
+        self.restored.append((backup_id, restore_database))
+        return {"restored": True, "state": "completed", "safety_backup": {"backup_id": "cccc3333"}}
 
     @contextlib.asynccontextmanager
     async def download(self, backup_id):
@@ -102,9 +106,19 @@ async def test_delete_needs_the_delete_switch(tmp_path):
     assert deleted.json()["deleted"] is True
 
 
-async def test_there_is_no_restore_route(tmp_path):
-    app, *_ = make(tmp_path)
+async def test_restore_needs_the_delete_switch_a_valid_id_and_a_proper_request(tmp_path):
+    app, fake, _ = make(tmp_path)
     async with client(app) as http:
         await configure(http)
-        for path in ("/api/backups/aaaa1111/restore", "/api/backups/restore"):
-            assert (await http.post(path, headers=HEADERS, json={})).status_code in (404, 405)
+        await settings(http, allow_write=True, allow_admin_write=True)
+        refused = await http.post("/api/backups/aaaa1111/restore", headers=HEADERS, json={})
+        await settings(http, allow_write=True, allow_admin_write=True, allow_delete=True)
+        forged = await http.post("/api/backups/aaaa1111/restore", headers={"Origin": "http://evil.example",
+                                                                         "X-HA-MCP-UI": "1"}, json={})
+        bad = await http.post("/api/backups/..%2Fx/restore", headers=HEADERS, json={})
+        wrong = await http.post("/api/backups/aaaa1111/restore", headers=HEADERS, json={"restore_database": "ja"})
+        restored = await http.post("/api/backups/aaaa1111/restore", headers=HEADERS,
+                                   json={"restore_database": False})
+    assert refused.status_code == 403 and "Löschen" in refused.json()["error"]
+    assert forged.status_code == 403 and bad.status_code in (400, 404) and wrong.status_code == 400
+    assert restored.json()["restored"] is True and fake.restored == [("aaaa1111", False)]

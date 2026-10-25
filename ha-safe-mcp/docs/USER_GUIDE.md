@@ -117,7 +117,7 @@ Default write and auto flags are all `false`. The default control-domain list is
 
 In **Chat**, enabling **Allow control** in settings is not enough: tick **Allow actions** under the message box for that request. By default every proposed write shows an **Approval required** card with tool name and JSON arguments. **Run** approves *this call once*; **Reject** rejects it. Unanswered cards expire after 120 seconds; **Stop** rejects pending approvals. Multiple write calls require multiple decisions.
 
-Under **Settings**, each level has a separate **run without approval** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Allow actions** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `YES` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
+Under **Settings**, each level has a separate **run without approval** switch (`HA_AUTO_WRITE`, `HA_AUTO_ADMIN_WRITE`, `HA_AUTO_DELETE` in `.env`). This is **auto-execution**, not a broader permission: the matching allow switch, the chat's **Allow actions** checkbox, the UI ceiling and the server/HA checks still apply, but the approval card for that level is skipped. Executed calls remain visible in chat and the metadata audit log. Exception: `ha_restore_backup` always shows its card, even with Delete set to run without approval. Keep auto switches off unless you intentionally accept model-initiated actions without reviewing each payload. The UI classifies `ha_rest_write` as an admin-level tool for auto-approval even when its specific REST route is control-level; the server still gates each route by its catalog permission. CLI `YES` and approval mechanisms in other MCP clients are **independent** of the UI auto switches; these auto flags are not server authorization flags. Review the [tool reference](TOOLS.md) and use `ha_rest_catalog` for route-specific permissions.
 
 ### Two layers of permissions: server level and client settings
 
@@ -125,18 +125,18 @@ A remote client is limited twice:
 
 1. **Server side (binding):** the client's level in **MCP clients** (or chosen on the consent page), capped by the
    instance switches. Tools above the level are not even listed for the client. Number of tools a client sees
-   (version 0.27.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
+   (version 0.28.0; the numbers grow with new versions, so a client needs a "reload tools" after an update):
 
    | Level | Tools listed | marked read-only | marked write/delete |
    |---|---|---|---|
-   | Read only | 63 | 63 | 0 |
-   | Control | 70 | 63 | 7 |
-   | Change configuration | 113 | 63 | 50 |
-   | Delete | 133 | 63 | 70 |
+   | Read only | 64 | 64 | 0 |
+   | Control | 71 | 64 | 7 |
+   | Change configuration | 114 | 64 | 50 |
+   | Delete | 135 | 64 | 71 |
 
 2. **Client side (additional):** many clients let you allow, confirm or block tools. They group them by the hints
    this server sends (`readOnlyHint`, `destructiveHint`). Example, Claude → Settings → Connectors → the connector →
-   *Tool permissions*: a client with level **Change configuration** shows "read-only tools (63)" and "write/delete
+   *Tool permissions*: a client with level **Change configuration** shows "read-only tools (64)" and "write/delete
    tools (50)"; setting the first to *Always allow* and the second to *Blocked* makes Claude read only.
 
 The client setting only protects that client. Anyone else holding the same token is limited by the server level
@@ -399,7 +399,18 @@ newest entries (`limit`, `max_points`).
 
 ### Back up before changing configuration
 
-Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Credentials**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—delete backups; a download streams from HA and is not retained by MCP. **Restore is not provided here**: use HA's own **Settings → System → Backups** workflow. `ha_delete_backup` uses a listed `backup_id` and is not a restore/rollback mechanism.
+Use `ha_list_backups` `{}` (HA may require an administrator even for listing). With admin-write permission, `ha_create_backup` `{"name":"Before example change"}` asks HA for a full configuration-and-database backup on its local backup agent and waits for it to appear. If encryption is needed, add `"password":{"$credential":"example_backup_password","field":"password"}` after storing that field in **Credentials**. Confirm creation via `ha_list_backups`; if it reports the backup is still running, check again later rather than treating the response as completion. The UI **Backups** tab can list, create, download and—with delete permission—restore and delete backups; a download streams from HA and is not retained by MCP. `ha_delete_backup` uses a listed `backup_id` and is not a rollback mechanism.
+
+### Restore a backup
+
+Restoring replaces Home Assistant's configuration (and, unless you pass `"restore_database": false`, its history database) with the backup's state and restarts HA. It needs the **Delete** level.
+
+1. `ha_list_backups` `{}`, then `ha_get_backup` `{"backup_id":"<id>"}`: check name, date, HA version and the `restore_impact` lines. Users and long-lived tokens created after the backup stop working, possibly including the token this MCP uses; if so, enter a fresh token in the UI settings afterwards.
+2. `ha_restore_backup` `{"backup_id":"<id>"}` (encrypted backups: add `"password":{"$credential":"<alias>","field":"password"}`). In the UI chat this always shows an approval card with the backup's details, even when Delete is set to "run without approval". Other MCP clients must ask you themselves.
+3. The MCP first creates a **safety backup** of the current state (nothing is restored if that fails), then asks HA to restore and waits for the restart (up to 15 minutes). The result names `restored` (true/false, from HA's own result) and `safety_backup`.
+4. To undo, restore the safety backup the same way.
+
+Add-ons and folders are never restored by the MCP; use HA's **Settings → System → Backups** for those.
 
 ## 4. Pitfalls and troubleshooting
 
@@ -417,7 +428,7 @@ Use `ha_list_backups` `{}` (HA may require an administrator even for listing). W
 | UI unreachable or wrong model | Open the UI on the same machine via `http://localhost:8765/`; check its running process, Ollama service/model and UI **Settings**. A foreign Host header is rejected. Do not use `--allow-remote` on an unauthenticated network. |
 | Model gives a stale/unsupported answer | Ask it to use a named read tool to fetch the *current* state or start a new chat. Small Ollama models get a keyword-based preselection of tools plus the local `find_tools` search (and any real tool they call by name is loaded on demand); a plausible answer is not verification. |
 
-The REST gateway is an allowlisted subset, **not** an arbitrary HTTP or WebSocket proxy. It cannot edit arbitrary HA files, schedule/restore backups, or remove an individual device from the registry. The HA token still has its underlying HA authority outside this adapter. Prefer a separate less-privileged HA account for routine reads, backups before admin changes, and manual verification in HA after consequential writes.
+The REST gateway is an allowlisted subset, **not** an arbitrary HTTP or WebSocket proxy. It cannot edit arbitrary HA files, schedule backups, restore add-ons or folders, or remove an individual device from the registry. The HA token still has its underlying HA authority outside this adapter. Prefer a separate less-privileged HA account for routine reads, backups before admin changes, and manual verification in HA after consequential writes.
 
 ## 5. Where data is stored
 

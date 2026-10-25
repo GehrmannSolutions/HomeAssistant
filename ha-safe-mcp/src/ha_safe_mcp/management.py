@@ -43,6 +43,7 @@ WRITE_TYPES = frozenset({"lovelace/config/save", "lovelace/dashboards/create", "
                          "lovelace/resources/create"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
 DELETE_TYPES = frozenset({"lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
+                          "backup/restore",
                           "config/area_registry/delete", "config/floor_registry/delete",
                           "config/entity_registry/remove", "config/label_registry/delete",
                           "config/category_registry/delete", "zone/delete", "calendar/event/delete",

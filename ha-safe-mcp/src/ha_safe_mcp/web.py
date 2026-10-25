@@ -630,6 +630,27 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         except (RuntimeError, ValueError) as exc:
             return _error(str(exc), 502)
 
+    async def backups_restore(request: Request):
+        settings, backups, problem = _backups_or_error()
+        if problem:
+            return problem
+        if not (settings.allow_write and settings.allow_admin_write and settings.allow_delete):
+            return _error(L("Restoring backups needs 'Allow delete' in the settings",
+                            "Backups wiederherstellen braucht in den Einstellungen 'Löschen erlauben'"), 403)
+        backup_id = request.path_params["backup_id"]
+        if not BACKUP_ID.fullmatch(backup_id):
+            return _error(L("Invalid backup ID", "Ungültige Backup-ID"), 400)
+        try:
+            data = await _json_body(request)
+            restore_database = data.get("restore_database", True)
+            if not isinstance(restore_database, bool):
+                raise SetupError(L("restore_database must be true or false", "restore_database muss true oder false sein"))
+            return _ok(await backups.restore_backup(backup_id, restore_database))
+        except SetupError as exc:
+            return _error(str(exc))
+        except (RuntimeError, ValueError) as exc:
+            return _error(str(exc), 502)
+
     async def backups_download(request: Request):
         settings, backups, problem = _backups_or_error()
         if problem:
@@ -779,6 +800,7 @@ def create_app(store: SettingsStore, *, checks=None, runs: RunManager | None = N
         Route("/api/backups", backups_create, methods=["POST"]),
         Route("/api/backups/{backup_id}", backups_delete, methods=["DELETE"]),
         Route("/api/backups/{backup_id}/download", backups_download),
+        Route("/api/backups/{backup_id}/restore", backups_restore, methods=["POST"]),
         Route("/api/changes", changes_list),
         Route("/api/changes/{change_id}/undo", changes_undo, methods=["POST"]),
         Route("/api/domains", domains_list),

@@ -487,3 +487,38 @@ def test_english_questions_reach_the_matching_tools(prompt, tool):
     from ha_safe_mcp.ollama_client import TOOL_TOPICS
     offered = {name for pattern, names in TOOL_TOPICS if _re.search(pattern, prompt, _re.IGNORECASE) for name in names}
     assert tool in offered
+
+
+@pytest.mark.asyncio
+async def test_restore_card_shows_the_backup_details_read_before_approval():
+    class RestoreSession(FakeSession):
+        async def list_tools(self):
+            tools = (await super().list_tools()).tools + [
+                SimpleNamespace(name="ha_restore_backup", description="Restore",
+                                inputSchema={"type": "object", "properties": {"backup_id": {"type": "string"}}}),
+                SimpleNamespace(name="ha_get_backup", description="Backup details",
+                                inputSchema={"type": "object", "properties": {"backup_id": {"type": "string"}}})]
+            return SimpleNamespace(tools=tools)
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            text = '{"backup": {"name": "Alt"}, "restore_impact": ["HA restarts"]}' if name == "ha_get_backup" else "{}"
+            return SimpleNamespace(isError=False, content=[SimpleNamespace(type="text", text=text)])
+
+    responses = iter([
+        {"message": {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
+            "name": "ha_restore_backup", "arguments": {"backup_id": "aaaa1111"}}}]}},
+        {"message": {"role": "assistant", "content": "Done."}}])
+    seen = []
+
+    async def approve(name, arguments, details=None):
+        seen.append((name, details))
+        return False
+
+    session = RestoreSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
+                                 base_url="http://ollama:11434") as http:
+        with pytest.raises(PermissionError):
+            await run_chat(session, http, "qwen3", "restore backup aaaa1111", allow_write=True, approve=approve)
+    assert seen == [("ha_restore_backup", {"backup": {"name": "Alt"}, "restore_impact": ["HA restarts"]})]
+    assert session.calls == [("ha_get_backup", {"backup_id": "aaaa1111"})]  # rejected: restore never called

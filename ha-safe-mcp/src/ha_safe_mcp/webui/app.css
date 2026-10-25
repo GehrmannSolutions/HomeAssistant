@@ -207,6 +207,10 @@ button.icon:hover { color: var(--text); background: var(--surface-2); }
   background: var(--surface-2); padding: 8px; border-radius: 8px; max-height: 220px; overflow: auto; }
 .approval .actions { justify-content: flex-start; margin-top: 8px; }
 .approval .countdown { font-size: 0.82rem; color: var(--muted); }
+.restore-summary { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 0.86rem; }
+.restore-facts { font-weight: 600; margin-bottom: 4px; }
+.restore-summary ul { margin: 4px 0 0; padding-left: 18px; }
+.restore-summary li { margin: 2px 0; }
 .typing { align-self: flex-start; color: var(--muted); font-size: 0.9rem; }
 .typing::after { content: "…"; animation: dots 1.2s steps(3, end) infinite; display: inline-block; width: 1.2em; overflow: hidden; vertical-align: bottom; }
 @keyframes dots { from { width: 0; } to { width: 1.2em; } }

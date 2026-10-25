@@ -691,7 +691,8 @@ const chat = {
       case "approval_required":
         this.typing = t("Waiting for your approval", "Wartet auf deine Freigabe");
         this.add({ kind: "approval", runId: this.running && this.running.runId, approvalId: event.approval_id,
-                   name: event.name, args: event.arguments, state: "pending", deadline: Date.now() + event.timeout * 1000 });
+                   name: event.name, args: event.arguments, details: event.details || null, state: "pending",
+                   deadline: Date.now() + event.timeout * 1000 });
         if (app.view !== "chat") this.openBubble();
         return;
       case "auto_approved":
@@ -806,6 +807,7 @@ const chat = {
         el("h4", {}, auto ? t("Action without approval", "Aktion ohne Freigabe") : t("Approval required", "Freigabe erforderlich")),
         el("div", {}, auto ? t("The model runs this action:", "Das Modell führt diese Aktion aus:") : t("The model wants to run this action:", "Das Modell möchte folgende Aktion ausführen:")),
         el("pre", {}, `${item.name}\n${argsText(item.args)}`),
+        item.details && item.details.backup ? restoreSummary(item.details.backup, (item.args || {}).restore_database !== false) : null,
         pending
           ? el("div", { class: "actions" },
               el("button", { type: "button", class: "danger small", onclick: () => this.decide(item, true) }, t("Run", "Ausführen")),
@@ -973,6 +975,10 @@ const backupPage = {
       el("td", { class: "row-actions" },
         el("a", { class: "button ghost small", href: `/api/backups/${encodeURIComponent(item.backup_id)}/download`,
                   download: "" }, t("Download", "Herunterladen")),
+        canDelete ? el("button", { type: "button", class: "secondary small", disabled: item.protected ? "" : null,
+                                   title: item.protected ? t("Encrypted: restore it in the chat with a stored password, or in Home Assistant",
+                                                             "Verschlüsselt: im Chat mit gespeichertem Passwort oder in Home Assistant wiederherstellen") : "",
+                                   onclick: (event) => this.restore(item, event.currentTarget) }, t("Restore", "Wiederherstellen")) : null,
         canDelete ? el("button", { type: "button", class: "danger small", onclick: () => this.remove(item) }, t("Delete", "Löschen")) : null)));
     $("#backup-rows").replaceChildren(...rows);
     $("#backup-empty").hidden = items.length > 0;
@@ -990,6 +996,33 @@ const backupPage = {
       else setResult($("#backup-result"), result.note || t(`Backup failed (${result.reason || "unknown"}).`, `Backup fehlgeschlagen (${result.reason || "unbekannt"}).`), "err");
       await this.load();
       if (result.completed) setResult($("#backup-result"), t(`Backup "${result.backup.name}" created.`, `Backup »${result.backup.name}« erstellt.`), "ok");
+    } catch (error) {
+      setResult($("#backup-result"), error.message, "err");
+    } finally {
+      busy(button, false);
+    }
+  },
+
+  async restore(item, button) {
+    const date = item.date ? new Date(item.date).toLocaleString(LOCALE) : "?";
+    const question = [t(`Restore backup "${item.name}" from ${date}?`, `Backup »${item.name}« vom ${date} wiederherstellen?`), "",
+                      ...restoreImpact(item, true).map((line) => `• ${line}`)].join("\n");
+    if (!window.confirm(question)) return;
+    busy(button, true, t("Restoring …", "Stelle wieder her …"));
+    setResult($("#backup-result"), t("Safety backup, restore and restart are running; this can take several minutes …",
+                                     "Sicherheits-Backup, Wiederherstellung und Neustart laufen; das kann einige Minuten dauern …"));
+    try {
+      const result = await api(`/api/backups/${encodeURIComponent(item.backup_id)}/restore`, { method: "POST", body: { restore_database: true } });
+      const safety = result.safety_backup ? result.safety_backup.name || result.safety_backup.backup_id : "–";
+      if (result.restored === true) {
+        await this.load();
+        setResult($("#backup-result"), t(`Restored "${item.name}". Safety backup of the previous state: "${safety}".`,
+                                         `»${item.name}« wiederhergestellt. Sicherheits-Backup des vorherigen Stands: »${safety}«.`), "ok");
+      } else {
+        await this.load();
+        setResult($("#backup-result"), result.note || result.reason || t("Restore failed.", "Wiederherstellung fehlgeschlagen."),
+                  result.restored === null ? "warn" : "err");
+      }
     } catch (error) {
       setResult($("#backup-result"), error.message, "err");
     } finally {
@@ -1176,6 +1209,37 @@ const clientPage = {
     }
   },
 };
+
+/* What restoring a backup changes, in the UI language (approval card and backup page). */
+function restoreImpact(backup, restoreDatabase) {
+  const date = backup.date ? new Date(backup.date).toLocaleString(LOCALE) : "?";
+  const database = restoreDatabase && backup.database_included !== false;
+  return [
+    t(`Home Assistant's configuration is replaced by the state of ${date}; every change since then is lost.`,
+      `Die Konfiguration von Home Assistant wird auf den Stand vom ${date} zurückgesetzt; alle Änderungen seitdem gehen verloren.`),
+    database ? t("The history database is replaced too.", "Die Verlaufsdatenbank wird ebenfalls ersetzt.")
+             : t("The history database stays as it is.", "Die Verlaufsdatenbank bleibt, wie sie ist."),
+    t("Users and access tokens created after the backup stop working.",
+      "Benutzer und Zugriffstoken, die nach dem Backup angelegt wurden, funktionieren danach nicht mehr."),
+    t("A safety backup of the current state is created first; restoring it undoes this.",
+      "Vorher wird ein Sicherheits-Backup des aktuellen Stands angelegt; damit lässt sich das rückgängig machen."),
+    t("Home Assistant restarts and is unavailable for a while.", "Home Assistant startet neu und ist eine Weile nicht erreichbar."),
+  ];
+}
+
+function restoreSummary(backup, restoreDatabase) {
+  const facts = [
+    `${t("Backup", "Backup")}: ${backup.name || backup.backup_id}${backup.protected ? " 🔒" : ""}`,
+    `${t("Date", "Datum")}: ${backup.date ? new Date(backup.date).toLocaleString(LOCALE) : "–"}`,
+    `${t("Home Assistant version", "Home-Assistant-Version")}: ${backup.homeassistant_version || "–"}`,
+    `${t("Contents", "Inhalt")}: ${[backup.homeassistant_included !== false ? t("configuration", "Konfiguration") : null,
+                                   backup.database_included ? t("database", "Datenbank") : null].filter(Boolean).join(", ")}`
+      + (typeof backup.size === "number" ? ` · ${formatBackupSize(backup.size)}` : ""),
+  ];
+  return el("div", { class: "restore-summary" },
+    el("div", { class: "restore-facts" }, ...facts.map((line) => el("div", {}, line))),
+    el("ul", {}, ...restoreImpact(backup, restoreDatabase).map((line) => el("li", {}, line))));
+}
 
 function formatBackupSize(bytes) {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;

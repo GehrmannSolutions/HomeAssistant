@@ -185,3 +185,20 @@ async def test_groups_whose_members_are_in_the_area_are_reported_but_not_doubled
     assert result["groups"] == [{"entity_id": "light.wohnzimmer_alle", "name": "Wohnzimmer Alle",
                                  "members": ["light.stehlampe_1", "light.stehlampe_2"]}]
     assert "light.wohnzimmer_alle" not in result["available"]
+
+
+async def test_restore_always_needs_the_card_and_the_card_carries_its_details():
+    async def runner(settings, prompt, history, allow_write, approve, on_event):
+        return str(await approve("ha_restore_backup", {"backup_id": "aaaa1111"},
+                                 details={"backup": {"name": "Alt", "date": "2026-10-20T10:00:00+00:00"}}))
+
+    settings = Settings(ha_token=TOKEN, allow_write=True, allow_admin_write=True, allow_delete=True,
+                        auto_write=True, auto_admin_write=True, auto_delete=True)
+    manager = RunManager(runner, approval_timeout=0.05)
+    run = manager.start(settings, "restore", [], allow_write=True)
+    await run.task
+    kinds = [event["type"] for event in run.events]
+    assert "auto_approved" not in kinds and "approval_required" in kinds
+    card = next(event for event in run.events if event["type"] == "approval_required")
+    assert card["details"]["backup"]["name"] == "Alt"
+    assert run.events[-2]["content"] == "False"  # timed out = rejected

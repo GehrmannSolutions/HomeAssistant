@@ -3,6 +3,26 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.28.0 – 2026-10-25
+
+- **Backups wiederherstellen**: `ha_restore_backup` (Stufe Löschen) setzt die Konfiguration von Home Assistant und
+  wahlweise die Verlaufsdatenbank auf den Stand eines Backups zurück; Add-ons und Ordner nie. Neu auch
+  `ha_get_backup` (Details eines Backups und was ein Wiederherstellen ändern würde) und im Reiter *Backups* der
+  Knopf *Wiederherstellen* mit derselben Erklärung.
+- Schutz: vorher immer ein Sicherheits-Backup des aktuellen Stands (schlägt es fehl, passiert nichts; es
+  zurückzuspielen macht das Wiederherstellen rückgängig). Im Chat erscheint **immer** eine Freigabekarte, auch wenn
+  Löschen „ohne Freigabe“ laufen darf; die Karte nennt Name, Datum, HA-Version, Inhalt und Größe des Backups und die
+  Folgen in einfachen Worten. Verschlüsselte Backups nur mit Passwort-Verweis auf *Zugangsdaten*.
+- Das Werkzeug wartet den Neustart ab und meldet das eigene Ergebnis von HA (`completed`/`failed`) erst, wenn HA
+  wieder ganz läuft. Ein Verbindungsabbruch zählt als Neustart, ein Fehlercode von HA als „abgelehnt, nichts
+  geändert“.
+- Lehre aus dem Dev-Test: HA schreibt Helfer und Register erst bis zu 10 Sekunden nach einer Änderung auf die Platte
+  (`SAVE_DELAY`), ein Backup wartet nicht darauf. Ein Sicherheits-Backup direkt nach einer Änderung hätte sie
+  verpasst; deshalb wartet der MCP vorher 12 Sekunden. Außerdem antwortet die Backup-Integration nach dem Neustart,
+  bevor andere Integrationen geladen sind; das Werkzeug wartet deshalb auf den Zustand `RUNNING`.
+- Getestet auf der Dev-Instanz über MCP-stdio: Basis-Backup, danach Prüf-Helfer angelegt, Basis zurückgespielt
+  (Helfer weg, Demo-Wohnung unverändert), Sicherheits-Backup zurückgespielt (Helfer wieder da), aufgeräumt.
+
 ## 0.27.0 – 2026-10-25
 
 - **Zweisprachige Weboberfläche**: Englisch ist Standard, Deutsch per Umschalter `EN | DE` in der Kopfleiste (auch

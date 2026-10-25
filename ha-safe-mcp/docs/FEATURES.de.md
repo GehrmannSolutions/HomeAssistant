@@ -411,12 +411,33 @@ Kalendertermine und Listeneinträge sind deine Daten, keine Konfiguration, desha
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
 | `ha_list_backups` | Backups, neueste zuerst, mit Größe und Speicherort. | Lesen |
+| `ha_get_backup` | Ein Backup im Detail (Datum, HA-Version, Inhalt, Größe, verschlüsselt) und was ein Wiederherstellen ändern würde. | Lesen |
 | `ha_create_backup` | Erstellt ein vollständiges Backup und wartet, bis es in der Liste erscheint; ein Verschlüsselungspasswort nur als Verweis auf *Zugangsdaten*. | Konfigurieren |
 | `ha_delete_backup` | Löscht ein Backup. | Löschen |
+| `ha_restore_backup` | Stellt die Konfiguration von Home Assistant und auf Wunsch die Verlaufsdatenbank aus einem Backup wieder her; HA startet neu. | Löschen |
 
-Das Wiederherstellen eines Backups ist geplant (mit einem frischen Backup direkt davor und einer klaren
-Freigabekarte), aber noch nicht verfügbar. Die Seite *Backups* in der Weboberfläche listet die Backups auf und
-kann eines erstellen, bevor du etwas änderst:
+**Wiederherstellen** ist die weitreichendste Aktion des MCP und deshalb am stärksten abgesichert:
+
+- Es braucht die Stufe **Löschen**, und im Chat der Weboberfläche erscheint **immer** eine Freigabekarte, auch
+  wenn die Stufe Löschen auf „ohne Freigabe ausführen“ steht.
+- Die Karte nennt das Backup (Name, Datum, HA-Version, Inhalt, Größe) und sagt in einfachen Worten, was passiert:
+  Konfiguration zurück auf diesen Stand, Änderungen seitdem gehen verloren, neuere Benutzer und Tokens
+  funktionieren nicht mehr, HA startet neu.
+- Direkt vor dem Wiederherstellen legt der MCP ein **Sicherheits-Backup** des aktuellen Stands an. Klappt das nicht,
+  wird nichts wiederhergestellt. Wer das Sicherheits-Backup zurückspielt, macht das Wiederherstellen rückgängig.
+- Zurückgesetzt werden nur die Konfiguration und (wahlweise) die Datenbank, nie Add-ons oder Ordner. Verschlüsselte
+  Backups brauchen ihr Passwort als Verweis auf *Zugangsdaten*.
+- Das Werkzeug wartet, bis Home Assistant wieder läuft, und meldet `restored: true/false` aus dem eigenen Ergebnis
+  von HA.
+
+**Beispiel**: *„Stell das Backup von heute Morgen wieder her, aber behalte den Verlauf.“* Das Modell sieht sich das
+Backup mit `ha_get_backup` an, fragt mit `restore_database: false` um Freigabe und nennt danach das
+Sicherheits-Backup, zu dem du zurückkehren kannst. Die Karte im Chat (hier abgelehnt, es ist also nichts passiert):
+
+![Chat: Freigabekarte zum Wiederherstellen](images/de/16a-restore-card.png)
+
+Die Seite *Backups* in der Weboberfläche listet die Backups auf und kann sie erstellen, herunterladen,
+wiederherstellen und löschen; vor dem Wiederherstellen fragt sie mit derselben Erklärung nach:
 
 ![Seite Backups](images/de/16-backups.png)
 
