@@ -3,6 +3,13 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.31.0 – 2026-10-28
+
+- **Nachkommastellen für Sensoren:** `ha_update_entity_registry` kennt jetzt `display_precision` (nur Sensoren,
+  0–10 oder `null` für den Standard der Integration). Beispiel: `{"display_precision": 1}` zeigt 28,7 °C statt
+  28,80 °C, überall in Home Assistant. Andere Sensor-Optionen (z. B. die Einheit) bleiben erhalten, die Änderung
+  steht im Änderungsprotokoll und lässt sich rückgängig machen. Ein kleines Modell braucht dafür nur einen Aufruf.
+
 ## 0.30.2 – 2026-10-26
 
 - **Große Dashboards speichern:** WebSocket-Nachrichten durften höchstens 64 KiB groß sein; ein Dashboard mit

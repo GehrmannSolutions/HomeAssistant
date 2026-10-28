@@ -119,6 +119,11 @@ class FakeWS:
                         entity["categories"].pop(scope, None)
                     else:
                         entity["categories"][scope] = cid
+            if "options_domain" in payload:  # HA replaces the domain's options as a whole
+                domain, options = payload.pop("options_domain"), payload.pop("options")
+                entity["options"] = {k: v for k, v in (entity.get("options") or {}).items() if k != domain}
+                if options is not None:
+                    entity["options"][domain] = options
             entity.update(payload)
             return {"entity_entry": copy.deepcopy(entity)}
         if kind == "config/device_registry/list":
@@ -252,6 +257,40 @@ async def test_entity_registry_accepts_labels_categories_aliases_and_hiding():
         await admin.entity_registry_update("light.flur", {"platform": "x"})
     assert (await admin.entity_registry_get("light.flur"))["aliases"] == ["Gang"]
     assert await admin.entity_registry_get("light.gibtsnicht") is None
+
+
+async def test_display_precision_keeps_other_sensor_options_and_can_be_reset():
+    _, admin, _, ws = make()
+    ws.entities.append({"entity_id": "sensor.zelt_temp", "name": None, "icon": None, "area_id": None, "labels": [],
+                        "categories": {}, "disabled_by": None, "hidden_by": None, "aliases": [], "platform": "vendor",
+                        "options": {"sensor": {"unit_of_measurement": "°C", "suggested_display_precision": 2},
+                                    "conversation": {"should_expose": False}}})
+    current = await admin.entity_registry_update("sensor.zelt_temp", {"display_precision": 1, "name": "Zelt"})
+    assert current["display_precision"] == 1 and current["name"] == "Zelt"
+    assert current["options"]["sensor"] == {"unit_of_measurement": "°C", "suggested_display_precision": 2,
+                                            "display_precision": 1}
+    assert current["options"]["conversation"] == {"should_expose": False}
+    reset = await admin.entity_registry_update("sensor.zelt_temp", {"display_precision": None})
+    assert reset["display_precision"] is None and reset["options"]["sensor"]["unit_of_measurement"] == "°C"
+    for bad in (-1, 11, 1.5, True, "1"):
+        with pytest.raises(ValueError, match="display_precision"):
+            await admin.entity_registry_update("sensor.zelt_temp", {"display_precision": bad})
+    with pytest.raises(ValueError, match="only exists for sensor"):
+        await admin.entity_registry_update("light.flur", {"display_precision": 1})
+
+
+async def test_display_precision_change_can_be_undone(tmp_path):
+    organizer, admin, registry, ws = make()
+    ws.entities.append({"entity_id": "sensor.zelt_rh", "name": None, "icon": None, "area_id": None, "labels": [],
+                        "categories": {}, "disabled_by": None, "hidden_by": None, "aliases": [], "platform": "vendor",
+                        "options": {}})
+    changes = changes_for(tmp_path, organizer, admin, registry)
+    _, change_id = await changes.apply("ha_update_entity_registry", "entity", "sensor.zelt_rh",
+                                       lambda: admin.entity_registry_update("sensor.zelt_rh", {"display_precision": 0}),
+                                       fields=["display_precision"])
+    assert (await admin.entity_registry_get("sensor.zelt_rh"))["display_precision"] == 0
+    await changes.undo(change_id)
+    assert (await admin.entity_registry_get("sensor.zelt_rh"))["display_precision"] is None
 
 
 async def test_rename_entity_keeps_the_domain_and_refuses_taken_ids():

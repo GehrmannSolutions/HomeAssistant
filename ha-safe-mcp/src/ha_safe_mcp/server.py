@@ -496,8 +496,9 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         """Edit an entity's registry entry; does not create entities. changes may contain: name (null = name from
         the integration), icon, area_id (null = follow the device), aliases (complete list of names for voice
         assistants; a null entry stands for the entity's own name, keep it), labels (complete list of label_ids), categories ({scope: category_id or null}, e.g.
-        {"automation": "<id>"} to file an automation), disabled_by / hidden_by ('user' or null). Admin write
-        required. To change the entity_id use ha_rename_entity."""
+        {"automation": "<id>"} to file an automation), disabled_by / hidden_by ('user' or null), display_precision
+        (sensors only: decimals shown everywhere in the UI, e.g. 1 for 28.7 °C; null = integration default). Admin
+        write required. To change the entity_id use ha_rename_entity."""
         fields = list(changes) if isinstance(changes, dict) else None
         return await journaled("ha_update_entity_registry", "entity", entity_id,
                                lambda: admin.entity_registry_update(entity_id, changes), fields=fields)

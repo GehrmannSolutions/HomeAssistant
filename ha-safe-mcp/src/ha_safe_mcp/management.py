@@ -64,7 +64,8 @@ DELETE_TYPES = frozenset({"hacs/repository/remove", "assist_pipeline/pipeline/de
 
 
 ENTITY_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
-ENTITY_UPDATE = frozenset({"name", "area_id", "icon", "aliases", "labels", "categories", "disabled_by", "hidden_by"})
+ENTITY_UPDATE = frozenset({"name", "area_id", "icon", "aliases", "labels", "categories", "disabled_by", "hidden_by",
+                           "display_precision"})
 
 
 SUPERVISOR_READ = frozenset({"/addons", "/core/info", "/supervisor/info", "/os/info", "/host/info"})
@@ -345,13 +346,23 @@ class HAAdmin:
         if not isinstance(entity_id, str) or not ENTITY_ID.fullmatch(entity_id):
             raise ValueError("invalid entity_id")
         try:
-            return await self.ws.command("config/entity_registry/get", {"entity_id": entity_id})
+            item = await self.ws.command("config/entity_registry/get", {"entity_id": entity_id})
         except RuntimeError as exc:
             if "not_found" in str(exc):
                 return None
             raise
+        if isinstance(item, dict) and entity_id.startswith("sensor."):
+            # decimals shown in the UI (sensor option); flattened so changes can be read back and undone
+            item["display_precision"] = ((item.get("options") or {}).get("sensor") or {}).get("display_precision")
+        return item
 
-    async def _validate_entity_changes(self, payload: dict):
+    async def _validate_entity_changes(self, payload: dict, entity_id: str = ""):
+        if "display_precision" in payload:
+            value = payload["display_precision"]
+            if not entity_id.startswith("sensor."):
+                raise ValueError("display_precision only exists for sensor entities")
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 10):
+                raise ValueError("display_precision must be a number of decimals 0-10 or null (null = integration default)")
         for key in ("disabled_by", "hidden_by"):
             if key in payload and payload[key] not in ("user", None):
                 raise ValueError(f"{key} may only be 'user' or null")
@@ -395,8 +406,23 @@ class HAAdmin:
         if not changes or not changes.keys() <= ENTITY_UPDATE:
             raise ValueError(f"unsupported entity registry fields; allowed: {', '.join(sorted(ENTITY_UPDATE))}")
         payload = dict(changes)
-        await self._validate_entity_changes(payload)
-        result = await self.ws.command("config/entity_registry/update", {"entity_id": entity_id, **payload})
+        await self._validate_entity_changes(payload, entity_id)
+        fields = {k: v for k, v in payload.items() if k != "display_precision"}
+        result = {}
+        if fields:
+            result = await self.ws.command("config/entity_registry/update", {"entity_id": entity_id, **fields})
+        if "display_precision" in payload:
+            # HA replaces a domain's options as a whole: keep the other sensor options (e.g. unit)
+            before = await self.entity_registry_get(entity_id)
+            if before is None:
+                raise ValueError(f"{entity_id} is not in the entity registry (no unique_id), decimals cannot be set")
+            options = dict((before.get("options") or {}).get("sensor") or {})
+            if payload["display_precision"] is None:
+                options.pop("display_precision", None)
+            else:
+                options["display_precision"] = payload["display_precision"]
+            result = await self.ws.command("config/entity_registry/update", {
+                "entity_id": entity_id, "options_domain": "sensor", "options": options or None})
         current = await self.entity_registry_get(entity_id)
 
         def confirmed(key, value):
