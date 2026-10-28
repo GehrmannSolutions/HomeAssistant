@@ -3,6 +3,14 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.32.0 – 2026-10-28
+
+- **Aktionen von Integrationen auf ihre eigenen Entitäten:** `ha_call_service` lehnte bisher jeden Aufruf ab, bei
+  dem Entität und Aktion verschiedene Domains haben. Manche Integrationen bieten aber Aktionen,
+  die auf eine ihrer Sensor-Entitäten zielen (`vendor.set_plan` mit `sensor.vendor_controller_plan`). Das ist jetzt erlaubt, wenn
+  die Entität laut Registry wirklich zu dieser Integration gehört (`platform == sf`). Alles andere bleibt gesperrt,
+  z. B. eine fremde Integration auf ein Schloss. Die Domain der Aktion muss weiter freigegeben sein.
+
 ## 0.31.0 – 2026-10-28
 
 - **Nachkommastellen für Sensoren:** `ha_update_entity_registry` kennt jetzt `display_precision` (nur Sensoren,

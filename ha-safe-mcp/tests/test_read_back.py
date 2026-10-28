@@ -128,3 +128,25 @@ async def test_forecast_entries_say_which_day_they_are(monkeypatch):
     assert [f["day"] for f in by_date["forecast"]] == ["Tuesday 2026-10-27"]
     with pytest.raises(ValueError, match="day"):
         await weather.forecast(day="übermorgen")
+
+
+async def test_integration_action_may_target_its_own_entities_of_other_domains(monkeypatch):
+    """vendor.set_plan targets sensor.vendor_controller_plan (platform vendor); a foreign entity stays refused."""
+    from ha_safe_mcp.management import HAAdmin
+    platforms = {"sensor.vendor_controller_plan": "vendor", "lock.front": "zwave_js"}
+
+    async def registry_get(self, entity_id):
+        return {"entity_id": entity_id, "platform": platforms[entity_id]} if entity_id in platforms else None
+    monkeypatch.setattr(HAAdmin, "entity_registry_get", registry_get)
+    server = create_server(HAClient(URL, "t", allow_write=True, allowed_domains=frozenset({"vendor"})))
+    with respx.mock(base_url=URL) as router:
+        route = router.post("/api/services/vendor/set_plan").mock(return_value=httpx.Response(200, json=[]))
+        router.get("/api/states/sensor.vendor_controller_plan").mock(return_value=state("sensor.vendor_controller_plan", "active"))
+        result = parse(await server.call_tool("ha_call_service", {
+            "domain": "vendor", "service": "set_plan", "entity_id": "sensor.vendor_controller_plan",
+            "service_data": {"stages": [], "enabled": False}}))
+        assert route.called and result["states_after"][0]["entity_id"] == "sensor.vendor_controller_plan"
+        for foreign in ("lock.front", "sensor.unknown"):
+            with pytest.raises(Exception, match="must match"):
+                await server.call_tool("ha_call_service", {"domain": "vendor", "service": "set_plan",
+                                                           "entity_id": foreign, "service_data": {}})

@@ -138,7 +138,10 @@ class HAClient:
                 and (not domain or item["domain"] == domain)]
 
     async def call_service(self, domain: str, service: str, entity_id: str | list[str],
-                           service_data: dict | None = None, *, return_response: bool = False) -> list[dict] | dict:
+                           service_data: dict | None = None, *, return_response: bool = False,
+                           integration_targets: frozenset[str] = frozenset()) -> list[dict] | dict:
+        """integration_targets: entity_ids of another domain that the caller verified to belong to the integration
+        `domain` (entity registry platform == domain), e.g. vendor.set_plan on sensor.vendor_controller_plan."""
         if not self.allow_write:
             raise ValueError("Writes are disabled; set HA_ALLOW_WRITE=true to enable")
         if domain not in self.allowed_domains:
@@ -153,8 +156,9 @@ class HAClient:
         for target in targets:
             if not isinstance(target, str) or not ENTITY.fullmatch(target):
                 raise ValueError("invalid domain, service, or entity_id")
-            if not target.startswith(domain + "."):
-                raise ValueError("entity_id domain must match service domain")
+            if not target.startswith(domain + ".") and target not in integration_targets:
+                raise ValueError("entity_id domain must match service domain (or the entity must belong to the "
+                                 f"integration '{domain}', e.g. vendor.set_plan on a vendor sensor)")
         targets = list(dict.fromkeys(targets))
         entity_id = targets[0] if len(targets) == 1 else targets
         if service_data is None:
@@ -348,9 +352,24 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         domain (e.g. all available lights of a room from ha_list_area_entities). Returns states_after: the targets
         read back after the call with confirmed true/false (false = expected state not reached; report that, do not
         claim success). return_response=true returns the data of services that answer (e.g. todo.get_items).
+        Integration actions may target that integration's own entities of other domains (e.g. vendor.set_plan with
+        entity_id sensor.vendor_controller_plan); everything else must use an entity of the action's domain.
         Disabled unless HA_ALLOW_WRITE=true; only configured domains allowed."""
+        targets = [entity_id] if isinstance(entity_id, str) else entity_id
+        foreign = [t for t in targets if isinstance(t, str) and not t.startswith(f"{domain}.")] \
+            if isinstance(targets, list) else []
+        own = set()
+        for target in foreign[:MAX_TARGETS]:
+            # integration services (vendor.set_plan, ...) act on the integration's own entities of other domains
+            try:
+                entry = await admin.entity_registry_get(target)
+            except (RuntimeError, ValueError):
+                entry = None
+            if entry and entry.get("platform") == domain:
+                own.add(target)
         response = await client.call_service(domain, service, entity_id, service_data,
-                                             return_response=bool(return_response))
+                                             return_response=bool(return_response),
+                                             integration_targets=frozenset(own))
         result = await read_back(client, domain, service, entity_id, service_data)
         if return_response:
             answer = response.get("service_response") if isinstance(response, dict) else None
