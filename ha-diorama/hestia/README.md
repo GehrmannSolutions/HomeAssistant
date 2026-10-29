@@ -4,7 +4,8 @@
 |---|---|
 | `walls.test.ts` | Checks for `src/geometry/walls.ts` with Node's own test runner: `node --test hestia/walls.test.ts` (Node 23.6+ runs TypeScript directly). Upstream has no test runner, so the tests stay here and out of the pull request. |
 | `planRooms.test.ts` | Checks for the room search in a plan picture, `src/editor/planRooms.ts` (prototype, not wired into the editor yet). |
-| `try_plan.ts` | Runs the room search on a local grey raster of a plan: `node hestia/try_plan.ts <file.gray> <w> <h> <px per m> <out.json>`. Plans stay local, never in the repo. |
+| `plan_to_diorama.ts` | Reads a plan picture (local grey raster) into rooms, doors and windows for the card, in meters: `node hestia/plan_to_diorama.ts <file.gray> <w> <h> <px per m> <out.json>`. Plans stay local, never in the repo. |
+| `plan_view.py` | Check picture for that output: rooms, doors (green), windows (blue) over the plan. |
 | `deploy_dev.py` | Puts `dist/card.js` on the DEV Home Assistant over the HACS copy and gives the resource a new `?hestia=<hash>` URL (HA serves `/hacsfiles/` with a 31 day cache). `--restore` puts the HACS original back. Never for prod. |
 
 Walls patch, state 2026-10-29: `src/geometry/walls.ts` (geometry, pure), `src/scene/Walls.tsx` (drawing, cutaway),
@@ -18,8 +19,19 @@ above half or cut walls; no switch in the visual editor yet.
 Screenshots in headless Chromium: the tab must be in front (`Page.bringToFront`), otherwise
 `requestAnimationFrame` never fires and the card keeps an old or empty frame.
 
-Room search in a plan picture (prototype, 2026-10-29): ink -> long straight runs only (text, slanted hatching, door
-arcs go) -> openings up to 1.3 m between collinear wall lines shut -> paper worn back by 15 cm, one piece per room ->
-slots filled, outline traced, straightened to right angles, grown back. Clean plans work (synthetic tests); on the
-scanned house plan only 3 of about 10 rooms come out right (tile grids in kitchen and bath, stairs, a strip
-between wall and dimension line). A first tile-grid filter (crossing density) cut the walls apart and was dropped.
+Room search in a plan picture (`src/editor/planRooms.ts`, `readPlan`), as of 2026-10-29 evening:
+
+1. Ink by Otsu; dashed and dash-dotted lines (section lines, hidden edges) taken out.
+2. Walls found two ways: paper strips between two lines, narrow one way (6.5 to 40 cm) and long the other
+   (wall interiors; treads of stairs and panes of windows rejected as ladders, tiles as neighbours); and dense bands
+   (window fronts, solid walls) that hold a long line and are not mostly tile cells.
+3. The frame of the sheet dropped; openings closed only along the wall's way: up to 1.1 m always (doors), up to
+   2.6 m where panes run through (windows); a wall of 0.8 m or more carried on to a wall ahead (door by a corner);
+   chinks up to 30 cm sealed.
+4. Rooms are the enclosed paper, straightened to right angles; each side with a room beyond its wall is moved to the
+   middle of that wall, outer sides to the inner face; outer wall thickness measured.
+5. Openings: what step 3 added between two rooms is a door, to the outside a window; thin bands on the outside are
+   window fronts, cut into windows of at most 2.5 m.
+
+On that plan: the open living and dining area came out as one room as drawn, the hall rooms as one; only a small
+room that runs into the hall is not yet found. Outer wall 0.375 m as dimensioned.

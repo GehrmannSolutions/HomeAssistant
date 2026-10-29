@@ -1,7 +1,19 @@
 // Checks for src/editor/planRooms.ts (HESTIA): `node --test hestia/planRooms.test.ts`.
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { inkOf, piecesOf, pieceAt, planRooms, roomOutline, roomsOf, straighten, wallLines, type Ink } from '#/editor/planRooms.ts'
+import {
+  inkOf,
+  piecesOf,
+  pieceAt,
+  planRooms,
+  readPlan,
+  roomOutline,
+  roomsOf,
+  straighten,
+  wallLines,
+  withoutDashes,
+  type Ink,
+} from '#/editor/planRooms.ts'
 import type { Point } from '#/types.ts'
 
 // A plan drawn into a raster: 1 is ink.
@@ -134,4 +146,34 @@ test('straightening takes the jogs out of a stepped edge', () => {
   ]
   const straight = straighten(stepped, 4)
   assert.equal(straight.length, 4, JSON.stringify(straight))
+})
+
+test('reading a plan: the two rooms meet in the middle of their wall, with the door between them', () => {
+  const plan = twoRooms()
+  const { rooms, openings, outer } = readPlan(plan, 50)
+  assert.equal(rooms.length, 2)
+  const [left, right] = [...rooms].sort((a, b) => Math.min(...a.map(p => p[0])) - Math.min(...b.map(p => p[0])))
+  const leftEnd = Math.max(...left.map(p => p[0]))
+  const rightStart = Math.min(...right.map(p => p[0]))
+  // the wall's lines are at 340 and 352: both rooms end near its middle
+  assert.ok(Math.abs(leftEnd - 347) <= 3, `left room ends at ${leftEnd}`)
+  assert.ok(Math.abs(rightStart - 347) <= 3, `right room starts at ${rightStart}`)
+  const doors = openings.filter(o => o.door)
+  assert.equal(doors.length, 1)
+  assert.ok(doors[0].upright && Math.abs(doors[0].at[1] - 130) <= 8, `door at ${doors[0].at}`)
+  assert.ok(Math.abs(doors[0].width - 60) <= 12, `door ${doors[0].width} wide`)
+  // the outer walls are 12 px between their lines plus the lines
+  assert.ok(outer >= 10 && outer <= 18, `outer wall ${outer}`)
+})
+
+test('a dash-dotted line across a room is taken out, a wall line is not', () => {
+  const p = paper(200, 400)
+  for (let y = 10; y < 390; y += 50) line(p, 50, y, 50, y + 30, 2)
+  for (let y = 10; y < 390; y += 50) line(p, 50, y + 40, 50, y + 41, 2)
+  line(p, 150, 10, 150, 390, 2)
+  const clean = withoutDashes(p, 50)
+  const left = clean.ink.reduce((n, v, i) => n + (v && i % 200 < 100 ? 1 : 0), 0)
+  const right = clean.ink.reduce((n, v, i) => n + (v && i % 200 >= 100 ? 1 : 0), 0)
+  assert.equal(left, 0)
+  assert.ok(right > 700)
 })
