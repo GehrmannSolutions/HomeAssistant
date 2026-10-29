@@ -294,3 +294,20 @@ export function wallsOf(rooms: RoomConfig[], walls: WallsConfig, openings: Openi
 export function seenFromOutside(side: WallSide, camera: Point): boolean {
   return dot([camera[0] - side.at[0], camera[1] - side.at[1]], side.out) > 0
 }
+
+// Whether the top of a full wall stands, for a camera over `camera` on the
+// plan. With a room in view, only that room's side of it counts. With the
+// whole home in view, a wall between two rooms keeps its top unless the
+// cutaway is `all`, and an outer wall drops it while the camera is outside.
+export function topShown(
+  sides: WallSide[],
+  camera: Point,
+  focus: string | null,
+  cutaway: WallsConfig['cutaway'] = true,
+): boolean {
+  if (cutaway === false) return true
+  const mine = focus === null ? sides : sides.filter(side => side.room === focus)
+  if (mine.length === 0) return false
+  if (focus === null && mine.length > 1 && cutaway !== 'all') return true
+  return !mine.some(side => seenFromOutside(side, camera))
+}

@@ -1,5 +1,5 @@
 import { decorationKind, paramValue } from '#/decoration/catalog.ts'
-import { seenFromOutside, wallsOf, type Opening, type WallBlock, type WallSide } from '#/geometry/walls.ts'
+import { topShown, wallsOf, type Opening, type WallBlock, type WallSide } from '#/geometry/walls.ts'
 import { redrawShadows, WALLS } from '#/scene/focus.ts'
 import { WALL_COLOR } from '#/theme.ts'
 import type { CardConfig, Point } from '#/types.ts'
@@ -127,9 +127,9 @@ export default function Walls({ config, focus = null }: Props) {
     }
   }, [group, invalidate])
 
-  // The top of a full wall stands only while the camera looks at it from
-  // inside every room it bounds, or with a room focused, from inside that
-  // one, so a wall never stands between the camera and the room behind it.
+  // The top of a full wall drops while the camera looks at it from outside
+  // the room it bounds, so it never stands between the camera and that room.
+  const cutaway = walls?.cutaway
   useFrame(({ camera }) => {
     const tops = drawn.current?.children ?? []
     const from: Point = [camera.position.x, -camera.position.z]
@@ -137,8 +137,7 @@ export default function Walls({ config, focus = null }: Props) {
     for (const mesh of tops) {
       const sides = mesh.userData.sides as WallSide[] | undefined
       if (!sides) continue
-      const mine = focus ? sides.filter(side => side.room === focus) : sides
-      const show = mine.length > 0 && !mine.some(side => seenFromOutside(side, from))
+      const show = topShown(sides, from, focus, cutaway)
       if (mesh.visible !== show) {
         mesh.visible = show
         changed = true

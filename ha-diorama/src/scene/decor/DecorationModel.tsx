@@ -21,6 +21,7 @@ import type { DecorationKind } from '#/decoration/catalog.ts'
 import { memo, useLayoutEffect, useMemo, type ReactNode } from 'react'
 import type { DecorationConfig, RoomConfig } from '#/types.ts'
 import { MathUtils } from 'three'
+import { CEILING_HEIGHT_M } from '#/theme.ts'
 import { useEased } from '#/scene/decor/ease.ts'
 import { pressedState, usePressed } from '#/scene/decor/pressed.ts'
 
@@ -34,6 +35,9 @@ type Props = {
   // The rooms it belongs to, for a piece in a wall between two. Absent for
   // a piece that has only its own.
   between?: Between | null
+  // The height of the ceiling over it, as measured, which a piece hung from
+  // the ceiling hangs from. The theme's ceiling when not set.
+  ceiling?: number
   state: ItemState | null
   // How far the standing desks under it have carried it up.
   raise?: number
@@ -119,6 +123,7 @@ function DecorationModel({
   all,
   room,
   between,
+  ceiling,
   state,
   raise = 0,
   onClick,
@@ -152,7 +157,10 @@ function DecorationModel({
   if (!Model) return null
 
   const rotation = MathUtils.degToRad(item.rotation ?? 0)
-  const lift = standHeight(item, all) + rise
+  // Ceiling pieces are built under the theme's ceiling, so under another one
+  // the whole piece moves by the difference, cord and all.
+  const hang = kind.mount === 'ceiling' && ceiling !== undefined ? ceiling - CEILING_HEIGHT_M : 0
+  const lift = standHeight(item, all) + rise + hang
   // A piece told to hang on the other side of its wall is turned round where
   // it meets the wall. The piece itself keeps facing its room, so it is still
   // in that room and its clicks still go where they did.
@@ -208,7 +216,7 @@ function DecorationModel({
 // every model in the flat, and the plan a piece stands in changes with every
 // edit, so it only counts through the height it lifts the piece to.
 function unchanged(a: Props, b: Props) {
-  if (a.raise !== b.raise) return false
+  if (a.raise !== b.raise || a.ceiling !== b.ceiling) return false
   if (JSON.stringify(a.between ?? null) !== JSON.stringify(b.between ?? null)) return false
   if (a.item !== b.item || a.room !== b.room || a.onClick !== b.onClick || a.onOpen !== b.onOpen || a.exact !== b.exact)
     return false

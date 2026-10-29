@@ -408,6 +408,7 @@ export default function Devices({ hass, config, onPick, tries, onTry, roomFirst,
             all={decorations}
             room={roomById.get(item.room)}
             between={between}
+            ceiling={roomById.get(item.room)?.ceiling ?? config.walls?.ceiling}
             state={state}
             raise={raise(item)}
             onClick={onClick && h.click}

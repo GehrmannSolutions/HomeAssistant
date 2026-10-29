@@ -102,7 +102,8 @@ export type RoomConfig = {
   // room's view, as room ids.
   hide_arrows?: string[]
   // The room's own ceiling height in meters, as measured. Full walls reach
-  // up to it. The card's `walls.ceiling` without one.
+  // up to it and ceiling lights, pendants and the like hang from it. The
+  // card's `walls.ceiling` without one.
   ceiling?: number
   // Rooms beside this one with no wall between them, as room ids, an open
   // kitchen and the dining room it runs into. Only read with `walls` on: a
@@ -263,14 +264,18 @@ export type WallsConfig = {
   // height, or a height in meters. Full when not set.
   height?: 'full' | 'half' | number
   // The ceiling height in meters, as measured, for every room without its
-  // own `ceiling`. 2.6 when not set.
+  // own `ceiling`, which the walls reach up to and the ceiling pieces hang
+  // from. 2.6 when not set.
   ceiling?: number
   // How high a half wall stands, in meters. Half the ceiling when not set.
   half?: number
-  // With full walls, the ones between the camera and the room behind them
-  // drop to half height while the camera looks over them, so every room
-  // stays in sight. On unless false.
-  cutaway?: boolean
+  // With full walls, a wall the camera looks at from outside its room drops
+  // to half height while it does, so it never hides the room behind it. On,
+  // `true`, that is every outer wall with the whole home in view and every
+  // wall of a room the camera has flown to, while the walls between rooms
+  // keep their full height with the whole home in view. `all` drops those
+  // too, and `false` keeps every wall at full height.
+  cutaway?: boolean | 'all'
   // How thick a wall between two rooms is, and an outer wall, in meters.
   thickness?: number
   outer?: number

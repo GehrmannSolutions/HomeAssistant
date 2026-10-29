@@ -2,7 +2,7 @@
 // so these run with Node's own: `node --test hestia/walls.test.ts`.
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { openBetween, seenFromOutside, wallHeights, wallsOf, WALL_FOOT_M, type WallBlock } from '#/geometry/walls.ts'
+import { openBetween, seenFromOutside, topShown, wallHeights, wallsOf, WALL_FOOT_M, type WallBlock } from '#/geometry/walls.ts'
 import type { Point, RoomConfig } from '#/types.ts'
 
 const area = (points: Point[]) => {
@@ -137,4 +137,31 @@ test('the camera sees a wall from outside on the side its room faces out of', ()
   const south = blocks.find(b => b.upper && b.corners.every(c => c[1] <= 0))!
   assert.ok(seenFromOutside(south.sides[0], [2, -10]), 'camera south of the room')
   assert.ok(!seenFromOutside(south.sides[0], [2, 10]), 'camera north of it, looking over the room at the wall')
+})
+
+test('cutaway: the whole home keeps the walls between rooms full, a room in view drops its near walls', () => {
+  const rooms = [square('a', 0, 0, 4, 3), square('b', 4, 0, 3, 3)]
+  const blocks = wallsOf(rooms, {}, [])
+  const between = blocks.find(b => b.upper && b.rooms.length === 2)!
+  const southOfA = blocks.find(b => b.upper && b.rooms[0] === 'a' && b.corners.every(c => c[1] <= 0))!
+  const camera: Point = [-5, -8] // south west of the home, looking north east
+  // Whole home, default: walls between rooms stay full, outer walls facing the camera drop.
+  assert.equal(topShown(between.sides, camera, null), true)
+  assert.equal(topShown(southOfA.sides, camera, null), false)
+  // 'all' drops the wall between them too: from the south west it is a near wall of b.
+  assert.equal(topShown(between.sides, camera, null, 'all'), false)
+  // With a room in view only that room's side counts: for a the wall to b is its east wall,
+  // which the camera in the south west sees from inside a.
+  assert.equal(topShown(between.sides, camera, 'a'), true)
+  assert.equal(topShown(between.sides, camera, 'b'), false)
+  // A wall of another room than the one in view is not drawn at all.
+  assert.equal(topShown(southOfA.sides, camera, 'b'), false)
+  // No cutaway: every top stands.
+  assert.equal(topShown(southOfA.sides, camera, null, false), true)
+})
+
+test('cutaway all keeps the cut, false removes it', () => {
+  const room = square('a', 0, 0, 4, 3)
+  assert.deepEqual(wallHeights({ cutaway: 'all' }, [room]), { top: 2.6, cut: 1.3 })
+  assert.deepEqual(wallHeights({ cutaway: false, ceiling: 2.35 }, [room]), { top: 2.35, cut: null })
 })
