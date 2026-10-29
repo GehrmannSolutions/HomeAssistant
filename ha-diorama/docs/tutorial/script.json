@@ -1,0 +1,92 @@
+[
+  {
+    "id": "01-intro",
+    "title": "What Diorama is",
+    "screen": "The finished demo flat in the card, slowly orbiting, then a lamp turned on.",
+    "say": "This is Diorama, a card for Home Assistant that turns your home into a small 3D model you can click. In the next few minutes we will build one from an empty card: two rooms, a lamp linked to a real light in your home, a sofa and a bed, a camera view for each room, and the side panel with its widgets."
+  },
+  {
+    "id": "02-add-card",
+    "title": "Add the card",
+    "screen": "An empty dashboard. Edit dashboard, Add card, search Diorama, pick it, Open editor.",
+    "say": "Start on any dashboard. Open edit mode, add a card and search for Diorama. The card starts empty, so press Open editor."
+  },
+  {
+    "id": "03-tour",
+    "title": "The editor",
+    "screen": "The editor fullscreen. The cursor points at the plan, the 3D preview and the catalog in turn.",
+    "say": "The editor fills the screen. The plan is on top, a live 3D preview sits under it, and the catalog of furniture and devices is on the right."
+  },
+  {
+    "id": "04-first-room",
+    "title": "Draw the first room",
+    "screen": "Draw tool, four corners, Enter. Name Living room, area Living room.",
+    "say": "Pick the draw tool, or press D, and click the corners of your first room. Corners snap to the grid. Press Enter, or click the first corner again, to close it. The new room is selected, so its settings are on the right. Give it a name and link it to its Home Assistant area."
+  },
+  {
+    "id": "05-device",
+    "title": "Add a device",
+    "screen": "Search Floor lamp, click it, drag it to a corner. Device list, pick the living room light.",
+    "say": "Now a device. Search the catalog for a floor lamp and click it. It lands in the selected room, and you can drag it where it belongs. In its settings, the Device list shows the entities from your own Home Assistant that this lamp can work with. Pick your living room light, and the lamp is linked to it. Outside the editor, a click on the lamp toggles the real light."
+  },
+  {
+    "id": "06-decoration",
+    "title": "Add a decoration",
+    "screen": "Click Sofa, drag it into place, press R to turn it, change its style and its color.",
+    "say": "Decorations work the same way, just without a device. Add a sofa, drag it into place and press R to turn it. Every piece has its own styles, sizes and colors."
+  },
+  {
+    "id": "07-second-room",
+    "title": "A second room",
+    "screen": "Draw a second room against the first. Name Bedroom, area Bedroom. Add a door on the shared wall and a bed.",
+    "say": "Draw a second room next to the first. Its corners snap onto the walls that are already there. Call it Bedroom and link its area. You can change the floor style too. Add a door on the wall the two rooms share, and drag it into place. Then add a bed, and push it against the wall."
+  },
+  {
+    "id": "07b-fan",
+    "title": "A second device",
+    "screen": "Search the catalog for a ceiling fan, add it to the bedroom, and link it to the fan entity.",
+    "say": "Now a second device: a ceiling fan for the bedroom. Search the catalog for it and add it. Link it to your fan, the same way as the lamp."
+  },
+  {
+    "id": "08-cameras",
+    "title": "Camera views",
+    "screen": "Press Fly to view: the whole home framed. Orbit the preview, press Save opening view. Select the living room, press its eye button, orbit, press Use current view.",
+    "say": "Now the camera. Every time you open the dashboard or reload the page, the card starts from its opening view. Press Fly to view to see it. By default it frames the whole home. To open on another angle, orbit the preview until you like it and press Save opening view. Each room has its own view too, where the camera flies when you click it. Select the living room and press its eye button to see it. To change it, orbit the preview and press Use current view."
+  },
+  {
+    "id": "09-try-it",
+    "title": "Try it in the card",
+    "screen": "Save & Close, close the card dialog. Click the living room, the camera flies in. Click the lamp. Click the door or the arrow on the floor to go to the bedroom. Click the floor or empty space to come back.",
+    "say": "Press Save and Close. Back on the dashboard, click a room, and the camera flies there while the rest of the home fades away. Click the lamp to switch it. Click the door or the arrow on the floor to walk into the room next door. Click the floor again, or any empty space, to come back to the whole home."
+  },
+  {
+    "id": "10-side-panel",
+    "title": "Turn on the side panel",
+    "screen": "Edit the card, switch on Show the side panel. The preview shows the widgets beside the model.",
+    "say": "Now the widgets. Open the card's settings, and switch on the side panel. The widgets for the devices you linked appear next to the model: a heading for each room, and a widget for each device."
+  },
+  {
+    "id": "11-widget-type",
+    "title": "Pick another widget",
+    "screen": "Under Widgets by room, click the widget name under the living room light. The picker opens, pick the toggle with the brightness slider. Add another entity with the entity picker.",
+    "say": "Under Widgets by room, each entity shows the widget it uses. Click its name to see every widget it can be, and pick one. The living room light can be dimmed, so here it gets a brightness slider. You can also add other entities that are not on the plan, and drag the rows into order."
+  },
+  {
+    "id": "12-panel-follows",
+    "title": "The panel follows the room",
+    "screen": "Save. Click the living room: the widgets fade to the living room's. Click back: every room returns.",
+    "say": "Save, and now you can dim your lamp right from here. Now click a room. The panel follows the camera and fades to that room's widgets. Go back, and they all return."
+  },
+  {
+    "id": "13-home",
+    "title": "A section for the whole home",
+    "screen": "Edit the card, add the weather and an entity for all the lights under Home. Save. The panel shows only the Home widgets. Click the living room: its widgets come in. Click back.",
+    "say": "Widgets that belong to the whole home, like the weather, go in the Home section. While the whole home is in view, the panel shows only these, so it stays short and tidy. Click a room, and that room's widgets come in."
+  },
+  {
+    "id": "14-outro",
+    "title": "Wrap up",
+    "screen": "The demo flat with the side panel, a slow orbit.",
+    "say": "That is all it takes. Keep adding rooms and pieces from the catalog until your whole home and its devices are a click away. Thanks for watching."
+  }
+]

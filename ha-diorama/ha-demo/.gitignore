@@ -1,0 +1,5 @@
+# Everything Home Assistant writes into its config folder while it runs.
+config/*
+!config/configuration.yaml
+!config/diorama.yaml
+!config/cameras/

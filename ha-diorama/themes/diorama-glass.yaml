@@ -1,0 +1,87 @@
+# A theme for the Diorama tiles: a dark gradient behind the dashboard,
+# the tile tokens, and Home Assistant's own colors set to match, so the
+# dialogs that open from a tile look like they belong to it.
+#
+# Copy this file into your Home Assistant config under themes/, with
+#
+#   frontend:
+#     themes: !include_dir_merge_named themes
+#
+# in configuration.yaml, then pick Diorama Glass in your profile or on the
+# dashboard. Every --dio-* token is optional: the tiles have their own
+# defaults, and these are the same values written out to change.
+Diorama Glass:
+  modes:
+    dark:
+      # The dashboard background.
+      lovelace-background: 'fixed center / cover no-repeat linear-gradient(160deg, #3a3f4f 0%, #1d2029 45%, #0d0e13 100%)'
+
+      # Tiles.
+      dio-tile-radius: 30px
+      dio-tile-gap: 10px
+      dio-tile-padding: 18px
+      dio-tile-bg-active: 'rgba(255, 255, 255, 0.94)'
+      dio-tile-bg-inactive: 'rgba(118, 118, 128, 0.24)'
+      dio-tile-blur: 24px
+      dio-tile-opacity-inactive: '1'
+      dio-tile-opacity-unavailable: '0.45'
+      dio-text-active: '#1c1c1e'
+      dio-text-inactive: '#ffffff'
+      dio-text-secondary-opacity: '0.6'
+      dio-accent: '#0a84ff'
+      dio-accent-light: '#ffb340'
+      dio-accent-cover: '#32ade6'
+      dio-accent-climate: '#ff9f0a'
+      dio-accent-cool: '#64d2ff'
+      dio-font-tile: "'Inter', system-ui, sans-serif"
+      dio-font-title: "'Inter Tight', system-ui, sans-serif"
+      dio-title-size: 30px
+      dio-title-opacity: '0.92'
+      dio-title-color: '#ffffff'
+      dio-menu-bg: 'rgba(44, 44, 48, 0.82)'
+      dio-menu-text: '#ffffff'
+
+      # The gap between tiles in a sections view.
+      ha-section-grid-row-gap: 'var(--dio-tile-gap)'
+      ha-section-grid-column-gap: 'var(--dio-tile-gap)'
+
+      # Home Assistant's own colors, for the header, the other cards and
+      # the more info dialog.
+      primary-color: '#0a84ff'
+      accent-color: '#ffb340'
+      primary-text-color: '#ffffff'
+      secondary-text-color: 'rgba(235, 235, 245, 0.6)'
+      disabled-text-color: 'rgba(235, 235, 245, 0.3)'
+      text-primary-color: '#ffffff'
+      divider-color: 'rgba(84, 84, 88, 0.6)'
+      primary-background-color: '#0d0e13'
+      secondary-background-color: '#1c1c1e'
+      card-background-color: 'rgba(28, 28, 30, 0.92)'
+      ha-card-background: 'rgba(118, 118, 128, 0.24)'
+      ha-card-border-radius: 30px
+      ha-card-border-width: 0px
+      ha-card-box-shadow: none
+      app-header-background-color: transparent
+      app-header-text-color: '#ffffff'
+      app-header-border-bottom: none
+      sidebar-background-color: '#111216'
+      sidebar-text-color: '#ffffff'
+      sidebar-icon-color: 'rgba(235, 235, 245, 0.6)'
+      sidebar-selected-icon-color: '#0a84ff'
+      sidebar-selected-text-color: '#0a84ff'
+      state-icon-color: 'rgba(235, 235, 245, 0.6)'
+      state-active-color: '#ffb340'
+      ha-font-family-body: "'Inter', system-ui, sans-serif"
+      ha-font-family-heading: "'Inter Tight', system-ui, sans-serif"
+
+      # Dialogs.
+      ha-dialog-border-radius: 28px
+      ha-dialog-surface-background: '#1c1c1e'
+      mdc-theme-surface: '#1c1c1e'
+      mdc-dialog-scrim-color: 'rgba(0, 0, 0, 0.55)'
+      dialog-backdrop-filter: blur(12px)
+      ha-more-info-app-toolbar-title-font-weight: '600'
+      input-fill-color: 'rgba(118, 118, 128, 0.24)'
+      switch-checked-color: '#34c759'
+      switch-checked-button-color: '#ffffff'
+      switch-checked-track-color: '#34c759'

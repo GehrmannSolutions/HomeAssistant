@@ -1,0 +1,328 @@
+import { MODEL_MAX_PARTS } from '#/decoration/models.ts'
+import type { ModelConfig } from '#/types.ts'
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Matrix4,
+  Vector3,
+  type InstancedMesh,
+  type Mesh,
+  type Object3D,
+  type Texture,
+} from 'three'
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
+import { mergeVertices, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+
+// A model's shape, read from a glTF file and kept as plain triangles: what
+// it was painted with is thrown away, since the card paints it its own way,
+// and so are its textures, its normals and everything else a file carries.
+// Only where its corners are and which three make each triangle is left.
+
+// One part of a model: its corners in meters, three numbers each, with the
+// model standing on y = 0 and centered on x and z, and its triangles.
+export type ShapePart = { name: string; positions: Float32Array; index: Uint16Array | Uint32Array }
+// The width, depth and height are along x, z and y.
+export type Shape = { size: [number, number, number]; triangles: number; parts: ShapePart[] }
+
+// Edges sharper than this stay sharp, softer ones are shaded round.
+const CREASE = (40 * Math.PI) / 180
+
+function loader(files?: Map<string, string>) {
+  const gltf = new GLTFLoader()
+  // The files picked along with a .gltf, its .bin and the like, found by
+  // their names.
+  if (files)
+    gltf.manager.setURLModifier(url => {
+      const name = decodeURIComponent(url.split(/[\\/]/).pop() ?? '')
+      return files.get(name) ?? url
+    })
+  // Meshopt's decoder is small enough to carry. Draco's is not, as three
+  // bundles it, so a file compressed with Draco is turned away with a word
+  // on how to export it.
+  gltf.setMeshoptDecoder(MeshoptDecoder)
+  // No texture is ever loaded, so none is decoded for nothing and none can
+  // fail to load. It takes the place of the KTX2 one, which comes before
+  // every other texture plugin and would ask for a loader it does not have.
+  gltf.register(() => ({
+    name: 'KHR_texture_basisu',
+    loadTexture: () => Promise.resolve(null) as unknown as Promise<Texture>,
+  }))
+  return gltf
+}
+
+// Reads a .glb, or a .gltf with the files it names.
+export async function readGltf(data: ArrayBuffer | string, files?: Map<string, string>): Promise<GLTF> {
+  return loader(files).parseAsync(data, '')
+}
+
+export async function fetchGltf(url: string): Promise<GLTF> {
+  return loader().loadAsync(url)
+}
+
+// What the file calls a node or a mesh, as written, before three tidies
+// the name up for its own use.
+type Names = { node?: string; mesh?: string; primitives: number }
+function namesOf(gltf: GLTF, object: Object3D): Names {
+  const json = gltf.parser.json as {
+    nodes?: { name?: string }[]
+    meshes?: { name?: string; primitives?: unknown[] }[]
+  }
+  const out: Names = { primitives: 1 }
+  // A mesh with several primitives is a group of meshes, one per primitive,
+  // under the node, so the names can be one step up.
+  for (let o: Object3D | null = object, steps = 0; o && steps < 2; o = o.parent, steps++) {
+    const at = gltf.parser.associations.get(o) as { nodes?: number; meshes?: number } | undefined
+    if (!at) continue
+    if (out.node === undefined && at.nodes !== undefined) out.node = json.nodes?.[at.nodes]?.name || undefined
+    if (out.mesh === undefined && at.meshes !== undefined) {
+      const mesh = json.meshes?.[at.meshes]
+      out.mesh = mesh?.name || undefined
+      out.primitives = mesh?.primitives?.length ?? 1
+    }
+  }
+  return out
+}
+
+// A name as a person would write it: Blender's .001 copies and the
+// underscores that stand for spaces taken out.
+const tidy = (name: string | undefined) =>
+  (name ?? '')
+    .replace(/\.\d{3,}$/, '')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+
+type Piece = { name: string; material: string; positions: number[]; index: number[] }
+
+const corner = new Vector3()
+const place = new Matrix4()
+const instance = new Matrix4()
+
+// Every mesh in the file as triangles where they stand in the scene.
+function piecesOf(gltf: GLTF): Piece[] {
+  const root = gltf.scene ?? gltf.scenes?.[0]
+  if (!root) return []
+  root.updateMatrixWorld(true)
+  const pieces: Piece[] = []
+  root.traverse(object => {
+    const mesh = object as Mesh
+    if (!mesh.isMesh || !mesh.geometry?.attributes.position) return
+    const geometry = mesh.geometry
+    const position = geometry.attributes.position
+    const names = namesOf(gltf, mesh)
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+    let name = tidy(names.node) || tidy(names.mesh)
+    // A mesh in several materials is told apart by them, a chair's frame
+    // from its seat.
+    if (names.primitives > 1 && material?.name) name = name ? `${name} ${tidy(material.name)}` : tidy(material.name)
+    const copies: Matrix4[] = []
+    const instanced = mesh as InstancedMesh
+    if (instanced.isInstancedMesh) {
+      for (let i = 0; i < instanced.count; i++) {
+        instanced.getMatrixAt(i, instance)
+        copies.push(instance.clone().premultiply(mesh.matrixWorld))
+      }
+    } else copies.push(mesh.matrixWorld)
+    const source = geometry.index
+    const count = source ? source.count : position.count
+    for (const matrix of copies) {
+      place.copy(matrix)
+      const positions: number[] = new Array(position.count * 3)
+      for (let i = 0; i < position.count; i++) {
+        corner.fromBufferAttribute(position, i).applyMatrix4(place)
+        positions[i * 3] = corner.x
+        positions[i * 3 + 1] = corner.y
+        positions[i * 3 + 2] = corner.z
+      }
+      // A mirrored copy has its triangles turned round so they still face out.
+      const mirrored = place.determinant() < 0
+      const index: number[] = new Array(count - (count % 3))
+      for (let t = 0; t + 2 < count; t += 3) {
+        const a = source ? source.getX(t) : t
+        const b = source ? source.getX(t + 1) : t + 1
+        const c = source ? source.getX(t + 2) : t + 2
+        index[t] = a
+        index[t + 1] = mirrored ? c : b
+        index[t + 2] = mirrored ? b : c
+      }
+      pieces.push({ name, material: tidy(material?.name), positions, index })
+    }
+  })
+  return pieces
+}
+
+const triangleCount = (pieces: Piece[]) => pieces.reduce((sum, p) => sum + p.index.length / 3, 0)
+
+// Pieces with the same name are one part, so the four legs of a table are
+// painted together. A piece with no name is a part of its own.
+function gather(pieces: Piece[], by: (p: Piece) => string): Piece[][] {
+  const groups = new Map<string, Piece[]>()
+  let unnamed = 0
+  for (const piece of pieces) {
+    const key = by(piece).toLowerCase() || `\u0000${unnamed++}`
+    const list = groups.get(key)
+    if (list) list.push(piece)
+    else groups.set(key, [piece])
+  }
+  return [...groups.values()]
+}
+
+// Few enough parts to paint one by one and to draw in a few calls. Past the
+// limit they are gathered by what they are made of, and past it still the
+// smallest go together as Other.
+function partsOf(pieces: Piece[]): { name: string; pieces: Piece[] }[] {
+  let groups = gather(pieces, p => p.name)
+  let named = (group: Piece[]) => group[0].name
+  if (groups.length > MODEL_MAX_PARTS) {
+    groups = gather(pieces, p => p.material)
+    named = group => group[0].material
+  }
+  if (groups.length > MODEL_MAX_PARTS) {
+    groups.sort((a, b) => triangleCount(b) - triangleCount(a))
+    const rest = groups.splice(MODEL_MAX_PARTS - 1).flat()
+    groups.push(rest.map(p => ({ ...p, name: 'Other', material: 'Other' })))
+  }
+  const used = new Set<string>()
+  return groups.map((group, i) => {
+    let name = named(group) || `Part ${i + 1}`
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${named(group) || 'Part'} ${n}`
+    used.add(name.toLowerCase())
+    return { name, pieces: group }
+  })
+}
+
+// A file says nothing about its unit, and glTF means meters. A model that
+// would come out tens of meters across was made in centimeters, or in
+// millimeters, and is taken down to size.
+function unitOf(largest: number) {
+  let scale = 1
+  while (largest * scale > 30) scale /= scale === 1 ? 100 : 10
+  return scale
+}
+
+// The shape in a glTF file, standing on the floor and centered, in meters.
+export function shapeOf(gltf: GLTF): Shape {
+  const pieces = piecesOf(gltf)
+  if (pieces.length === 0 || triangleCount(pieces) === 0) throw new Error('There is no shape in this file.')
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  for (const piece of pieces)
+    for (let i = 0; i < piece.positions.length; i++) {
+      const axis = i % 3
+      if (piece.positions[i] < min[axis]) min[axis] = piece.positions[i]
+      if (piece.positions[i] > max[axis]) max[axis] = piece.positions[i]
+    }
+  const scale = unitOf(Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]))
+  const middle = [(min[0] + max[0]) / 2, min[1], (min[2] + max[2]) / 2]
+  const parts = partsOf(pieces).map(({ name, pieces: group }) => {
+    const vertices = group.reduce((sum, p) => sum + p.positions.length / 3, 0)
+    const positions = new Float32Array(vertices * 3)
+    const index: number[] = []
+    let at = 0
+    for (const piece of group) {
+      for (let i = 0; i < piece.positions.length; i++)
+        positions[at * 3 + i] = (piece.positions[i] - middle[i % 3]) * scale
+      for (const corner of piece.index) index.push(corner + at)
+      at += piece.positions.length / 3
+    }
+    // Corners that were only apart for the texture or the shading are one.
+    const loose = new BufferGeometry()
+    loose.setAttribute('position', new BufferAttribute(positions, 3))
+    loose.setIndex(index)
+    const welded = mergeVertices(loose, 1e-5)
+    const p = welded.attributes.position.array as Float32Array
+    const n = p.length / 3
+    const source = welded.index!.array
+    const kept = n > 65536 ? new Uint32Array(source.length) : new Uint16Array(source.length)
+    kept.set(source)
+    return { name, positions: p, index: kept }
+  })
+  // To the millimeter, which is how it is written in the config.
+  const mm = (value: number) => Math.max(Math.round(value * scale * 1000) / 1000, 0.01)
+  const size: [number, number, number] = [mm(max[0] - min[0]), mm(max[2] - min[2]), mm(max[1] - min[1])]
+  const triangles = parts.reduce((sum, p) => sum + p.index.length / 3, 0)
+  return { size, triangles, parts }
+}
+
+// Into the card config and back. Each corner is three 16 bit numbers across
+// the model's own box, which keeps a tenth of a millimeter on a meter wide
+// piece in half the room a float takes, and the triangles index them in 16
+// bits while there are few enough corners, 32 bits past that.
+
+function toBase64(bytes: Uint8Array) {
+  let text = ''
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000) as unknown as number[])
+  return btoa(text)
+}
+
+function fromBase64(text: string) {
+  const raw = atob(text)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+export function encodeShape(shape: Shape): ModelConfig['parts'] {
+  const [w, d, h] = shape.size
+  return shape.parts.map(part => {
+    const q = new Uint16Array(part.positions.length)
+    for (let i = 0; i < part.positions.length; i += 3) {
+      q[i] = Math.round(Math.min(Math.max(part.positions[i] / w + 0.5, 0), 1) * 65535)
+      q[i + 1] = Math.round(Math.min(Math.max(part.positions[i + 1] / h, 0), 1) * 65535)
+      q[i + 2] = Math.round(Math.min(Math.max(part.positions[i + 2] / d + 0.5, 0), 1) * 65535)
+    }
+    return {
+      name: part.name,
+      vertices: toBase64(new Uint8Array(q.buffer)),
+      triangles: toBase64(new Uint8Array(part.index.buffer, part.index.byteOffset, part.index.byteLength)),
+    }
+  })
+}
+
+// One stored part back as corners in meters, or null when what is stored
+// does not add up to a shape.
+function decodePart(part: ModelConfig['parts'][number], size: [number, number, number]): ShapePart | null {
+  if (!part.vertices || !part.triangles) return null
+  try {
+    const raw = fromBase64(part.vertices)
+    if (raw.length % 6 !== 0) return null
+    const q = new Uint16Array(raw.buffer)
+    const n = q.length / 3
+    const bytes = fromBase64(part.triangles)
+    const wide = n > 65536
+    if (bytes.length % (wide ? 12 : 6) !== 0) return null
+    const index = wide ? new Uint32Array(bytes.buffer) : new Uint16Array(bytes.buffer)
+    for (let i = 0; i < index.length; i++) if (index[i] >= n) return null
+    const [w, d, h] = size
+    const positions = new Float32Array(q.length)
+    for (let i = 0; i < q.length; i += 3) {
+      positions[i] = (q[i] / 65535 - 0.5) * w
+      positions[i + 1] = (q[i + 1] / 65535) * h
+      positions[i + 2] = (q[i + 2] / 65535 - 0.5) * d
+    }
+    return { name: part.name, positions, index }
+  } catch {
+    return null
+  }
+}
+
+export function decodeShape(model: ModelConfig): Shape {
+  const parts = model.parts.map(p => decodePart(p, model.size)).filter((p): p is ShapePart => !!p)
+  return { size: model.size, triangles: parts.reduce((sum, p) => sum + p.index.length / 3, 0), parts }
+}
+
+// A part ready to draw, shaded round across soft edges and sharp across
+// hard ones. Drawn shared by every piece placed from the model.
+export function partGeometry(part: ShapePart) {
+  const indexed = new BufferGeometry()
+  indexed.setAttribute('position', new BufferAttribute(part.positions, 3))
+  indexed.setIndex(new BufferAttribute(part.index, 1))
+  const geometry = toCreasedNormals(indexed, CREASE)
+  indexed.dispose()
+  geometry.computeBoundingBox()
+  geometry.computeBoundingSphere()
+  return geometry
+}

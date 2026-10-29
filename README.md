@@ -7,6 +7,7 @@ Development of tools for Home Assistant. This repository is **source code and do
 | Project | Purpose | Start here |
 |---|---|---|
 | [ha-safe-mcp](ha-safe-mcp/) | Safety-first, self-hosted Home Assistant MCP server (stdio), optional local Ollama chat and loopback web UI | [Install](ha-safe-mcp/docs/INSTALL.md) · [User guide](ha-safe-mcp/docs/USER_GUIDE.md) · [Technical docs](ha-safe-mcp/docs/TECHNICAL.md) · [Tool reference](ha-safe-mcp/docs/TOOLS.md) |
+| [ha-diorama](ha-diorama/) | Copy of the MIT-licensed 3D card [CarlesRojas/ha-diorama](https://github.com/CarlesRojas/ha-diorama) for analysis and own additions (walls), offered upstream | [Upstream](ha-diorama/UPSTREAM.md) · [Analyse (DE)](ha-diorama/HESTIA-ANALYSE.de.md) |
 
 The `ha-safe-mcp/` directory is self-contained: packaging, source, tests, Docker test setup, examples, and documentation live together. Run its commands **from that directory**, not the repository root. Start with read-only access against your own disposable or test Home Assistant instance; never point destructive integration tests at your home.
 

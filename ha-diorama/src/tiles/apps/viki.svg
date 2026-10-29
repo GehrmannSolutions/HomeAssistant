@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1055.815" height="200" viewBox="0 0 1055.815 200"
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+  
+  
+  
+   version="1.1"
+   id="svg23"
+   sodipodi:docname="logo_blue_horizontal-8d999fcdbb3b16818e87999e3420c5ef.svg"
+   inkscape:version="0.92.1 r15371">
+  <metadata
+     id="metadata27">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title>vikiBlue</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1014"
+     inkscape:window-height="480"
+     id="namedview25"
+     showgrid="false"
+     inkscape:zoom="1.9954751"
+     inkscape:cx="110.3268"
+     inkscape:cy="21.000003"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg23"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0" />
+  <!-- Generator: Sketch 50.2 (55047) - http://www.bohemiancoding.com/sketch -->
+  <title
+     id="title2">vikiBlue</title>
+  <desc
+     id="desc4">Created with Sketch.</desc>
+  <defs
+     id="defs6" />
+  <polygon
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:1"
+     points="112,35 28,35 34.691955,42 "
+     id="Fill-1"
+     transform="matrix(4.8024396,0,0,4.8024396,-0.83178255,-1.7024648)" />
+  <path
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:4.80243969"
+     inkscape:connector-curvature="0"
+     id="Fill-2"
+     d="m 146.65882,121.56175 c -13.87425,0 -24.03141,-13.66294 -24.03141,-30.913306 0,-17.24556 10.15716,-30.913304 24.03141,-30.913304 13.89346,0 23.68083,13.667744 23.68083,30.913304 0,17.250366 -9.78737,30.913306 -23.68083,30.913306 z m 23.30624,-85.406585 v 4.83605 c -7.45819,-4.74961 -14.14798,-7.51101 -23.30624,-7.51101 -28.13269,0 -49.508348,25.65463 -49.508348,57.168239 0,31.513606 21.375658,57.158636 49.508348,57.158636 9.15826,0 15.84805,-2.7518 23.30624,-7.51101 v 4.83125 h 24.72776 V 36.155165 Z" />
+  <path
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:4.80243969"
+     inkscape:connector-curvature="0"
+     id="Fill-4"
+     d="m 368.0801,36.154205 v 64.016515 c 0,12.0061 -8.25059,22.14885 -20.26629,22.14885 -12.0061,0 -20.25669,-10.14275 -20.25669,-22.14885 V 36.154205 h -24.73737 v 64.016515 c 0,26.26454 17.97073,47.6354 44.24008,47.6354 12.16458,0 21.02027,-6.72822 21.02027,-6.72822 v 4.04846 h 24.73257 V 36.154205 Z" />
+  <path
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:4.80243969"
+     inkscape:connector-curvature="0"
+     id="Fill-6"
+     d="M 598.53382,145.12828 V 81.11176 c 0,-12.006099 8.25059,-22.148852 20.26629,-22.148852 12.0061,0 20.25669,10.142753 20.25669,22.148852 v 64.01652 h 24.73737 V 81.11176 c 0,-26.264545 -17.97073,-47.635395 -44.24008,-47.635395 -12.16458,0 -21.02027,6.72821 -21.02027,6.72821 v -4.04845 H 573.80125 V 145.12828 Z" />
+  <path
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:4.80243969"
+     inkscape:connector-curvature="0"
+     id="Fill-8"
+     d="m 25.86594,34.845535 h 16.880575 c 11.617102,0 21.116327,9.4464 21.116327,21.08751 0,11.669932 -9.499225,21.111529 -21.116327,21.111529 H 25.86594 Z m 0,110.283225 v -42.21825 h 18.297295 l 31.672089,42.21825 H 108.21337 L 69.942731,94.184481 c 11.92926,-8.56275 19.757237,-22.485023 19.757237,-38.251436 0,-25.89955 -21.053896,-46.9342398 -46.953453,-46.9342398 H 0 V 145.12876 Z" />
+  <path
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:4.80243969"
+     inkscape:connector-curvature="0"
+     id="Fill-10"
+     d="m 459.47149,119.3435 c -2.21873,1.50317 -5.02335,2.67976 -8.2698,2.67976 -4.03885,0 -11.66032,-3.08797 -11.66032,-13.37479 V 62.01678 h 21.14994 V 36.155645 H 439.54137 V 8.9978452 H 414.8088 V 36.155645 H 401.72696 V 62.01678 h 13.08184 v 47.01588 c -0.005,24.33397 18.32611,38.86615 36.76748,38.86615 6.87709,0 16.41474,-2.24754 24.19469,-6.85789 z" />
+  <polygon
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:1"
+     points="56.5488,30.5745 63.7648,30.5745 53.5168,18.5195 62.3508,7.8825 55.1318,7.8825 48.9538,15.7875 48.9538,0.3545 43.6498,0.3545 43.6498,30.5745 48.9538,30.5745 48.9538,21.2525 "
+     id="Fill-12"
+     transform="matrix(4.8024396,0,0,4.8024396,-0.83178255,-1.7024648)" />
+  <path
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:4.80243969"
+     inkscape:connector-curvature="0"
+     id="Fill-14"
+     d="m 538.18876,76.576336 h -44.54263 c 5.20585,-25.524971 39.72578,-26.989711 44.54263,0 M 516.59699,33.387995 c -28.62254,0 -49.15777,25.15518 -49.15777,57.254686 0,33.746749 25.77469,57.259489 51.61662,57.259489 13.04343,0 29.76072,-4.47107 43.80305,-24.39639 l -21.8463,-12.61121 c -16.89498,24.90065 -45.05168,12.26063 -48.30293,-12.640022 l 71.24419,0.01921 C 570.04814,59.129073 544.73929,33.387995 516.59699,33.387995" />
+  <polygon
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:1"
+     points="164.6112,3.6455 172.3862,3.6455 162.4882,30.5745 156.3432,30.5745 146.3302,3.6455 154.1432,3.6455 159.4152,21.2815 "
+     id="Fill-16"
+     transform="matrix(4.8024396,0,0,4.8024396,-0.83178255,-1.7024648)" />
+  <polygon
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:1"
+     points="182.264,30.574 182.264,3.645 174.868,3.645 174.868,30.574 "
+     id="Fill-18"
+     transform="matrix(4.8024396,0,0,4.8024396,-0.83178255,-1.7024648)" />
+  <polygon
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:1"
+     points="195.9007,20.6752 193.8537,22.7992 193.8537,30.5742 186.4577,30.5742 186.4577,3.6452 193.8537,3.6452 193.8537,13.8862 202.0457,3.6452 210.3897,3.6452 200.6037,15.7062 211.0717,30.5742 202.5757,30.5742 "
+     id="Fill-20"
+     transform="matrix(4.8024396,0,0,4.8024396,-0.83178255,-1.7024648)" />
+  <polygon
+     style="fill:#0c9bff;fill-rule:evenodd;stroke:none;stroke-width:1"
+     points="220.023,30.574 220.023,3.645 212.627,3.645 212.627,30.574 "
+     id="Fill-21"
+     transform="matrix(4.8024396,0,0,4.8024396,-0.83178255,-1.7024648)" />
+</svg>

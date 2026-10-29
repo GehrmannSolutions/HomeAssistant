@@ -1,0 +1,201 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+@theme {
+  --font-montserrat: 'Montserrat', sans-serif;
+  /* The editor is set in the system's own interface font. */
+  --font-system: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* The headings of the side panel, for the editor's headings over its widgets. */
+  --font-title: var(--dio-font-title, var(--fp-font-title, 'Inter Tight', system-ui, sans-serif));
+  --transition-duration-slow: 300ms;
+}
+
+/* shadcn tokens, mapped onto the Home Assistant theme variables. */
+@theme inline {
+  --color-background: var(--card-background-color, #fff);
+  --color-foreground: var(--primary-text-color, #212121);
+  --color-muted: var(--secondary-background-color, #f5f5f5);
+  --color-muted-foreground: var(--secondary-text-color, #727272);
+  --color-popover: var(--card-background-color, #fff);
+  --color-popover-foreground: var(--primary-text-color, #212121);
+  --color-accent: var(--secondary-background-color, #f5f5f5);
+  --color-accent-foreground: var(--primary-text-color, #212121);
+  --color-primary: var(--primary-color, #03a9f4);
+  --color-primary-foreground: var(--text-primary-color, #fff);
+  --color-destructive: var(--error-color, #db4437);
+  --color-border: var(--divider-color, #e0e0e0);
+  --radius-md: 8px;
+  --radius-sm: 6px;
+
+  /* The editor's palette, set on the editor's root below. */
+  --color-fill: var(--dio-fill);
+  --color-fill-strong: var(--dio-fill-strong);
+  --color-fill-stronger: var(--dio-fill-stronger);
+  --color-separator: var(--dio-separator);
+  --color-label-2: var(--dio-label-2);
+  --color-tint: var(--dio-tint);
+  --color-danger: var(--dio-danger);
+  --color-success: var(--dio-success);
+  --color-tint-fill: var(--dio-tint-fill);
+  --color-danger-fill: var(--dio-danger-fill);
+  --color-raised: var(--dio-raised);
+}
+
+/* Fills, separators and the secondary text are the text color thinned out,
+   so they read the same over a light theme and a dark one. The colors are
+   vivid over a dark theme and deeper over a light one, so text in them
+   keeps a contrast of at least 4.5 to 1 on either. */
+.dio-editor {
+  --dio-fill: color-mix(in srgb, var(--primary-text-color, #212121) 6%, transparent);
+  --dio-fill-strong: color-mix(in srgb, var(--primary-text-color, #212121) 10%, transparent);
+  --dio-fill-stronger: color-mix(in srgb, var(--primary-text-color, #212121) 15%, transparent);
+  --dio-separator: color-mix(in srgb, var(--primary-text-color, #212121) 11%, transparent);
+  --dio-label-2: color-mix(in srgb, var(--primary-text-color, #212121) 68%, transparent);
+  --dio-tint: #0a84ff;
+  --dio-danger: #ff453a;
+  --dio-success: #30d158;
+  /* Behind white text a shade deeper, for the same contrast. */
+  --dio-tint-fill: #0a6cdf;
+  --dio-danger-fill: #e0241b;
+  /* The chosen segment of a segmented control, lifted off its track. */
+  --dio-raised: color-mix(in srgb, var(--primary-text-color, #e1e1e1) 24%, var(--card-background-color, #1c1c1c));
+  /* A button floating on a widget's corner: a grey between the text and
+     the page, with its icon a very light grey over a dark page and white
+     over a light one. */
+  --dio-float: color-mix(in srgb, var(--primary-text-color, #e1e1e1) 32%, var(--dio-surface, #1c1c1c));
+  --dio-float-icon: color-mix(in srgb, var(--primary-text-color, #e1e1e1) 90%, var(--dio-surface, #1c1c1c));
+}
+.dio-editor[data-light] {
+  --dio-tint: #0066cc;
+  --dio-danger: #d70015;
+  --dio-success: #1f7f38;
+  --dio-tint-fill: #0066cc;
+  --dio-danger-fill: #d70015;
+  --dio-raised: var(--card-background-color, #fff);
+  --dio-float: color-mix(in srgb, var(--primary-text-color, #212121) 44%, var(--dio-surface, #fff));
+  --dio-float-icon: var(--dio-surface, #fff);
+}
+
+/* With more contrast asked for, the fills and lines are drawn firmer. */
+@media (prefers-contrast: more) {
+  .dio-editor {
+    --dio-fill: color-mix(in srgb, var(--primary-text-color, #212121) 10%, transparent);
+    --dio-fill-strong: color-mix(in srgb, var(--primary-text-color, #212121) 16%, transparent);
+    --dio-fill-stronger: color-mix(in srgb, var(--primary-text-color, #212121) 24%, transparent);
+    --dio-separator: color-mix(in srgb, var(--primary-text-color, #212121) 35%, transparent);
+    --dio-label-2: color-mix(in srgb, var(--primary-text-color, #212121) 82%, transparent);
+  }
+}
+
+/* With less transparency asked for, what floats is solid. */
+@media (prefers-reduced-transparency: reduce) {
+  .dio-floating {
+    background-color: var(--card-background-color);
+    backdrop-filter: none;
+  }
+}
+
+/* With less motion asked for, the editor changes without easing. */
+@media (prefers-reduced-motion: reduce) {
+  .dio-editor *,
+  .dio-editor *::before,
+  .dio-editor *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+  }
+}
+
+/* The editor's slider: a thin track, filled in the tint up to the thumb, and
+   a white lozenge of a thumb that grows a little while it is held. The fill
+   ends at the thumb's middle, which travels half a thumb in from each end.
+   --dio-share is how far along the value is, from 0 to 1. */
+.dio-slider {
+  --dio-thumb: 22px;
+  --dio-reach: calc(var(--dio-thumb) / 2 + (100% - var(--dio-thumb)) * var(--dio-share, 0));
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  background: transparent;
+  border-radius: 999px;
+}
+.dio-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--dio-tint) var(--dio-reach), var(--dio-fill-stronger) var(--dio-reach));
+}
+.dio-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--dio-fill-stronger);
+}
+.dio-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--dio-tint);
+}
+.dio-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--dio-thumb);
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.12),
+    0 1px 3px rgb(0 0 0 / 0.28);
+  transition: transform 150ms ease-out;
+}
+.dio-slider::-moz-range-thumb {
+  width: var(--dio-thumb);
+  height: 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.12),
+    0 1px 3px rgb(0 0 0 / 0.28);
+  transition: transform 150ms ease-out;
+}
+.dio-slider:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+.dio-slider:active::-moz-range-thumb {
+  transform: scale(1.15);
+}
+.dio-slider:disabled {
+  opacity: 0.4;
+}
+
+@custom-variant mouse (@media (hover: hover) and (pointer: fine));
+@custom-variant touch (@media (hover: none) or (pointer: coarse));
+
+@layer base {
+  * {
+    @apply m-0 box-border p-0 antialiased outline-none select-none;
+  }
+
+  img,
+  video,
+  svg,
+  canvas {
+    @apply block;
+  }
+
+  /* A ring in the tint round whatever the keyboard has reached. */
+  .dio-editor :focus-visible {
+    outline: 2px solid var(--dio-tint);
+    outline-offset: 1px;
+  }
+}
+
+/* The developer settings rise from below the version as they are found. */
+@keyframes dio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.dio-rise {
+  animation: dio-rise 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}

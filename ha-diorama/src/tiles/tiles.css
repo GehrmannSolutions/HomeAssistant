@@ -1,0 +1,3533 @@
+/*
+ * The Diorama tiles. Every look a theme can change is a --dio-* token,
+ * read here into a private --_* variable with its default, so a theme that
+ * sets none of them still gets a finished tile. Never set a --dio-* token on
+ * the host: it would win over the theme's value. A theme written before the
+ * card was renamed still works, as each token falls back on its old --fp-*
+ * name.
+ */
+:host {
+  display: block;
+  height: 100%;
+  --_radius: var(--dio-tile-radius, var(--fp-tile-radius, 30px));
+  --_padding: var(--dio-tile-padding, var(--fp-tile-padding, 18px));
+  --_bg-active: var(--dio-tile-bg-active, var(--fp-tile-bg-active, rgba(255, 255, 255, 0.94)));
+  --_bg-inactive: var(--dio-tile-bg-inactive, var(--fp-tile-bg-inactive, rgba(118, 118, 128, 0.24)));
+  --_blur: var(--dio-tile-blur, var(--fp-tile-blur, 24px));
+  --_opacity-inactive: var(--dio-tile-opacity-inactive, var(--fp-tile-opacity-inactive, 1));
+  --_opacity-unavailable: var(--dio-tile-opacity-unavailable, var(--fp-tile-opacity-unavailable, 0.45));
+  --_shadow: var(--dio-tile-shadow, var(--fp-tile-shadow, none));
+  --_text-active: var(--dio-text-active, var(--fp-text-active, #1c1c1e));
+  --_text-inactive: var(--dio-text-inactive, var(--fp-text-inactive, #ffffff));
+  --_secondary: var(--dio-text-secondary-opacity, var(--fp-text-secondary-opacity, 0.72));
+  --_accent: var(--dio-accent, var(--fp-accent, #0a84ff));
+  --_accent-light: var(--dio-accent-light, var(--fp-accent-light, #ffb340));
+  --_accent-cover: var(--dio-accent-cover, var(--fp-accent-cover, #32ade6));
+  --_accent-media: var(--dio-accent-media, var(--fp-accent-media, #0a9a7c));
+  --_accent-climate: var(--dio-accent-climate, var(--fp-accent-climate, #ff6422));
+  --_accent-cool: var(--dio-accent-cool, var(--fp-accent-cool, #5ab0ff));
+  --_mode-heat: var(--dio-mode-heat, var(--fp-mode-heat, var(--_accent-climate)));
+  --_mode-cool: var(--dio-mode-cool, var(--fp-mode-cool, var(--_accent-cool)));
+  --_mode-dry: var(--dio-mode-dry, var(--fp-mode-dry, #ffc60a));
+  --_mode-fan: var(--dio-mode-fan, var(--fp-mode-fan, #30c9a4));
+  --_accent-unlocked: var(--dio-accent-unlocked, var(--fp-accent-unlocked, #46c46e));
+  --_accent-locked: var(--dio-accent-locked, var(--fp-accent-locked, #ff453a));
+  --_alarm-armed: var(--dio-alarm-armed, var(--fp-alarm-armed, #ff453a));
+  --_alarm-disarmed: var(--dio-alarm-disarmed, var(--fp-alarm-disarmed, #30d158));
+  --_font-tile: var(--dio-font-tile, var(--fp-font-tile, 'Inter', system-ui, sans-serif));
+  --_font-title: var(--dio-font-title, var(--fp-font-title, 'Inter Tight', system-ui, sans-serif));
+  --_title-size: var(--dio-title-size, var(--fp-title-size, 30px));
+  --_title-opacity: var(--dio-title-opacity, var(--fp-title-opacity, 0.92));
+  --_icon-size: var(--dio-tile-icon-size, var(--fp-tile-icon-size, 28px));
+  --_name-size: var(--dio-tile-name-size, var(--fp-tile-name-size, 15px));
+  --_state-size: var(--dio-tile-state-size, var(--fp-tile-state-size, 13px));
+  --_handle: var(--dio-slider-handle, var(--fp-slider-handle, var(--_bg-active)));
+  --_duration: var(--dio-tile-duration, var(--fp-tile-duration, 200ms));
+  --_press: var(--dio-tile-press-scale, var(--fp-tile-press-scale, 0.96));
+  --_focus: var(--dio-tile-focus-scale, var(--fp-tile-focus-scale, 1.03));
+}
+
+/* Hidden by the room filter. Home Assistant hides the card around it too,
+   but a tile can sit where nothing does. */
+:host([hidden]) {
+  display: none;
+}
+
+/* On a light dashboard the translucent tile is light too, with dark text,
+   and a tile that is on turns dark with white text, since a white one would
+   not stand out from the page. */
+:host([data-light]) {
+  --_bg-inactive: var(--dio-tile-bg-inactive, var(--fp-tile-bg-inactive, rgba(120, 120, 128, 0.16)));
+  --_text-inactive: var(--dio-text-inactive, var(--fp-text-inactive, #1c1c1e));
+  --_bg-active: var(--dio-tile-bg-active, var(--fp-tile-bg-active, rgba(28, 28, 30, 0.94)));
+  --_text-active: var(--dio-text-active, var(--fp-text-active, #ffffff));
+}
+
+/* The accent and mode colors, toward white on a dark tile and toward
+   black on a light one, a tile that is on on a dark dashboard or one that
+   is off on a light dashboard, enough for an icon or a line to stand out
+   three to one from the tile and for words four and a half to one. */
+.dio-tile {
+  --_ink-to: white;
+  --_deep: 20%;
+  --_deep-text: 35%;
+}
+
+:host(:not([data-light])) .dio-tile[data-active] {
+  --_ink-to: black;
+  --_deep: 30%;
+  --_deep-text: 40%;
+}
+
+/* The media teal is deep enough to stand out on a light tile as it is,
+   so it keeps all its color there. */
+:host(:not([data-light])) .dio-tile[data-active][style*='--_accent-media'] {
+  --_deep: 0%;
+}
+
+/* The glass of a light dashboard is grey, so it takes more. */
+:host([data-light]) .dio-tile:not([data-active]) {
+  --_ink-to: black;
+  --_deep: 40%;
+  --_deep-text: 45%;
+}
+
+.dio-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 112px;
+  padding: var(--_padding);
+  overflow: hidden;
+  border-radius: var(--_radius);
+  background: var(--_bg-inactive);
+  color: var(--_text-inactive);
+  box-shadow: var(--_shadow);
+  -webkit-backdrop-filter: blur(var(--_blur)) saturate(1.6);
+  backdrop-filter: blur(var(--_blur)) saturate(1.6);
+  font-family: var(--_font-tile);
+  font-optical-sizing: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  transition:
+    background-color var(--_duration) ease,
+    color var(--_duration) ease,
+    opacity var(--_duration) ease,
+    transform var(--_duration) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dio-tile[data-active] {
+  background: var(--_bg-active);
+  color: var(--_text-active);
+}
+
+/* A button lights up at once when pressed and a moment later fades slowly
+   back to off. */
+.dio-tile[data-fading] {
+  --_duration: 1000ms;
+}
+
+.dio-tile[data-fading] .dio-icon,
+.dio-tile[data-fading] .dio-text {
+  transition:
+    color var(--_duration) ease,
+    opacity var(--_duration) ease;
+}
+
+/* The color of a light, strongest in the top left corner and fading out to
+   the plain tile. */
+.dio-tile[data-active][style*='--_tile-glow'] {
+  background-image: radial-gradient(
+    140% 140% at 0% 0%,
+    color-mix(in srgb, var(--_tile-glow) 42%, transparent) 0%,
+    color-mix(in srgb, var(--_tile-glow) 14%, transparent) 45%,
+    transparent 80%
+  );
+}
+
+/* An unlocked lock's green, coming in from the left, as strong as the
+   wash says, so it can fade in. */
+@property --_wash {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+.dio-tile[data-active][data-glow='left'][style*='--_tile-glow'] {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--_tile-glow) calc(24% * var(--_wash)), transparent) 0%,
+    color-mix(in srgb, var(--_tile-glow) calc(7% * var(--_wash)), transparent) 45%,
+    transparent 80%
+  );
+}
+
+/* A tile that is off with a tint stays glass, with the tint coming in
+   from the left and on its icon, like a locked lock or a disarmed alarm. */
+.dio-tile:not([data-active])[style*='--_tile-tint'] {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--_tile-tint) 22%, transparent) 0%,
+    color-mix(in srgb, var(--_tile-tint) 6%, transparent) 45%,
+    transparent 80%
+  );
+}
+
+.dio-tile:not([data-active])[style*='--_tile-tint'] .dio-top > .dio-icon {
+  color: var(--_tile-tint);
+  opacity: 1;
+}
+
+/* The color of a thermostat's mode, coming down from the top like the air
+   out of it. */
+.dio-tile[data-active][data-glow='top'][style*='--_tile-glow'] {
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--_tile-glow) 24%, transparent) 0%,
+    color-mix(in srgb, var(--_tile-glow) 7%, transparent) 45%,
+    transparent 80%
+  );
+}
+
+.dio-tile:not([data-active]) .dio-icon,
+.dio-tile:not([data-active]) .dio-text {
+  opacity: var(--_opacity-inactive);
+}
+
+.dio-tile[data-unavailable] {
+  opacity: var(--_opacity-unavailable);
+  cursor: default;
+}
+
+/* A tile in focus from the keyboard grows a little and lifts off the page. */
+.dio-tile:focus-visible {
+  outline: none;
+  transform: scale(var(--_focus));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.dio-tile[data-pressed] {
+  transform: scale(var(--_press));
+}
+
+/* A light whose whole tile is its brightness: a lit copy of the tile over
+   the plain one, cut off where the brightness ends. The two scale
+   together when pressed or in focus, so the outer box does instead. */
+.dio-fill {
+  position: relative;
+  height: 100%;
+  border-radius: var(--_radius);
+  touch-action: pan-y;
+  transition: transform var(--_duration) ease;
+}
+
+.dio-fill > .dio-tile {
+  touch-action: pan-y;
+}
+
+/* One that fills from the top is dragged up and down, so a swipe that
+   starts on it moves the fill and not the page. */
+.dio-fill[data-vertical],
+.dio-fill[data-vertical] > .dio-tile {
+  touch-action: pan-x;
+}
+
+.dio-fill .dio-tile,
+.dio-fill .dio-tile:focus-visible,
+.dio-fill .dio-tile[data-pressed] {
+  transform: none;
+}
+
+.dio-fill:has(.dio-tile[data-pressed]) {
+  transform: scale(var(--_press));
+}
+
+.dio-fill:has(> .dio-tile:focus-visible) {
+  transform: scale(var(--_focus));
+}
+
+.dio-fill-lit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: clip-path 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dio-fill[data-dragging] .dio-fill-lit,
+.dio-fill[data-dragging] .dio-fill-grip {
+  transition: none;
+}
+
+/* Something that travels, like a blind, fills as far as it really is
+   while a finger drags, and glides between the places it reports on the
+   way, about a second apart. */
+.dio-fill[data-travels] .dio-fill-lit,
+.dio-fill[data-travels][data-dragging] .dio-fill-lit {
+  transition: clip-path 1s linear;
+}
+
+/* Half lit, from where it is to where the finger takes it, then to where
+   it was sent until it gets there. A lit stretch over the unlit tile
+   stands out more than an unlit one over the lit fill, so the first is
+   fainter and the second stronger. Its words are drawn whole over it. */
+.dio-fill-band {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+.dio-fill-band[data-on] {
+  opacity: 1;
+}
+
+.dio-fill-band-tint,
+.dio-fill-band-ink {
+  position: absolute;
+  inset: 0;
+}
+
+.dio-fill-band-tint {
+  opacity: 0.15;
+}
+
+/* An unlit tile is see-through, so over the lit fill it would barely show.
+   There the band is the color of the words on a lit tile instead, dark on
+   a dark dashboard and light on a light one, faint over the fill. */
+.dio-fill-band[data-back] .dio-fill-band-tint {
+  opacity: 0.3;
+}
+
+.dio-fill-band[data-back] .dio-fill-band-tint .dio-tile {
+  background: var(--_text-active);
+}
+
+.dio-fill-band-tint .dio-tile > * {
+  visibility: hidden;
+}
+
+.dio-fill-band .dio-tile {
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.dio-fill-band-ink .dio-tile {
+  background: none;
+}
+
+/* The lit copy draws no shadow and no blur of its own, so the edge where
+   it ends is clean. */
+.dio-fill-lit .dio-tile {
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* A short bar that rides just inside the edge of the fill, centered on
+   the tile, the handle to drag it with. It fades in over the last stretch
+   to full brightness, where there is no edge left to see, and ends up
+   halfway across the padding past the words. Another one waits at the
+   start while it is empty, to show where to pull it from. */
+.dio-fill-grip {
+  --_inset: calc(var(--_padding) / 2 - 2px);
+  position: absolute;
+  top: 50%;
+  left: calc(var(--_edge) - var(--_inset) - 4px);
+  width: 4px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--_text-active);
+  transform: translateY(-50%);
+  pointer-events: none;
+  transition:
+    left 250ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dio-fill[data-vertical] .dio-fill-grip {
+  left: 50%;
+  width: 28px;
+  height: 4px;
+  transform: translateX(-50%);
+  transition:
+    top 250ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dio-fill[data-from='top'] .dio-fill-grip {
+  top: calc(var(--_edge) - var(--_inset) - 4px);
+}
+
+.dio-fill[data-from='bottom'] .dio-fill-grip {
+  top: calc(100% - var(--_edge) + var(--_inset));
+}
+
+.dio-fill .dio-fill-grip[data-start] {
+  background: var(--_text-inactive);
+}
+
+.dio-fill[data-from='left'] .dio-fill-grip[data-start] {
+  left: var(--_inset);
+}
+
+.dio-fill[data-from='top'] .dio-fill-grip[data-start] {
+  top: var(--_inset);
+}
+
+.dio-fill[data-from='bottom'] .dio-fill-grip[data-start] {
+  top: calc(100% - var(--_inset) - 4px);
+}
+
+/* A short tick at each stop a fill with few of them snaps to, hanging
+   from the very top edge with its free end rounded, faint over the empty
+   part and over the filled one alike. One that fills up or down has them
+   on its left edge instead, pointing in. */
+.dio-fill-ticks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--_radius);
+  pointer-events: none;
+}
+
+.dio-fill-tick {
+  position: absolute;
+  top: 0;
+  left: var(--_at);
+  width: 3px;
+  height: 9px;
+  border-radius: 0 0 1.5px 1.5px;
+  background: var(--_text-inactive);
+  opacity: 0.25;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.dio-fill-lit .dio-fill-tick {
+  background: var(--_text-active);
+}
+
+.dio-fill[data-vertical] .dio-fill-tick {
+  left: 0;
+  width: 9px;
+  height: 3px;
+  border-radius: 0 1.5px 1.5px 0;
+  transform: translateY(-50%);
+}
+
+.dio-fill[data-from='top'] .dio-fill-tick {
+  top: var(--_at);
+}
+
+.dio-fill[data-from='bottom'] .dio-fill-tick {
+  top: calc(100% - var(--_at));
+}
+
+.dio-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dio-text {
+  min-width: 0;
+}
+
+/* The name and the state in the bottom left corner, with buttons across
+   from them, like a thermostat's modes, level with the state line. */
+.dio-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dio-bottom > .dio-text {
+  flex: 1 1 auto;
+}
+
+.dio-aside {
+  display: flex;
+  flex: none;
+  margin: 0 -4px -4px 0;
+}
+
+.dio-icon {
+  display: block;
+  flex: none;
+  width: var(--_icon-size);
+  height: var(--_icon-size);
+  --mdc-icon-size: var(--_icon-size);
+  transition: color var(--_duration) ease;
+}
+
+/* The icon drawn, and while it changes the one before it on top, the two
+   fading across each other. A button fading back to off swaps its icon as
+   slowly as the rest of the tile. */
+.dio-icon {
+  position: relative;
+  --_icon-fade: 300ms;
+}
+
+.dio-tile[data-fading] .dio-icon {
+  --_icon-fade: var(--_duration);
+}
+
+.dio-icon-layer {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dio-icon-layer > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dio-icon-layer[data-out] {
+  position: absolute;
+  inset: 0;
+  animation: dio-icon-out var(--_icon-fade) ease forwards;
+}
+
+.dio-icon-layer[data-in] {
+  animation: dio-icon-in var(--_icon-fade) ease;
+}
+
+@keyframes dio-icon-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dio-icon-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A picture in place of the icon, square, with its corners rounded to sit
+   evenly inside the tile's. */
+.dio-picture {
+  display: block;
+  flex: none;
+  width: var(--_picture-size, 72px);
+  aspect-ratio: 1;
+  border-radius: max(4px, calc(var(--_radius) - var(--_padding)));
+  object-fit: cover;
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 22%, transparent);
+  user-select: none;
+}
+
+.dio-tile[data-active] .dio-icon {
+  color: color-mix(in oklab, var(--_tile-accent, var(--_accent)), var(--_ink-to) var(--_deep));
+}
+
+.dio-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--_name-size);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.dio-state {
+  overflow: hidden;
+  font-size: var(--_state-size);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: var(--_secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A feature across from the icon, in the space the icon leaves. Buttons
+   and menus sit in the corner like the controls of a wide tile, as wide as
+   they need on a wide tile and as wide as there is room on a small one.
+   Bars take the whole space. */
+.dio-beside {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+  margin: -4px -4px 0 12px;
+}
+.dio-beside:has(.dio-slim) {
+  margin: -2px 0 0 12px;
+}
+.dio-beside .dio-feature {
+  justify-content: flex-end;
+}
+.dio-beside .dio-pill,
+.dio-beside .dio-slider {
+  height: 40px;
+}
+.dio-beside .dio-feature > .dio-group {
+  flex: 0 1 auto;
+}
+.dio-beside .dio-feature .dio-group > .dio-control {
+  flex: 0 1 40px;
+  width: 40px;
+  max-width: 40px;
+  height: 40px;
+}
+.dio-beside .dio-feature .dio-group > .dio-pill {
+  height: 36px;
+}
+.dio-tile[data-wide] .dio-beside .dio-feature > :is(.dio-pill, .dio-feature-date) {
+  flex: 0 1 auto;
+}
+/* A pill that does something, like Press, is as wide as its words on a
+   small tile too, at the right. */
+.dio-beside .dio-feature > .dio-pill-action {
+  flex: 0 1 auto;
+}
+.dio-tile[data-wide] .dio-beside .dio-feature .dio-group > .dio-control {
+  flex: none;
+  width: 44px;
+  max-width: none;
+  height: 44px;
+}
+.dio-tile[data-wide] .dio-beside .dio-feature .dio-group > .dio-pill {
+  flex: none;
+  padding: 0 12px;
+}
+.dio-tile[data-wide] .dio-beside .dio-pill-menu {
+  max-width: 260px;
+}
+/* Smaller colors, and on a small tile only as many as fit. */
+.dio-beside .dio-swatches {
+  flex: none;
+  gap: 8px;
+  padding: 4px 0;
+}
+.dio-beside .dio-swatch {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+/* A small tile drops what the space beside the icon has no room for: the
+   word on a pill that stays pressed, the colors past the fourth, and some of the room
+   around a range of temperatures. */
+@container (max-width: 220px) {
+  .dio-beside .dio-swatch:nth-child(n + 5) {
+    display: none;
+  }
+
+  .dio-beside .dio-feature > .dio-pill-toggle {
+    flex: none;
+  }
+
+  .dio-beside .dio-pill-toggle .dio-pill-label {
+    display: none;
+  }
+
+  .dio-beside .dio-stepper-end {
+    width: auto;
+    padding: 0 5px;
+    font-size: 15px;
+  }
+}
+
+/* A slim bar of a scale with round ends, and a round handle where the
+   value is. */
+.dio-slim {
+  position: relative;
+  flex: 1 1 auto;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--_track);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  cursor: ew-resize;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.dio-slim:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.dio-slim-handle {
+  position: absolute;
+  top: 3px;
+  left: calc(3px + var(--_share) * (100% - 32px));
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  /* Tinted by the light's color like the tile around it. */
+  background: linear-gradient(color-mix(in srgb, var(--_tile-glow, transparent) 25%, transparent) 0 0), var(--_handle);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  transition: left 120ms ease-out;
+}
+
+.dio-slim-dragging .dio-slim-handle {
+  transition: none;
+}
+.dio-slim-idle .dio-slim-handle {
+  opacity: 0.4;
+}
+
+/* Round buttons inside a tile, like a cover's or a vacuum's. */
+.dio-controls {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin: -4px -4px 0 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* On a small tile the buttons are a little smaller and keep some room
+   from the icon. */
+.dio-tile:not([data-wide]) .dio-controls {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 8px;
+}
+.dio-tile:not([data-wide]) .dio-controls > * {
+  flex: none;
+}
+.dio-tile:not([data-wide]) .dio-controls > .dio-control {
+  width: 40px;
+  height: 40px;
+}
+/* With no room for both, the icon makes way for the buttons, which then
+   take the whole top, and with no room for them there either they shrink
+   until they fit. The icon is kept in the layout, so the room it leaves is
+   still measured the same. */
+.dio-tile .dio-controls[data-crowded] > .dio-control {
+  width: var(--_control);
+  height: var(--_control);
+}
+.dio-tile .dio-controls[data-crowded] > .dio-control > .dio-icon {
+  width: min(20px, calc(var(--_control) - 8px));
+  height: min(20px, calc(var(--_control) - 8px));
+  --mdc-icon-size: min(20px, calc(var(--_control) - 8px));
+}
+.dio-top[data-bare] > :first-child {
+  position: absolute;
+  visibility: hidden;
+}
+.dio-top[data-bare] > .dio-controls {
+  margin-left: auto;
+}
+
+/* A group left with no button in it, like Now Playing while nothing
+   plays, shows nothing at all. */
+.dio-controls:not(:has(button, input, select)) {
+  display: none;
+}
+
+.dio-control {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--_duration) ease,
+    box-shadow var(--_duration) ease,
+    transform var(--_duration) ease;
+}
+
+.dio-tile .dio-control > .dio-icon {
+  width: 20px;
+  height: 20px;
+  --mdc-icon-size: 20px;
+  color: inherit;
+}
+
+/* Under the pointer and the finger, a button takes a wash of the color of
+   its words over whatever fill it has, so a chosen, colored or filled one
+   keeps its look and its contrast. */
+@media (hover: hover) and (pointer: fine) {
+  .dio-control:hover,
+  .dio-control[data-hover] {
+    box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 14%, transparent);
+  }
+}
+
+.dio-control:active,
+.dio-control[data-active] {
+  transform: scale(0.88);
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dio-control:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* The minus and plus of a thermostat, with what it aims for between them. */
+/* As wide as the widest temperature it shows, like 99.5°, so it
+   keeps its width as the number changes. */
+.dio-stepper-value,
+.dio-stepper-end {
+  --_digits: 3.4em;
+  flex: none;
+  align-self: center;
+  width: var(--_digits);
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-stepper-range {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Either end of a range, the one the buttons move filled in. */
+.dio-stepper-end {
+  width: calc(var(--_digits) + 20px);
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  opacity: var(--_secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--_duration) ease,
+    opacity var(--_duration) ease;
+}
+
+.dio-stepper-end[aria-pressed='true'] {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  opacity: 1;
+}
+
+.dio-stepper-end:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* The row along the bottom of a wide thermostat, with its modes. */
+.dio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 -4px -4px;
+}
+
+.dio-modes {
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.dio-footer .dio-control {
+  width: 40px;
+  height: 40px;
+}
+
+/* The mode it runs in, filled and in the color of that mode. */
+.dio-mode[aria-checked='true'] {
+  color: color-mix(in oklab, var(--_mode-color, currentColor), var(--_ink-to) var(--_deep));
+  background: color-mix(in srgb, var(--_mode-color, currentColor) 20%, transparent);
+}
+
+.dio-title {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  min-height: 40px;
+  padding: 4px 4px 2px;
+  box-sizing: border-box;
+  color: var(--dio-title-color, var(--fp-title-color, var(--primary-text-color, #fff)));
+  font-family: var(--_font-title);
+  font-size: var(--_title-size);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  opacity: var(--_title-opacity);
+}
+
+/* The option menu of the select tile, in the top layer over the dashboard. */
+.dio-menu {
+  position: fixed;
+  inset: auto;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 32px));
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 18px;
+  background: var(--dio-menu-bg, var(--fp-menu-bg, rgba(44, 44, 48, 0.82)));
+  color: var(--dio-menu-text, var(--fp-menu-text, #fff));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  font-family: var(--_font-tile);
+  font-optical-sizing: auto;
+  opacity: 0;
+  transform: scale(0.94);
+  transform-origin: var(--_origin, top left);
+  transition:
+    opacity var(--_duration) ease,
+    transform var(--_duration) cubic-bezier(0.2, 0.8, 0.2, 1),
+    overlay var(--_duration) allow-discrete,
+    display var(--_duration) allow-discrete;
+}
+
+.dio-menu:popover-open {
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transform: none;
+}
+
+/* The options scroll inside the menu, so the menu's own glass stays put
+   while they fade out at its edges. */
+.dio-menu-list {
+  --_fade: 10px;
+  min-height: 0;
+  padding: var(--_fade) 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@starting-style {
+  .dio-menu:popover-open {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+:host([data-light]) .dio-menu {
+  background: var(--dio-menu-bg, var(--fp-menu-bg, rgba(250, 250, 252, 0.86)));
+  color: var(--dio-menu-text, var(--fp-menu-text, #1c1c1e));
+}
+
+.dio-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dio-option > .dio-check {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dio-option:hover {
+    box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 10%, transparent);
+  }
+}
+
+.dio-option:focus-visible {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.dio-camera {
+  padding: 0;
+  min-height: 0;
+  background: #000;
+}
+
+.dio-camera-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dio-camera-overlay {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 28px var(--_padding) var(--_padding);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), transparent);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* The weather tile, its background the sky and its type white on it. */
+.dio-weather {
+  min-height: 0;
+  gap: 6px;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.dio-weather > * {
+  position: relative;
+}
+
+.dio-weather-now {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dio-weather .dio-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dio-weather-temp {
+  font-size: 50px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-weather-sky {
+  display: flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  text-align: right;
+}
+
+.dio-weather-condition {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-weather-range {
+  opacity: 0.7;
+}
+
+.dio-weather-icon {
+  display: inline-flex;
+  color: #fff;
+}
+
+.dio-weather-sky .dio-icon {
+  width: 44px;
+  height: 44px;
+  --mdc-icon-size: 44px;
+}
+
+.dio-weather-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.dio-weather-step {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-weather-step .dio-icon {
+  width: 22px;
+  height: 22px;
+  --mdc-icon-size: 22px;
+}
+
+.dio-weather-when {
+  font-size: var(--_state-size);
+  font-weight: 600;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.dio-weather-step-temp {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* Small, two rows: the temperature under the name, and the sky, the
+   high and the low beside them on the right. */
+.dio-weather-small {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.dio-weather-small .dio-text {
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.dio-weather-small .dio-weather-temp {
+  font-size: 44px;
+}
+
+.dio-weather-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+
+.dio-weather-foot .dio-icon {
+  width: 24px;
+  height: 24px;
+  --mdc-icon-size: 24px;
+}
+
+.dio-weather-foot .dio-weather-icon {
+  margin-bottom: 2px;
+}
+
+/* Half as wide, the sky's icon and its word stand together at the top,
+   and the high and the low at the foot. */
+.dio-weather-small .dio-weather-foot {
+  justify-content: flex-start;
+}
+
+.dio-weather-small .dio-weather-foot .dio-icon {
+  width: 32px;
+  height: 32px;
+  --mdc-icon-size: 32px;
+}
+
+.dio-weather-small .dio-weather-range {
+  margin-top: auto;
+}
+
+.dio-weather-small .dio-weather-condition {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Large, the days under the hours, apart from them by a faint line. */
+.dio-weather-large {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.dio-weather-days {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-weather-day {
+  display: grid;
+  grid-template-columns: 3.4em 28px 2.4em minmax(0, 1fr) 2.4em;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dio-weather-day .dio-icon {
+  width: 22px;
+  height: 22px;
+  --mdc-icon-size: 22px;
+}
+
+.dio-weather-day-name {
+  white-space: nowrap;
+}
+
+.dio-weather-low {
+  text-align: right;
+  opacity: 0.6;
+}
+
+.dio-weather-bar {
+  position: relative;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.dio-weather-bar > span {
+  position: absolute;
+  inset-block: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #64d2ff, #ffd60a 60%, #ff9f0a);
+}
+
+/* The temperature now, on today's bar. */
+.dio-weather-bar > i {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+  transform: translate(-50%, -50%);
+}
+
+/* A feature along the bottom of a tile, at any size: a bar, a menu, a
+   switch or a set of buttons, the whole width of the tile. */
+.dio-feature {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 6px;
+  container-type: inline-size;
+}
+
+.dio-feature > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Round buttons side by side in one frosted pill, spread out to fill it. */
+.dio-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.dio-feature .dio-group > .dio-control {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: 64px;
+  height: 38px;
+}
+
+.dio-feature .dio-group:has(> .dio-pill) {
+  gap: 3px;
+}
+
+.dio-group > .dio-pill {
+  flex: 1 1 0;
+  height: 38px;
+  padding: 0 6px;
+  background: transparent;
+}
+
+/* Pills with a word and no icon, like 25% or 50%, a size smaller once
+   there are five of them in a small tile, so each fits whole. */
+@container (max-width: 260px) {
+  .dio-group > .dio-pill {
+    font-size: 13px;
+  }
+
+  .dio-group > .dio-pill:has(> .dio-icon) .dio-pill-label {
+    display: none;
+  }
+}
+
+/* A slider: a thick rounded bar that fills from the left as far as its
+   value, the value written inside it. */
+.dio-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  cursor: ew-resize;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: transform var(--_duration) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dio-slider-dragging {
+  transform: scaleY(1.06);
+}
+
+.dio-slider:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.dio-slider-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--_share) * 100%);
+  background: var(--_fill, var(--_tile-accent, var(--_accent)));
+  transition: width 120ms ease-out;
+}
+
+.dio-slider-dragging .dio-slider-fill {
+  transition: none;
+}
+
+.dio-slider-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.dio-slider-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dio-tile .dio-slider-label > .dio-icon {
+  width: 20px;
+  height: 20px;
+  --mdc-icon-size: 20px;
+  color: inherit;
+}
+
+/* The words again in another color, cut to the part of the bar that is
+   filled, so they read over a fill as light or as dark as they are. */
+.dio-slider-ink {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 calc((1 - var(--_share)) * 100%) 0 0);
+  transition: clip-path 120ms ease-out;
+}
+
+.dio-slider-dragging .dio-slider-ink {
+  transition: none;
+}
+
+/* A bar that is a scale of its own, like a rainbow, shows a knob where its
+   value is, its words in white over the colors. */
+.dio-slider-scale {
+  background: var(--_track);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.dio-slider-knob {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: calc(5px + var(--_share) * (100% - 18px));
+  width: 8px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: left 120ms ease-out;
+}
+
+.dio-slider-dragging .dio-slider-knob {
+  transition: none;
+}
+
+/* A pill with words, for a menu, a switch or an action. */
+.dio-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--_duration) ease,
+    box-shadow var(--_duration) ease,
+    color var(--_duration) ease,
+    transform var(--_duration) ease;
+}
+
+.dio-tile .dio-pill > .dio-icon {
+  width: 20px;
+  height: 20px;
+  --mdc-icon-size: 20px;
+  flex: none;
+  color: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dio-pill:not(:disabled):hover {
+    box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 7%, transparent);
+  }
+}
+
+.dio-pill:not(:disabled):active {
+  transform: scale(0.96);
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.dio-pill:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.dio-pill:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.dio-pill-label,
+.dio-pill-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A menu names what it picks in a dimmer weight, then the choice. */
+.dio-pill-menu {
+  justify-content: flex-start;
+}
+
+.dio-pill-menu .dio-pill-label {
+  flex: none;
+  font-weight: 500;
+  opacity: var(--_secondary);
+}
+
+.dio-pill-menu .dio-pill-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.dio-tile .dio-pill > .dio-pill-caret {
+  width: 14px;
+  height: 14px;
+  opacity: var(--_secondary);
+}
+
+/* A narrow tile has room for the choice only, or for what the menu picks
+   while nothing is chosen, like a fan running at a speed of its own. */
+@container (max-width: 220px) {
+  .dio-pill-menu:not([data-empty]) .dio-pill-label {
+    display: none;
+  }
+
+  .dio-pill-menu[data-empty] .dio-pill-label {
+    flex: 1 1 auto;
+    text-align: left;
+  }
+}
+
+/* A pill that does what a button does lights up the same way. */
+.dio-pill-action[data-flash='lit'] {
+  background-color: var(--_bg-active);
+  color: var(--_text-active);
+}
+
+.dio-pill-action[data-flash='fading'] {
+  --_duration: 1000ms;
+}
+
+/* A pill that stays pressed while what it says is on, filled in the color
+   of its words, with the words in the color of the tile. */
+.dio-pill-toggle[aria-pressed='true'] {
+  background: currentColor;
+}
+
+.dio-tile .dio-pill-toggle[aria-pressed='true'] > * {
+  color: var(--_text-active);
+}
+
+.dio-tile[data-active] .dio-pill-toggle[aria-pressed='true'] > * {
+  color: var(--_text-inactive);
+}
+
+/* Pressed, a wash of its own color would not show, so under the pointer
+   and the finger it lets a little of the tile through instead, little
+   enough for the words to stay readable. */
+@media (hover: hover) and (pointer: fine) {
+  .dio-pill-toggle[aria-pressed='true']:not(:disabled):hover {
+    background: color-mix(in srgb, currentColor 80%, transparent);
+    box-shadow: none;
+  }
+}
+
+.dio-pill-toggle[aria-pressed='true']:not(:disabled):active {
+  background: color-mix(in srgb, currentColor 70%, transparent);
+  box-shadow: none;
+}
+
+/* One of a set, like the position of a lock, filled while it is the one. */
+.dio-pill[aria-checked='true'] {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dio-group > .dio-pill[aria-checked='true'] {
+  background: var(--_bg-chosen, color-mix(in srgb, currentColor 18%, transparent));
+}
+
+/* The action a sheet is for, like Disarm, in the accent. */
+.dio-pill-primary:not(:disabled) {
+  background: color-mix(in oklab, var(--_accent), black 15%);
+  color: #fff;
+}
+
+/* A stepper fills its pill: minus on the left, plus on the right. */
+.dio-stepper > .dio-stepper-value,
+.dio-feature .dio-group > .dio-stepper-value,
+.dio-feature .dio-group > .dio-stepper-range {
+  flex: 1 1 auto;
+  width: auto;
+  justify-content: center;
+}
+
+/* A few colors a press away. */
+.dio-swatches {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px;
+}
+
+.dio-swatch {
+  flex: 0 1 38px;
+  aspect-ratio: 1;
+  min-width: 0;
+  max-height: 38px;
+  border: none;
+  border-radius: 999px;
+  background: var(--_swatch);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+  cursor: pointer;
+  transition: transform var(--_duration) ease;
+}
+
+.dio-swatch:active {
+  transform: scale(0.88);
+}
+
+.dio-swatch:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* The line of a reading's last day along the bottom of a tile. */
+.dio-sparkline {
+  display: block;
+  width: 100%;
+  height: 44px;
+  color: color-mix(in oklab, var(--_tile-accent, var(--_accent)), var(--_ink-to) var(--_deep));
+  overflow: visible;
+}
+
+.dio-feature-date {
+  position: relative;
+  display: flex;
+}
+
+.dio-feature-date > .dio-pill {
+  flex: 1 1 auto;
+}
+
+/* The native picker opens from a field no one sees, under its pill. */
+.dio-hidden-input {
+  position: absolute;
+  inset: auto 0 0;
+  width: 100%;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A sheet in the middle of the screen, over the dashboard, like the keypad
+   an alarm asks for its code with. */
+.dio-sheet {
+  position: fixed;
+  inset: 0;
+  width: min(340px, calc(100vw - 32px));
+  height: fit-content;
+  margin: auto;
+  padding: 22px 20px 20px;
+  border: none;
+  border-radius: 28px;
+  background: var(--dio-menu-bg, var(--fp-menu-bg, rgba(44, 44, 48, 0.86)));
+  color: var(--dio-menu-text, var(--fp-menu-text, #fff));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  font-family: var(--_font-tile);
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity var(--_duration) ease,
+    transform var(--_duration) cubic-bezier(0.2, 0.8, 0.2, 1),
+    overlay var(--_duration) allow-discrete,
+    display var(--_duration) allow-discrete;
+}
+
+.dio-sheet:popover-open {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .dio-sheet:popover-open {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+.dio-sheet::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+:host([data-light]) .dio-sheet {
+  background: var(--dio-menu-bg, var(--fp-menu-bg, rgba(250, 250, 252, 0.9)));
+  color: var(--dio-menu-text, var(--fp-menu-text, #1c1c1e));
+}
+
+.dio-sheet-title {
+  margin-bottom: 4px;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* The keypad: the code as dots, round keys three across, and the action. */
+.dio-keypad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.dio-keypad-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 28px;
+}
+
+.dio-keypad-hint {
+  font-size: 15px;
+  font-weight: 500;
+  opacity: var(--_secondary);
+}
+
+.dio-keypad-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.dio-keypad-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 14px 22px;
+  justify-content: center;
+}
+
+.dio-key {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 30px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 120ms ease;
+}
+
+.dio-key:active {
+  background: color-mix(in srgb, currentColor 32%, transparent);
+}
+
+.dio-key:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.dio-key-plain {
+  background: transparent;
+}
+
+.dio-key:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.dio-key > .dio-icon {
+  width: 26px;
+  height: 26px;
+  --mdc-icon-size: 26px;
+}
+
+.dio-keypad-field {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 17px;
+}
+
+.dio-keypad-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.dio-keypad-actions > .dio-pill {
+  flex: 1 1 0;
+}
+
+/* A card bigger than a tile, like the dial or the calendar: a wide tile
+   as tall as what it holds, the icon in the top left, its buttons in the
+   top right on one round, the name and the state in the bottom left and
+   what it shows in the bottom right. */
+.dio-card {
+  height: 100%;
+}
+
+.dio-card > .dio-tile {
+  height: auto;
+  min-height: 100%;
+}
+
+.dio-card .dio-controls > .dio-group {
+  padding: 0;
+  background: none;
+}
+
+.dio-card .dio-aside {
+  margin: 0;
+}
+
+/* The dial card keeps to its rows, and its ring takes the height under
+   the icon and the modes, up to its full size. */
+.dio-big-dial > .dio-tile {
+  height: 100%;
+}
+
+.dio-big-dial .dio-bottom {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+}
+
+.dio-big-dial .dio-dial {
+  --_ring: min(224px, 100cqh + 26px);
+}
+
+/* With nothing in the top right corner, as for a light, the icon floats
+   in its own corner and the ring takes the whole height beside it. */
+.dio-big-dial > .dio-tile:not(:has(> .dio-top > .dio-controls)) > .dio-top {
+  position: absolute;
+  top: var(--_padding);
+  left: var(--_padding);
+}
+
+/* Beside a dial, the name and the state are never cut short. Where they
+   run longer than the room it leaves them, they go on over it, in front,
+   and let a drag through to what is under them. */
+.dio-big-dial .dio-bottom > .dio-text {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.dio-big-dial .dio-bottom :is(.dio-name, .dio-state) {
+  display: block;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+/* A card of a set height, like the calendar or the graph, gives what it
+   shows all the height under the icon, and as much of the width as it
+   can leave the name. */
+.dio-card:is(.dio-calendar, .dio-graph, .dio-todo) .dio-bottom {
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.dio-card:is(.dio-calendar, .dio-graph, .dio-todo) .dio-bottom > .dio-text {
+  flex: 1 1 30%;
+  align-self: flex-end;
+}
+
+.dio-card:is(.dio-calendar, .dio-graph, .dio-todo) .dio-aside {
+  flex: 0 1 62%;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The calendar's agenda and the to-do list take the whole width instead,
+   under the icon, and end just over the name. */
+.dio-card:is(.dio-calendar, .dio-todo) .dio-bottom {
+  flex-direction: column-reverse;
+  gap: 2px;
+  margin-top: 12px;
+}
+
+:is(.dio-calendar .dio-agenda, .dio-todo-body) {
+  --_fade: 14px;
+  margin-top: calc(-1 * var(--_fade));
+  padding-top: var(--_fade);
+  padding-bottom: var(--_fade);
+}
+
+/* An empty to-do list takes no room, and its name tucks in under the
+   buttons' row, so the card is two rows tall like a tile. */
+.dio-todo-body[data-empty] {
+  display: none;
+}
+
+.dio-card.dio-todo .dio-bottom:has(> .dio-aside > .dio-todo-body[data-empty]) {
+  margin-top: -8px;
+}
+
+.dio-card:is(.dio-calendar, .dio-todo) .dio-bottom > .dio-text {
+  flex: none;
+  align-self: stretch;
+}
+
+.dio-card:is(.dio-calendar, .dio-todo) .dio-aside {
+  flex: 1;
+}
+
+/* How far back the graph goes, plain in the top right. */
+.dio-graph .dio-controls {
+  margin: 0;
+  padding: 0;
+  background: none;
+}
+
+.dio-graph-range {
+  font-size: var(--_state-size);
+  font-weight: 600;
+  opacity: var(--_secondary);
+}
+
+/* A mode picked to wait for the code, its fill pulsing until it is sent. */
+.dio-mode-picked {
+  animation: dio-waiting 1.4s ease-in-out infinite;
+}
+
+@keyframes dio-waiting {
+  50% {
+    background: color-mix(in srgb, var(--_mode-color, currentColor) 8%, transparent);
+  }
+}
+
+/* A button that cannot be pressed for now, like the modes of an armed alarm. */
+.dio-control:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* A keypad on a tile: smaller keys, packed to the right. */
+.dio-keypad-compact {
+  gap: 10px;
+  width: auto;
+}
+
+.dio-keypad-compact .dio-keypad-dots {
+  height: 20px;
+  gap: 10px;
+}
+
+.dio-keypad-compact .dio-keypad-hint {
+  font-size: var(--_state-size);
+}
+
+.dio-keypad-compact .dio-keypad-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.dio-keypad-compact .dio-keypad-keys {
+  grid-template-columns: repeat(3, 52px);
+  gap: 8px 12px;
+}
+
+.dio-keypad-compact .dio-key {
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+}
+
+.dio-keypad-compact .dio-key > .dio-icon {
+  width: 22px;
+  height: 22px;
+  --mdc-icon-size: 22px;
+}
+
+.dio-keypad-compact .dio-keypad-field {
+  width: 200px;
+}
+
+/* The code large in the middle of the left half, over the name. */
+.dio-alarm .dio-keypad-dots {
+  position: absolute;
+  top: 50%;
+  left: var(--_padding);
+  height: auto;
+  gap: 14px;
+  transform: translateY(-50%);
+}
+
+.dio-alarm .dio-keypad-dot {
+  width: 16px;
+  height: 16px;
+}
+
+.dio-alarm .dio-keypad-compact .dio-keypad-hint {
+  max-width: 140px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* The alarm card keeps to its five rows, its keys a little closer
+   together to fit in them. */
+.dio-alarm > .dio-tile {
+  height: 100%;
+}
+
+.dio-alarm .dio-keypad-compact .dio-keypad-keys {
+  grid-template-columns: repeat(3, 50px);
+  gap: 7px 12px;
+}
+
+.dio-alarm .dio-keypad-compact .dio-key {
+  width: 50px;
+  height: 50px;
+}
+
+/* The key that sends the code, in the color of what it does once there is
+   a code to send, faint in it before. */
+.dio-key-go {
+  color: var(--_go-color, inherit);
+}
+
+.dio-key-go:not(:disabled) {
+  background: color-mix(in oklab, var(--_go-color, var(--_tile-accent, var(--_accent))), black 15%);
+  color: #fff;
+}
+
+/* White on its fill, even on a lit tile whose icons take its color. */
+.dio-tile .dio-key-go:not(:disabled) > .dio-icon {
+  color: inherit;
+}
+
+/* The remote: a round pad of arrows around OK, and a pill for the
+   volume. Each arrow is a quarter of the
+   pad, cut from its center to its edge, and lights up alone when pressed. */
+.dio-pad {
+  position: relative;
+  touch-action: none;
+  width: var(--_pad);
+  height: var(--_pad);
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.dio-remote-key {
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 120ms ease;
+}
+
+.dio-remote-key:active:not(:disabled) {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dio-remote-key:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.dio-remote-key:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.dio-remote-key > .dio-icon {
+  width: 22px;
+  height: 22px;
+  --mdc-icon-size: 22px;
+  color: inherit;
+}
+
+.dio-pad > .dio-remote-key {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+}
+
+/* The arrows are only a hint that the pad is swiped, dimmer than OK. */
+.dio-pad > .dio-remote-key:not(.dio-pad-ok) > .dio-icon {
+  opacity: 0.45;
+}
+
+.dio-pad > .dio-pad-up {
+  clip-path: polygon(0 0, 100% 0, 50% 50%);
+  align-items: start;
+  padding-top: 12px;
+}
+
+.dio-pad > .dio-pad-down {
+  clip-path: polygon(0 100%, 100% 100%, 50% 50%);
+  align-items: end;
+  padding-bottom: 12px;
+}
+
+.dio-pad > .dio-pad-left {
+  clip-path: polygon(0 0, 0 100%, 50% 50%);
+  justify-items: start;
+  padding-left: 12px;
+}
+
+.dio-pad > .dio-pad-right {
+  clip-path: polygon(100% 0, 100% 100%, 50% 50%);
+  justify-items: end;
+  padding-right: 12px;
+}
+
+.dio-pad > .dio-pad-ok {
+  inset: 50% auto auto 50%;
+  width: calc(var(--_pad) * 0.42);
+  height: calc(var(--_pad) * 0.42);
+  transform: translate(-50%, -50%);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* Nothing on the wheel lights up under the finger: a tap anywhere is OK
+   and a swipe steers it. What is sent pulses instead, the whole wheel for
+   OK and a round behind the arrow for each step. */
+.dio-pad > .dio-remote-key:active:not(:disabled) {
+  background: transparent;
+}
+
+.dio-pad-glow {
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dio-pad > .dio-pad-glow {
+  position: absolute;
+  inset: 0;
+}
+
+/* As big as the icon to be laid out, so it sits wherever the icon does,
+   and grown around it. */
+.dio-pad .dio-remote-key > .dio-pad-glow {
+  grid-area: 1 / 1;
+  width: 40px;
+  height: 40px;
+  margin: -9px;
+}
+
+.dio-pad .dio-remote-key > .dio-icon {
+  grid-area: 1 / 1;
+}
+
+/* On a remote, every button answers the finger like its keys do: at once
+   when pointed at or pressed, with the same wash, so back, home, power and
+   the buttons that play feel the same as the volume. */
+.dio-remote .dio-control {
+  transition: background-color 120ms ease;
+}
+
+.dio-remote .dio-control:active:not(:disabled) {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+/* Four rows tall and the whole width. Back and home in the top right, the
+   pad under them on the right with the volume standing on its left,
+   centered on it, plus on top, and the icon and the name on the left. */
+.dio-remote {
+  container-type: inline-size;
+}
+
+.dio-remote > .dio-tile {
+  --_pad: 154px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto 1fr var(--_pad);
+  gap: 8px;
+}
+
+.dio-remote :is(.dio-top, .dio-bottom, .dio-aside) {
+  display: contents;
+}
+
+.dio-remote .dio-top > .dio-icon {
+  grid-area: 1 / 1;
+}
+
+/* Only as wide as its keys, so without power it is back and home alone. */
+.dio-remote .dio-controls {
+  grid-area: 1 / 3;
+  align-self: start;
+  justify-self: end;
+}
+
+.dio-remote .dio-controls.dio-volume {
+  grid-area: 3 / 2;
+  flex-direction: column-reverse;
+  align-self: center;
+  /* As far from the pad as the pad is from back and home above it. */
+  margin: 0 8px 0 0;
+}
+
+/* The name and the state are never cut short: they run over the volume
+   and the pad when there is no room, drawn above them. */
+.dio-remote .dio-text {
+  grid-area: 3 / 1;
+  align-self: end;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.dio-remote .dio-text :is(.dio-name, .dio-state) {
+  display: block;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+.dio-remote .dio-pad {
+  grid-area: 3 / 3;
+  align-self: end;
+  justify-self: end;
+  margin-right: -4px;
+}
+
+/* Half as wide and six rows tall, one thing over the other: back and home
+   in the corner, then the pad, then the volume in a row of its own, and
+   the name at the bottom. */
+@container (max-width: 300px) {
+  .dio-remote > .dio-tile {
+    --_pad: min(154px, 100cqi - 2 * var(--_padding));
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto 1fr auto auto 1fr auto;
+  }
+
+  .dio-remote .dio-pad {
+    grid-area: 3 / 1 / 4 / 3;
+    justify-self: center;
+    margin-right: 0;
+  }
+
+  .dio-remote .dio-controls {
+    grid-area: 1 / 2;
+  }
+
+  .dio-remote .dio-controls.dio-volume {
+    grid-area: 4 / 1 / 5 / 3;
+    flex-direction: row;
+    justify-self: center;
+    margin: 8px 0 0;
+  }
+
+  .dio-remote .dio-text {
+    grid-area: 6 / 1 / 7 / 3;
+    align-self: end;
+  }
+}
+
+.dio-remote .dio-remote-muted {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+/* Power after one press, waiting for the second that turns it off: lit, as
+   the double tap toggle is, with the light running back across it until it
+   stops waiting. */
+.dio-armed {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.dio-armed::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: color-mix(in srgb, currentColor 28%, transparent);
+  content: '';
+  transform-origin: left;
+  animation: dio-armed var(--_armed-ms) linear forwards;
+}
+
+@keyframes dio-armed {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* A link like button, for Clear. */
+.dio-link {
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in oklab, var(--_tile-accent, var(--_accent)), var(--_ink-to) var(--_deep-text));
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dio-link:hover {
+    box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 12%, transparent);
+  }
+}
+
+.dio-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* The calendar: a day by day agenda, each day a small heading over its
+   events, each event a rounded row with a bar in its calendar's color. */
+:is(.dio-agenda, .dio-todo-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(6px - var(--_padding)) 0 -6px;
+  padding: 0 calc(var(--_padding) - 6px) 0 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Whatever scrolls fades out at its top and bottom edges rather than
+   being cut off there, and keeps as much room inside those edges, so its
+   first and last rows show whole once it is scrolled to either end. */
+:is(.dio-agenda, .dio-todo-body, .dio-menu-list) {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--_fade), #000 calc(100% - var(--_fade)), transparent);
+}
+
+/* A thin quiet scrollbar in the text's color with no track. */
+:is(.dio-agenda, .dio-todo-body, .dio-menu-list) {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, currentColor 22%, transparent) transparent;
+}
+
+/* Where the standard colors are not read, a thin rounded thumb of the
+   same color with no track, in the gap the agenda keeps on its right. */
+:is(.dio-agenda, .dio-todo-body, .dio-menu-list)::-webkit-scrollbar {
+  width: 4px;
+}
+
+:is(.dio-agenda, .dio-todo-body, .dio-menu-list)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:is(.dio-agenda, .dio-todo-body, .dio-menu-list)::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dio-agenda-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dio-agenda-day {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: var(--_secondary);
+}
+
+.dio-agenda-day[data-today] {
+  color: color-mix(in oklab, var(--_tile-accent, var(--_accent)), var(--_ink-to) var(--_deep-text));
+  opacity: 1;
+}
+
+.dio-agenda-event {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--_event-bg);
+}
+
+/* Each event is tinted in its calendar's color, a little darker than the
+   card behind it so it never reads lighter than the card. */
+.dio-agenda-event {
+  --_event-bg: color-mix(in srgb, var(--_event, currentColor) 14%, transparent);
+  --_event-now: color-mix(in srgb, var(--_event, currentColor) 34%, transparent);
+}
+
+:host([data-light]) .dio-agenda-event {
+  --_event-bg: color-mix(in srgb, var(--_event, currentColor) 22%, transparent);
+  --_event-now: color-mix(in srgb, var(--_event, currentColor), #000 12%);
+}
+
+/* On a light dashboard the event going on now is its color itself, with
+   white words, the way a tile that is on is dark there. */
+:host([data-light]) .dio-agenda-event[data-now] {
+  color: #fff;
+}
+
+.dio-agenda-event[data-now] {
+  background: var(--_event-now);
+}
+
+/* The events that last all day: just their names, in plain grey round
+   pills over the day's other events. */
+.dio-agenda-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dio-agenda-pill {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dio-agenda-title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dio-agenda-time {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: var(--_secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-agenda-empty,
+.dio-graph-empty {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+  font-size: 15px;
+  font-weight: 500;
+  opacity: var(--_secondary);
+}
+
+/* The to-do list: a field to add to beside the plus, then the rows, each
+   with a round box to tick. A ticked row fades and is struck through. */
+.dio-todo-field {
+  width: 200px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  outline: none;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+}
+
+.dio-todo-field::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+
+.dio-todo-plus.dio-todo-ready {
+  background: var(--_tile-accent, var(--_accent));
+  color: #fff;
+}
+
+.dio-todo-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dio-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.dio-todo-text {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.dio-todo-summary {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.dio-todo-due {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: var(--_secondary);
+}
+
+.dio-todo-item[data-done] .dio-todo-text {
+  text-decoration: line-through;
+  opacity: var(--_secondary);
+}
+
+.dio-todo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: -6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dio-todo-head > span {
+  opacity: var(--_secondary);
+}
+
+.dio-todo-head > .dio-link {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+}
+
+/* A round box to tick, filled in the accent once ticked. */
+.dio-todo-item > .dio-check {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background-color var(--_duration) ease,
+    border-color var(--_duration) ease,
+    transform var(--_duration) ease;
+}
+
+.dio-todo-item > .dio-check[aria-checked='true'] {
+  border-color: var(--_tile-accent, var(--_accent));
+  background: var(--_tile-accent, var(--_accent));
+  color: #1c1c1e;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dio-todo-item > .dio-check:not(:disabled):hover {
+    border-color: var(--_tile-accent, var(--_accent));
+  }
+}
+
+.dio-todo-item > .dio-check:active {
+  transform: scale(0.88);
+}
+
+.dio-todo-item > .dio-check:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.dio-tile .dio-todo-item > .dio-check > .dio-icon {
+  width: 14px;
+  height: 14px;
+  --mdc-icon-size: 14px;
+  color: inherit;
+}
+
+/* The graph: the chart fills the rest of the card, in the accent, with the
+   highest and lowest values up its side and the hours under it. */
+.dio-graph {
+  height: 100%;
+}
+
+.dio-graph-chart {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 72px;
+  color: color-mix(in oklab, var(--_tile-accent, var(--_accent)), var(--_ink-to) var(--_deep));
+}
+
+.dio-graph-chart > svg {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+
+.dio-graph-scale {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.dio-graph-scale > span,
+.dio-graph-axis {
+  color: var(--_text-inactive);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-graph-scale > span {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--_bg-inactive) 80%, transparent);
+  opacity: 0.6;
+}
+
+.dio-graph-axis {
+  display: flex;
+  justify-content: space-between;
+  opacity: var(--_secondary);
+}
+
+.dio-bars {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 8px;
+  min-height: 72px;
+}
+
+.dio-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dio-bar-fill {
+  display: block;
+  border-radius: 6px;
+  background: currentColor;
+  opacity: 0.85;
+  transition: height 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dio-bar:last-child .dio-bar-fill {
+  opacity: 1;
+}
+
+.dio-bar-day {
+  color: var(--_text-inactive);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  opacity: var(--_secondary);
+}
+
+.dio-timeline-chart {
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.dio-timeline {
+  position: relative;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--_text-inactive) 10%, transparent);
+}
+
+.dio-timeline-span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.dio-timeline-span[data-on] {
+  background: currentColor;
+}
+
+.dio-timeline-span[data-off] {
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--_text-inactive) 18%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+/* The gauge: a small ring open at the bottom, across from the name. */
+.dio-gauge-ring {
+  width: 64px;
+  height: 59px;
+  color: color-mix(in oklab, var(--_tile-accent, var(--_accent)), var(--_ink-to) var(--_deep));
+}
+
+.dio-gauge-track,
+.dio-gauge-fill {
+  fill: none;
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+
+.dio-gauge-track {
+  stroke: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.dio-gauge-fill {
+  stroke: currentColor;
+  transition: stroke-dasharray 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* The ring reaches up beside the icon, so the gauge fits in two rows. */
+.dio-gauge .dio-aside {
+  margin-top: -24px;
+}
+
+/* A card of a set height stays that tall. */
+.dio-card:is(.dio-calendar, .dio-graph, .dio-gauge, .dio-map) > .dio-tile {
+  height: 100%;
+}
+
+/* The dial: a big ring to drag, open at the bottom, with what it aims for
+   in its middle and the plus over the minus on its left. The ring reaches
+   down into its open bottom, so it takes the height the buttons left. */
+.dio-dial {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: -26px;
+  color: color-mix(in oklab, var(--_dial, var(--_accent)), var(--_ink-to) var(--_deep));
+}
+
+/* A stretch with a color of its own, like the heat and the cool ends of a
+   range, deepens it the same way the ring's color is. */
+.dio-dial-segment[style*='--_segment'] {
+  color: color-mix(in oklab, var(--_segment), var(--_ink-to) var(--_deep));
+}
+
+.dio-dial-face {
+  display: grid;
+  justify-items: center;
+  align-items: center;
+}
+
+.dio-dial-ring,
+.dio-dial-center {
+  grid-area: 1 / 1;
+}
+
+.dio-dial-ring {
+  width: var(--_ring, 224px);
+  aspect-ratio: 1;
+  overflow: visible;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+}
+
+.dio-dial[data-dragging] .dio-dial-ring {
+  cursor: grabbing;
+}
+
+.dio-dial-track,
+.dio-dial-fill {
+  fill: none;
+  stroke-width: 18;
+  stroke-linecap: round;
+}
+
+.dio-dial-track {
+  stroke: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.dio-dial-fill {
+  stroke: currentColor;
+  transition:
+    stroke-dasharray var(--_duration) ease,
+    stroke-dashoffset var(--_duration) ease,
+    stroke var(--_duration) ease;
+}
+
+.dio-dial[data-dragging] .dio-dial-fill {
+  transition: none;
+}
+
+.dio-dial[data-off] .dio-dial-fill {
+  stroke: color-mix(in srgb, var(--_text-inactive) 40%, transparent);
+}
+
+/* The stretch between where the room is now and where it is heading, paler
+   than the fill, with arrows along it that point at the knob and light up
+   one after another toward it. */
+.dio-dial-toward {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 36%, transparent);
+  stroke-width: 18;
+  stroke-linecap: round;
+}
+
+.dio-dial-arrow {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.25;
+  animation: dio-dial-run 1.4s ease-in-out infinite;
+  animation-delay: calc(var(--_i) * 0.12s);
+}
+
+@keyframes dio-dial-run {
+  30% {
+    opacity: 0.7;
+  }
+  60% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dio-dial-arrow {
+    opacity: 0.55;
+    animation: none;
+  }
+}
+
+.dio-dial[data-dragging] .dio-dial-toward,
+.dio-dial[data-dragging] .dio-dial-arrow {
+  opacity: 0.6;
+  animation: none;
+}
+
+/* Where the room is now, while it is not heading anywhere: a small dot,
+   faint on the track and white on the fill. */
+.dio-dial-mark {
+  fill: color-mix(in srgb, currentColor 55%, transparent);
+  pointer-events: none;
+}
+
+.dio-dial-mark[data-on-fill] {
+  fill: rgb(255 255 255 / 0.85);
+}
+
+.dio-dial-knob {
+  fill: #fff;
+  stroke: color-mix(in srgb, #000 12%, transparent);
+  stroke-width: 1;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+  transition: r var(--_duration) ease;
+}
+
+.dio-dial-ring:focus-visible .dio-dial-knob[data-active],
+.dio-dial[data-dragging] .dio-dial-knob[data-active] {
+  r: 13;
+}
+
+.dio-dial-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.dio-dial-label {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: var(--_secondary);
+}
+
+.dio-dial-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  font-size: calc(var(--_ring, 224px) * 0.214);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A range stacks its two ends, the top one over the bottom one, like the
+   ring they sit in. */
+.dio-dial[data-range] .dio-dial-value {
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 2px;
+}
+
+.dio-dial-value > span {
+  min-width: var(--_digits);
+  text-align: center;
+}
+
+/* The whole degrees right aligned in the room of the widest, with the
+   degree sign over the tenths small beside them. */
+.dio-degrees {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.dio-degrees-whole {
+  min-width: var(--_whole, auto);
+  text-align: right;
+}
+
+.dio-degrees-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin-left: 0.04em;
+  padding-block: 0.06em;
+  font-size: 0.42em;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+.dio-degrees-side > [data-empty] {
+  visibility: hidden;
+}
+
+.dio-dial-end {
+  padding: 2px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  min-width: var(--_digits);
+  font-size: 34px;
+  opacity: 0.6;
+  pointer-events: auto;
+  cursor: pointer;
+  transition:
+    background-color var(--_duration) ease,
+    opacity var(--_duration) ease;
+}
+
+.dio-dial-end[aria-pressed='true'] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 1;
+}
+
+.dio-dial-end:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.dio-dial-now {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: var(--_secondary);
+}
+
+.dio-dial-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.dio-dial-buttons > .dio-control {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* The media control: the cover art, large and blurred only a touch, so
+   it reads almost as sharp as it is, washes the whole card. It reaches past the
+   edges by a little more than the blur, which would fade them otherwise. */
+.dio-media-control[style*='--_art'] > .dio-tile::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  background: var(--_art) center / cover;
+  filter: blur(1.5px) saturate(1.3) brightness(0.7);
+  opacity: 0.85;
+}
+
+/* With no cover art behind it, three soft lights in the colors of the app
+   it plays from, each drifting its own way while it plays and holding
+   still while it is paused. */
+.dio-media-control[style*='--_glow-a'] > .dio-tile::before {
+  content: '';
+  position: absolute;
+  inset: -24px;
+  z-index: -1;
+  background:
+    radial-gradient(closest-side, var(--_glow-a), transparent) 0% 0% / 70% 110% no-repeat,
+    radial-gradient(closest-side, var(--_glow-b), transparent) 100% 30% / 60% 100% no-repeat,
+    radial-gradient(closest-side, var(--_glow-c), transparent) 40% 100% / 75% 90% no-repeat;
+  filter: blur(16px);
+  opacity: 0.6;
+  animation: dio-media-drift 24s ease-in-out infinite alternate;
+}
+
+/* The lights fade into a dark shade of the app's first color rather than
+   into the plain card, so the whole card looks lit, on a light theme as
+   much as on a dark one, and its words are white as over cover art. */
+.dio-media-control[style*='--_glow-a'] > .dio-tile {
+  background: color-mix(in srgb, var(--_glow-a) 36%, #000);
+}
+
+.dio-media-still > .dio-tile::before {
+  animation-play-state: paused;
+}
+
+@keyframes dio-media-drift {
+  0% {
+    background-position:
+      0% 0%,
+      100% 30%,
+      40% 100%;
+  }
+  35% {
+    background-position:
+      70% 30%,
+      20% 90%,
+      100% 50%;
+  }
+  70% {
+    background-position:
+      20% 90%,
+      80% 0%,
+      0% 30%;
+  }
+  100% {
+    background-position:
+      100% 60%,
+      0% 20%,
+      60% 0%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dio-media-control > .dio-tile::before {
+    animation: none;
+  }
+}
+
+/* The logo of the app it plays from, in place of the icon, straight on
+   the card. It is as tall as the tile sets for its shape, and as wide as
+   that makes it. */
+.dio-logo {
+  display: flex;
+  flex: none;
+  align-items: center;
+  max-width: 120px;
+}
+
+.dio-logo > img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left;
+  user-select: none;
+}
+
+:host([data-light]) .dio-logo-dark,
+:host(:not([data-light])) .dio-logo-light {
+  display: none;
+}
+
+/* A logo in a single color, black on a light card and white on a dark one. */
+:host([data-light]) .dio-logo-mono > img {
+  filter: brightness(0);
+}
+
+:host(:not([data-light])) .dio-logo-mono > img,
+:host .dio-media-control:is([style*='--_art'], [style*='--_glow-a']) .dio-logo-mono > img {
+  filter: brightness(0) invert(1);
+}
+
+.dio-media-control > .dio-tile {
+  min-height: max(168px, 100%);
+  isolation: isolate;
+}
+
+.dio-media-control:is([style*='--_art'], [style*='--_glow-a']) > .dio-tile {
+  color: #fff;
+}
+
+/* Two rows tall, or half as wide, with no volume under the buttons, and
+   the cover art in place of the icon only as wide as it is tall, so the
+   buttons have the rest. */
+.dio-media-compact > .dio-tile {
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+}
+
+/* Half as wide, the icon or the art gives its place to the buttons. */
+.dio-media-narrow .dio-top > :not(.dio-controls),
+.dio-media-narrow.dio-media-cover .dio-picture {
+  display: none;
+}
+
+.dio-media-narrow .dio-top {
+  justify-content: flex-end;
+}
+
+/* The title takes one line at most, cut short with an ellipsis. */
+.dio-media-control .dio-name {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dio-media-compact.dio-media-cover > .dio-tile {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+/* The cover art in place of the icon takes all the height the title
+   leaves it, a padding above the title, without making the card any
+   taller than the one with the art behind it. The title stays in the
+   bottom left, the buttons in the top right and what is across from the
+   title in the bottom right. */
+.dio-media-cover > .dio-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 55%);
+  grid-template-rows: auto 1fr auto;
+  gap: 8px 12px;
+}
+
+.dio-media-cover .dio-top,
+.dio-media-cover .dio-bottom {
+  display: contents;
+}
+
+.dio-media-cover .dio-picture {
+  grid-area: 1 / 1 / 3 / 2;
+  width: auto;
+  max-width: 100%;
+  height: 0;
+  min-height: calc(100% - var(--_padding) + 8px);
+}
+
+.dio-media-cover .dio-controls {
+  grid-area: 1 / 2;
+  justify-self: end;
+}
+
+.dio-media-cover .dio-text {
+  grid-area: 3 / 1;
+}
+
+.dio-media-cover .dio-aside {
+  grid-area: 2 / 2 / 4 / 3;
+  align-self: end;
+}
+
+/* The card fills from the left as far into the song as it is, with a
+   faint shade between what is behind it and the words, and a drag sideways
+   anywhere on it moves along the song. */
+.dio-media-seek {
+  height: 100%;
+}
+
+.dio-media-seek[data-seekable] {
+  touch-action: pan-y;
+}
+
+.dio-media-control[style*='--_progress'] > .dio-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(
+    --dio-media-progress,
+    var(--fp-media-progress, color-mix(in srgb, #000 var(--_progress-shade, 20%), transparent))
+  );
+  /* As wide as the song has gone, and clear behind the boxes of buttons
+     and of the volume, so they stay the same glass as the rest. */
+  mask:
+    linear-gradient(#000 0 0) 0 0 / var(--_progress) 100% no-repeat,
+    var(--_holes, linear-gradient(#000 0 0)) 0 0 / 100% 100% no-repeat;
+  mask-composite: intersect;
+  transition: mask-size 1s linear;
+  pointer-events: none;
+}
+
+/* On the light glass with the art small the boxes of buttons and of the
+   volume are a light grey of their own, so the shade goes darker than
+   them to stand apart. */
+:host([data-light]) .dio-media-control:not([style*='--_art'], [style*='--_glow-a']) {
+  --_progress-shade: 24%;
+}
+
+.dio-media-seek[data-dragging] .dio-tile::after {
+  transition: none;
+}
+
+/* A card that was turned on from itself fades from lit into what plays. */
+.dio-media-wake[data-leaving] .dio-fill-lit {
+  animation: dio-media-wake var(--_wake-ms) ease forwards;
+}
+
+@keyframes dio-media-wake {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The media card with the remote: two rows tall while it is off, and four
+   once on, with the remote's pad and volume under what plays, as the remote
+   has them, and its buttons in the top right. */
+.dio-media-seek[data-remote] {
+  --_rows-gap: var(--_gap, var(--row-gap, 8px));
+  height: calc(2 * var(--row-height, 56px) + var(--_rows-gap));
+  transition: height 300ms ease;
+}
+
+.dio-media-seek[data-remote][data-on] {
+  height: calc(4 * var(--row-height, 56px) + 3 * var(--_rows-gap));
+}
+
+.dio-media-seek[data-remote] .dio-media-control > .dio-tile {
+  height: 100%;
+  min-height: 0;
+}
+
+.dio-media-remote .dio-top > :first-child {
+  grid-area: 1 / 1;
+}
+
+.dio-media-remote .dio-top > .dio-controls {
+  grid-area: 1 / 2 / 2 / 4;
+}
+
+.dio-media-remote .dio-controls.dio-volume {
+  gap: 4px;
+  padding: 3px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Grown at once when it is turned on, its buttons come in slowly, and what
+   plays fades in behind them once the player tells it. */
+.dio-media-seek[data-remote][data-on] :is(.dio-pad, .dio-remote-side, .dio-media-buttons, .dio-top > .dio-controls) {
+  animation: dio-media-rise 900ms ease 150ms both;
+}
+
+.dio-media-seek[data-remote] .dio-media-control[style*='--_art'] > .dio-tile::before {
+  animation: dio-media-rise 1400ms ease both;
+}
+
+.dio-media-seek[data-remote] .dio-media-control[style*='--_glow-a'] > .dio-tile::before {
+  animation:
+    dio-media-drift 24s ease-in-out infinite alternate,
+    dio-media-rise 1400ms ease both;
+}
+
+.dio-media-seek[data-remote] .dio-media-still > .dio-tile::before {
+  animation-play-state: paused, running;
+}
+
+@keyframes dio-media-rise {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The buttons that play it over the volume, both across, left of the pad
+   and centered on it. */
+.dio-media-remote .dio-remote-side {
+  grid-area: 3 / 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+  gap: 14px;
+  margin-right: 8px;
+}
+
+.dio-media-remote .dio-remote-side > .dio-controls.dio-volume {
+  flex-direction: row;
+  margin: 0;
+}
+
+/* What plays is cut short with an ellipsis, never run over the pad. */
+.dio-media-remote .dio-text :is(.dio-name, .dio-state) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Too narrow for the name beside the volume, as on a phone: the buttons
+   that play it and the volume stand at the top of the left side, the name
+   and the state under them, and the pad on the right. */
+@container (min-width: 301px) and (max-width: 460px) {
+  .dio-media-remote > .dio-tile {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto 1fr auto auto;
+  }
+
+  .dio-media-remote .dio-top > .dio-controls {
+    grid-area: 1 / 2;
+  }
+
+  .dio-media-remote .dio-remote-side {
+    grid-area: 3 / 1;
+    align-self: start;
+    justify-self: start;
+    margin: 0;
+  }
+
+  .dio-media-remote .dio-text {
+    grid-area: 4 / 1;
+  }
+
+  .dio-media-remote .dio-pad {
+    grid-area: 3 / 2 / 5 / 3;
+  }
+}
+
+/* Narrower still, the buttons on the left and the pad shrink together so
+   the volume never runs under the pad. */
+@container (min-width: 301px) and (max-width: 345px) {
+  .dio-media-remote > .dio-tile {
+    --_pad: min(154px, 100cqi - 2 * var(--_padding) - 142px);
+  }
+
+  .dio-media-remote .dio-remote-side .dio-control {
+    width: 38px;
+    height: 38px;
+  }
+
+  .dio-media-remote .dio-remote-side .dio-controls {
+    gap: 6px;
+  }
+}
+
+/* How far in, on the left of the buttons. */
+.dio-media-control .dio-controls {
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  background: none;
+}
+
+.dio-media-time {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: var(--_secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dio-media-buttons {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* A player that takes none of the buttons that play has no group for them. */
+.dio-media-buttons:empty {
+  display: none;
+}
+
+/* The volume across from the title, with shuffle and repeat to its
+   right. It fills in the card's own text color, white on a dark card and
+   black on a light one, and its words over the fill take the other. */
+.dio-media-control {
+  --_volume-fill: currentColor;
+  --_volume-ink: #000;
+}
+
+:host([data-light]) .dio-media-control:not([style*='--_art'], [style*='--_glow-a']) {
+  --_volume-ink: #fff;
+}
+
+.dio-media-control .dio-aside {
+  flex: 0 1 55%;
+  min-width: max-content;
+}
+
+.dio-media-row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dio-media-row > .dio-feature {
+  flex: 1;
+  min-width: 104px;
+}
+
+.dio-tile .dio-media-small > .dio-icon {
+  opacity: 0.6;
+}
+
+.dio-media-small[aria-checked='true'] {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.dio-tile .dio-media-small[aria-checked='true'] > .dio-icon {
+  opacity: 1;
+}
+
+/* The map: Home Assistant's own, over the whole card edge to edge, with
+   no icon, and the name and the state in the bottom left in white over a
+   dark shade that rises from the bottom, so they read on a light map and
+   a dark one. */
+.dio-map .dio-top {
+  display: none;
+}
+
+.dio-map-box {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: default;
+  --ha-card-border-radius: 0;
+  --ha-card-border-width: 0;
+  --ha-card-background: transparent;
+  --ha-card-box-shadow: none;
+}
+
+.dio-map-box > * {
+  display: block;
+  height: 100%;
+}
+
+.dio-map-full .dio-bottom {
+  margin-top: auto;
+}
+
+.dio-map-full .dio-text {
+  position: relative;
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.dio-map-full .dio-bottom::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 96px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0.35) 55%, transparent);
+  pointer-events: none;
+}
+
+/* Across the top, the map takes all the card above the name and the
+   state, inside the padding, with rounded corners. */
+.dio-map-top .dio-bottom {
+  flex: 1;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.dio-map-top .dio-bottom > .dio-text {
+  flex: none;
+}
+
+.dio-map-top .dio-aside {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+
+.dio-map-top .dio-map-box {
+  border-radius: calc(var(--_radius) - var(--_padding) / 2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dio-tile,
+  .dio-icon,
+  .dio-control,
+  .dio-stepper-end,
+  .dio-menu,
+  .dio-slider,
+  .dio-slider-fill,
+  .dio-slider-knob,
+  .dio-pill,
+  .dio-swatch,
+  .dio-sheet,
+  .dio-key,
+  .dio-remote-key,
+  .dio-todo-item > .dio-check,
+  .dio-bar-fill,
+  .dio-gauge-fill,
+  .dio-dial-fill,
+  .dio-dial-knob,
+  .dio-dial-end {
+    transition: none;
+  }
+
+  .dio-tile[data-pressed],
+  .dio-tile:focus-visible {
+    transform: none;
+  }
+
+  .dio-mode-picked,
+  .dio-icon-layer {
+    animation: none;
+  }
+
+  .dio-icon-layer[data-out] {
+    display: none;
+  }
+
+  /* With no growth to show focus, a ring inside the edge shows it. */
+  .dio-tile:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -2px;
+  }
+}
+
+/* A tile that acts only on a second tap: the part the first tap lights
+   or cuts runs frame by frame, with no easing of its own. A button that
+   ran fades back from the plain tile under it, with the lit copy gone at
+   once. */
+.dio-confirm[data-step='1'] .dio-fill-lit,
+.dio-confirm[data-fading] .dio-fill-lit {
+  transition: none;
+}
+
+/* The lock's green wash waits for the second tap and fades in then. */
+.dio-open-door .dio-tile {
+  --_wash: 0;
+  transition:
+    background-color var(--_duration) ease,
+    color var(--_duration) ease,
+    opacity var(--_duration) ease,
+    transform var(--_duration) cubic-bezier(0.2, 0.8, 0.2, 1),
+    --_wash 600ms ease;
+}
+
+.dio-open-door[data-done] .dio-tile {
+  --_wash: 1;
+}

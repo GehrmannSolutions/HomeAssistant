@@ -1,0 +1,79 @@
+# Publishes a release. Run it by hand from the Actions tab, on main.
+#
+# It raises the version in package.json, moves the Unreleased section of
+# CHANGELOG.md under the new version, builds dist/card.js with that version
+# baked in, commits both files, tags the commit vX.Y.Z and publishes a
+# GitHub release with card.js attached and the changelog section as notes.
+# HACS picks the new release up from there.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to raise
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+      version:
+        description: Exact version to release instead, like 1.2.0. Leave empty to use the bump.
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+# Two releases at once would fight over the same commit and tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Raise the version and promote the changelog
+        id: bump
+        run: pnpm release --bump "${{ inputs.bump }}" --version "${{ inputs.version }}" --notes release-notes.md
+
+      - name: Lint and build card.js
+        run: |
+          pnpm lint
+          pnpm build
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md
+          git commit -m "Release v${{ steps.bump.outputs.version }}"
+          git tag "v${{ steps.bump.outputs.version }}"
+          # The tag is named outright: --follow-tags only carries annotated
+          # tags, and this one is plain, so it stayed behind and the release
+          # had nothing to hang on.
+          git push origin HEAD:main "refs/tags/v${{ steps.bump.outputs.version }}"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.bump.outputs.version }}" dist/card.js \
+            --title "v${{ steps.bump.outputs.version }}" \
+            --notes-file release-notes.md

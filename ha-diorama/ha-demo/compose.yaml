@@ -1,0 +1,20 @@
+# A Home Assistant with the demo flat on a dashboard, run from this folder
+# with `docker compose up -d`. See README.md next to it.
+services:
+  homeassistant:
+    container_name: diorama-demo
+    image: ghcr.io/home-assistant/home-assistant:stable
+    ports:
+      - "8124:8123"
+    volumes:
+      - ./config:/config
+      - ../dist:/config/www/diorama
+      - ../themes:/config/themes
+      - ./seed:/seed:ro
+    # The backyard camera can only be set up from the UI, so on the first
+    # start its config entry is copied in before Home Assistant runs.
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /config/.storage && { [ -e /config/.storage/core.config_entries ] || cp /seed/core.config_entries /config/.storage/; } && exec /init
+    restart: unless-stopped

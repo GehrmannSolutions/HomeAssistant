@@ -1,0 +1,215 @@
+default_config:
+
+# Home Assistant's Demo integration: lights, covers, a vacuum, media players
+# and the rest of the devices the flat is bound to, all made up.
+demo:
+
+# Real looking names for the media players the flat uses.
+homeassistant:
+  customize:
+    media_player.living_room:
+      friendly_name: Living room TV
+    media_player.walkman:
+      friendly_name: Bedroom speaker
+
+# The bedroom projector, playing a show from an app with no cover, so its
+# picture is the app's colors. It is the Demo integration's lounge room
+# player, with the cover it tells of taken away.
+media_player:
+  - platform: universal
+    name: Projector
+    unique_id: bedroom_projector
+    children:
+      - media_player.lounge_room
+    attributes:
+      entity_picture: input_number.projector_screen_position|no_picture
+    commands:
+      turn_on:
+        action: media_player.turn_on
+        target:
+          entity_id: media_player.lounge_room
+      turn_off:
+        action: media_player.turn_off
+        target:
+          entity_id: media_player.lounge_room
+
+# A projector screen that rolls down and up, which the Demo integration does
+# not have, kept as a number behind a cover, so it can be sent to any
+# position as well as all the way down or up. Then two scenes for the side
+# panel's Home section, as switches so they have a state. Projector scene
+# is on while the screen is down: turning it on turns off the bedroom
+# lights, brings the screen down and turns the projector on, and turning
+# it off rolls the screen up and turns the projector off. TV scene is the same around the living room TV, turning off
+# the living room and the kitchen. All lights is a plain switch, not a
+# light, so its tile has no brightness or color: on while any light is,
+# and a tap turns them all off, or all on when every one is off. Cleaning is
+# on while the robot vacuum cleans: it sends the robot out, and turning it
+# off sends the robot back to its dock.
+input_number:
+  projector_screen_position:
+    name: Projector screen position
+    icon: mdi:projector-screen
+    min: 0
+    max: 100
+    step: 1
+
+template:
+  - cover:
+      - name: Projector screen
+        unique_id: projector_screen
+        device_class: shade
+        state: "{{ 'open' if states('input_number.projector_screen_position') | float(0) > 0 else 'closed' }}"
+        position: "{{ states('input_number.projector_screen_position') | int(0) }}"
+        open_cover:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.projector_screen_position
+            data:
+              value: 100
+        close_cover:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.projector_screen_position
+            data:
+              value: 0
+        set_cover_position:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.projector_screen_position
+            data:
+              value: '{{ position }}'
+  - switch:
+      - name: Projector scene
+        unique_id: projector_scene
+        icon: ph:projector-screen
+        state: "{{ is_state('cover.projector_screen', 'open') }}"
+        turn_on:
+          - action: light.turn_off
+            target:
+              entity_id:
+                - light.bed_light
+                - light.office_rgbw_lights
+          - action: cover.open_cover
+            target:
+              entity_id: cover.projector_screen
+          - action: media_player.turn_on
+            target:
+              entity_id: media_player.bedroom_projector
+        turn_off:
+          - action: cover.close_cover
+            target:
+              entity_id: cover.projector_screen
+          - action: media_player.turn_off
+            target:
+              entity_id: media_player.bedroom_projector
+      - name: TV scene
+        unique_id: tv_scene
+        icon: ph:television
+        state: "{{ states('media_player.living_room') not in ['off', 'standby', 'unavailable', 'unknown'] }}"
+        turn_on:
+          - action: light.turn_off
+            target:
+              entity_id:
+                - light.living_room_rgbww_lights
+                - light.entrance_color_white_lights
+                - light.kitchen_lights
+          - action: switch.turn_off
+            target:
+              entity_id: switch.decorative_lights
+          - action: media_player.turn_on
+            target:
+              entity_id: media_player.living_room
+        turn_off:
+          - action: media_player.turn_off
+            target:
+              entity_id: media_player.living_room
+      - name: All lights
+        unique_id: all_lights
+        icon: ph:lightbulb
+        state: "{{ ['light.living_room_rgbww_lights', 'light.entrance_color_white_lights', 'light.kitchen_lights', 'light.office_rgbw_lights', 'light.bed_light', 'light.ceiling_lights'] | select('is_state', 'on') | list | count > 0 }}"
+        turn_on:
+          - action: light.turn_on
+            target:
+              entity_id:
+                - light.living_room_rgbww_lights
+                - light.entrance_color_white_lights
+                - light.kitchen_lights
+                - light.office_rgbw_lights
+                - light.bed_light
+                - light.ceiling_lights
+        turn_off:
+          - action: light.turn_off
+            target:
+              entity_id:
+                - light.living_room_rgbww_lights
+                - light.entrance_color_white_lights
+                - light.kitchen_lights
+                - light.office_rgbw_lights
+                - light.bed_light
+                - light.ceiling_lights
+      - name: Cleaning
+        unique_id: cleaning
+        icon: ph:broom
+        state: "{{ is_state('vacuum.demo_vacuum_0_ground_floor', 'cleaning') }}"
+        turn_on:
+          - action: vacuum.start
+            target:
+              entity_id: vacuum.demo_vacuum_0_ground_floor
+        turn_off:
+          - action: vacuum.return_to_base
+            target:
+              entity_id: vacuum.demo_vacuum_0_ground_floor
+
+# The Demo integration's lights come up red and pink. This sets them to a
+# warm white at full brightness every time Home Assistant starts.
+automation:
+  - id: warm_white_lights_on_start
+    alias: Warm white lights on start
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id:
+            - light.living_room_rgbww_lights
+            - light.office_rgbw_lights
+            - light.entrance_color_white_lights
+            - light.kitchen_lights
+            - light.ceiling_lights
+            - light.bed_light
+        data:
+          brightness: 255
+          color_temp_kelvin: 3200
+  # The living room TV and the projector come up on, which would turn TV
+  # scene on and leave the projector lit, so this turns them off and every
+  # scene starts off.
+  - id: tv_off_on_start
+    alias: TV off on start
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: media_player.turn_off
+        target:
+          entity_id:
+            - media_player.living_room
+            - media_player.lounge_room
+
+# The Diorama Glass theme from the repo's themes folder.
+frontend:
+  themes: !include_dir_merge_named themes
+
+# The card from the repo's dist folder, and the dashboard with the demo flat.
+lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /local/diorama/card.js
+      type: module
+  dashboards:
+    diorama-demo:
+      mode: yaml
+      filename: diorama.yaml
+      title: Diorama
+      icon: mdi:floor-plan
+      show_in_sidebar: true

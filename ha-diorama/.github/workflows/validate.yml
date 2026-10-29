@@ -1,0 +1,23 @@
+# Checks the repository the way HACS does: hacs.json, the README, the
+# description and topics on GitHub, and the card file in the latest
+# release. Being listed in the HACS default store asks for this to pass.
+#
+# It runs when something lands on main, and by hand from the Actions tab.
+# It does not run on pull requests or on the commits of other branches.
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: plugin
