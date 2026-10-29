@@ -15,6 +15,7 @@ import {
   type Ink,
 } from '#/editor/planRooms.ts'
 import type { Point } from '#/types.ts'
+import { roomsFromPicture } from '#/editor/planImport.ts'
 
 // A plan drawn into a raster: 1 is ink.
 function paper(width: number, height: number): Ink {
@@ -176,4 +177,35 @@ test('a dash-dotted line across a room is taken out, a wall line is not', () => 
   const right = clean.ink.reduce((n, v, i) => n + (v && i % 200 >= 100 ? 1 : 0), 0)
   assert.equal(left, 0)
   assert.ok(right > 700)
+})
+
+test('rooms found in a trace picture land where the picture lies on the plan, in meters', () => {
+  const plan = twoRooms()
+  const data = new Uint8Array(plan.width * plan.height * 4)
+  for (let i = 0; i < plan.ink.length; i++) {
+    const v = plan.ink[i] ? 0 : 255
+    data.set([v, v, v, 255], i * 4)
+  }
+  // 640 px over 12.8 m: 50 px to the meter, the picture's middle at (10, 5)
+  const trace = { src: '', aspect: plan.height / plan.width, center: [10, 5] as Point, width: 12.8, opacity: 1 }
+  let n = 0
+  const found = roomsFromPicture(
+    trace,
+    { width: plan.width, height: plan.height, data },
+    () => ({ id: `room-${++n}`, name: `Room ${n}` }),
+    kind => `${kind}-1`,
+  )
+  assert.equal(found.rooms.length, 2)
+  const xs = found.rooms.flatMap(r => r.points.map(p => p[0]))
+  const ys = found.rooms.flatMap(r => r.points.map(p => p[1]))
+  // inner faces at x 40..552 and y 40..240 px: 4.4..14.64 m and 5+3.6-0.8=7.8 down to 3.8 m
+  assert.ok(Math.abs(Math.min(...xs) - 4.4) < 0.15, `west ${Math.min(...xs)}`)
+  assert.ok(Math.abs(Math.max(...xs) - 14.64) < 0.15, `east ${Math.max(...xs)}`)
+  assert.ok(Math.abs(Math.max(...ys) - 7.8) < 0.15, `north ${Math.max(...ys)}`)
+  assert.ok(Math.abs(Math.min(...ys) - 3.8) < 0.15, `south ${Math.min(...ys)}`)
+  const door = found.decorations.find(d => d.kind === 'door')
+  assert.ok(door, 'a door')
+  assert.ok(found.rooms.some(r => r.id === door.room))
+  assert.ok(door.rotation === 90 || door.rotation === 270)
+  assert.ok(Math.abs(door.position[0] - (4.4 + 307 / 50)) < 0.2, `door at ${door.position}`)
 })

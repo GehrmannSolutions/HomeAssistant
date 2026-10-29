@@ -981,6 +981,8 @@ const DOOR_M = 1.1
 // A strip narrower than this and many times as long is the paper between a
 // wall and a dimension line, not a room.
 const STRIP_M = 1.1
+// A room narrower than this is a tank, a shaft or a cupboard drawn closed.
+const NARROWEST_M = 0.9
 const STRIP_STRETCH = 4
 
 // The walls of a plan picture: ink on long straight runs, openings shut.
@@ -1072,7 +1074,7 @@ function planRoomsIn(walls: Ink, perMeter: number, settings: PlanSettings): Poin
     const ys = room.map(p => p[1])
     const a = (Math.max(...xs) - Math.min(...xs)) / perMeter
     const b = (Math.max(...ys) - Math.min(...ys)) / perMeter
-    return !(Math.min(a, b) < STRIP_M && Math.max(a, b) > STRIP_STRETCH * Math.min(a, b))
+    return Math.min(a, b) >= NARROWEST_M && !(Math.min(a, b) < STRIP_M && Math.max(a, b) > STRIP_STRETCH * Math.min(a, b))
   })
 }
 

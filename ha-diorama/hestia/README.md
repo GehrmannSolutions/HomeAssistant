@@ -33,5 +33,10 @@ Room search in a plan picture (`src/editor/planRooms.ts`, `readPlan`), as of 202
 5. Openings: what step 3 added between two rooms is a door, to the outside a window; thin bands on the outside are
    window fronts, cut into windows of at most 2.5 m.
 
+In the editor: Trace image, set Width in meters, Find rooms (`src/editor/planImport.ts`, button in
+`Toolbar.tsx`, `findRooms` in `Editor.tsx`): adds the rooms (Room n), doors and windows, and switches walls on
+with the measured outer wall when the card had none. Tested on Dev 2026-10-29 with a scanned 1:100 house plan (kept local): 7 rooms,
+11 doors, 18 windows in about a second; the card config held only meters (5.4 KB, no picture).
+
 On that plan: the open living and dining area came out as one room as drawn, the hall rooms as one; only a small
 room that runs into the hall is not yet found. Outer wall 0.375 m as dimensioned.

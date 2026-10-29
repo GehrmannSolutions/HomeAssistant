@@ -57,6 +57,7 @@ type Props = {
   trace: Trace | null
   onTrace: (trace: Trace | null) => void
   onPickTrace: (file: File) => Promise<void>
+  onFindRooms?: () => Promise<{ rooms: number; doors: number; windows: number }>
 }
 
 export default function Toolbar({
@@ -72,6 +73,7 @@ export default function Toolbar({
   trace,
   onTrace,
   onPickTrace,
+  onFindRooms,
 }: Props) {
   const color = EDITOR_TINT_COLOR
   return (
@@ -128,7 +130,7 @@ export default function Toolbar({
         toggle
         onClick={() => onShowLengths(!showLengths)}
       />
-      <TracePanel color={color} trace={trace} onTrace={onTrace} onPick={onPickTrace} />
+      <TracePanel color={color} trace={trace} onTrace={onTrace} onPick={onPickTrace} onFind={onFindRooms} />
     </div>
   )
 }
@@ -168,14 +170,34 @@ function TracePanel({
   trace,
   onTrace,
   onPick,
+  onFind,
 }: {
   color: string
   trace: Trace | null
   onTrace: (trace: Trace | null) => void
   onPick: (file: File) => Promise<void>
+  onFind?: () => Promise<{ rooms: number; doors: number; windows: number }>
 }) {
   const [open, setOpen] = useState(false)
   const [failed, setFailed] = useState(false)
+  // What the last search of the picture for rooms found, or that it runs.
+  const [finding, setFinding] = useState<string | null>(null)
+  const find = async () => {
+    if (!onFind) return
+    setFinding('Reading the plan…')
+    // Let the line above show before the search holds the page.
+    await new Promise(resolve => window.setTimeout(resolve, 30))
+    try {
+      const found = await onFind()
+      setFinding(
+        found.rooms > 0
+          ? `Found ${found.rooms} rooms, ${found.doors} doors and ${found.windows} windows. Check them and name the rooms.`
+          : 'No rooms found. Is the width right, and are the walls drawn as lines?',
+      )
+    } catch {
+      setFinding('The picture could not be read.')
+    }
+  }
   const box = useAway(open, () => setOpen(false))
   const file = useRef<HTMLInputElement>(null)
   const pick = async (chosen: File | undefined) => {
@@ -256,6 +278,18 @@ function TracePanel({
                   }}
                 />
               </label>
+              {onFind && (
+                <>
+                  <p className="text-label-2 text-xs leading-snug">
+                    Set the width first, then let the card find the rooms, doors and windows in the plan. They are added
+                    to the drawing, with walls.
+                  </p>
+                  <button type="button" className={plainButton} onClick={() => void find()}>
+                    Find rooms
+                  </button>
+                  {finding && <p className="text-xs leading-snug">{finding}</p>}
+                </>
+              )}
             </>
           )}
           <div className="flex gap-2">

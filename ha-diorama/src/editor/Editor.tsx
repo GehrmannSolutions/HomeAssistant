@@ -6,6 +6,7 @@ import Overlay from '#/editor/Overlay.tsx'
 import RoomInfo from '#/editor/RoomInfo.tsx'
 import { plainButton } from '#/editor/look.ts'
 import Toolbar from '#/editor/Toolbar.tsx'
+import { roomsFromPicture, tracePixels } from '#/editor/planImport.ts'
 import { traceFrom, useTrace } from '#/editor/trace.ts'
 import type { Selection, Tool } from '#/editor/types.ts'
 import { fitView, roomCenter, round, type View } from '#/editor/view.ts'
@@ -105,6 +106,37 @@ export default function Editor({ hass, config, onChange, onSave }: Props) {
     setSelection({ roomId: null, vertex: null })
     setSelectedDecoration(null)
     setTraceSelected(true)
+  }
+  // The rooms, doors and windows read from the picture, added to what is
+  // drawn. Walls are switched on if they were off, the outer ones as thick
+  // as the plan draws them. Gives back how many of each were found.
+  const findRooms = async () => {
+    if (!trace) return { rooms: 0, doors: 0, windows: 0 }
+    const pixels = await tracePixels(trace)
+    const takenRooms = new Set(rooms.map(r => r.id))
+    let n = 1
+    const roomId = () => {
+      while (takenRooms.has(`room-${n}`)) n++
+      takenRooms.add(`room-${n}`)
+      return { id: `room-${n}`, name: `Room ${n}` }
+    }
+    const takenDecorations = new Set(decorations.map(d => d.id))
+    const decorationId = (kind: string) => {
+      let k = 1
+      while (takenDecorations.has(`${kind}-${k}`)) k++
+      takenDecorations.add(`${kind}-${k}`)
+      return `${kind}-${k}`
+    }
+    const found = roomsFromPicture(trace, pixels, roomId, decorationId)
+    if (found.rooms.length > 0) {
+      const walls = config.walls ?? { height: 'full' as const, ...(found.outer > 0 ? { outer: found.outer } : {}) }
+      commit([...rooms, ...found.rooms], devices, [...decorations, ...found.decorations], config.models, walls)
+    }
+    return {
+      rooms: found.rooms.length,
+      doors: found.decorations.filter(d => d.kind === 'door').length,
+      windows: found.decorations.filter(d => d.kind === 'window').length,
+    }
   }
   // One thing at a time is selected: picking a room or a piece, or starting
   // to draw, lets go of the picture.
@@ -283,6 +315,7 @@ export default function Editor({ hass, config, onChange, onSave }: Props) {
     devicesIn: DeviceConfig[] = devices,
     nextDecorations: DecorationConfig[] = decorations,
     nextModels: Models = config.models,
+    nextWalls: CardConfig['walls'] = config.walls,
   ) => {
     const nextDevices = settle(devicesIn, nextDecorations)
     setRooms(nextRooms)
@@ -292,6 +325,7 @@ export default function Editor({ hass, config, onChange, onSave }: Props) {
     if (serialized === lastEmitted.current) return
     lastEmitted.current = serialized
     const next: CardConfig = { ...config, rooms: nextRooms }
+    if (nextWalls) next.walls = nextWalls
     if (nextDevices.length > 0) next.devices = nextDevices
     else delete next.devices
     if (nextDecorations.length > 0) next.decorations = nextDecorations
@@ -980,6 +1014,7 @@ export default function Editor({ hass, config, onChange, onSave }: Props) {
           if (!next) setTraceSelected(false)
         }}
         onPickTrace={pickTrace}
+        onFindRooms={findRooms}
       />
     </div>
   )
