@@ -11,7 +11,7 @@ import { held } from '#/scene/drags.ts'
 import { flights } from '#/scene/flights.ts'
 import { fitView, frameRooms, sceneHeight } from '#/scene/framing.ts'
 import { multiTouchSince, sent } from '#/scene/touches.ts'
-import type { CameraView, DecorationConfig, RoomConfig } from '#/types.ts'
+import type { CameraView, DecorationConfig, RoomConfig, WallsConfig } from '#/types.ts'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, type RefObject } from 'react'
 import { MathUtils, Spherical, Vector3 } from 'three'
@@ -33,6 +33,9 @@ export type CameraHandle = {
 type Props = {
   rooms: RoomConfig[]
   decorations: DecorationConfig[]
+  // With walls, the signs into the rooms beside a room are only where it is
+  // open to them or has a door.
+  walls?: WallsConfig
   // Whether the wheel zooms. In a card on a dashboard that scrolls it
   // scrolls the page instead.
   wheelZoom?: boolean
@@ -119,6 +122,7 @@ const triple = (v: Vector3): [number, number, number] => [round(v.x), round(v.y)
 export default function CameraRig({
   rooms,
   decorations,
+  walls,
   view,
   framed,
   focus,
@@ -250,7 +254,7 @@ export default function CameraRig({
   // The signs on the floor that lead out of it into the rooms beside it are
   // kept wholly in the picture too, never past its sides.
   const show = (room: RoomConfig): CameraView => {
-    const signs = passagesOf(room, rooms, decorations).map((passage): RoomConfig => ({
+    const signs = passagesOf(room, rooms, decorations, walls).map((passage): RoomConfig => ({
       id: '',
       points: passageFootprint(passage),
     }))
@@ -674,7 +678,7 @@ export default function CameraRig({
     const { position, target } = home()
     place(C.set(...position), D.set(...target))
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [rooms, decorations, view, framed, room, size.width, size.height, place])
+  }, [rooms, decorations, walls, view, framed, room, size.width, size.height, place])
 
   return null
 }

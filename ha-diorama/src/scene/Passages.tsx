@@ -14,7 +14,7 @@ import {
   ROOM_SLAB_EDGE_RADIUS_M,
   ROOM_SLAB_THICKNESS_M,
 } from '#/theme.ts'
-import type { DecorationConfig, RoomConfig } from '#/types.ts'
+import type { DecorationConfig, RoomConfig, WallsConfig } from '#/types.ts'
 import { useEffect, useMemo, useState } from 'react'
 import { Color, SRGBColorSpace, type Mesh } from 'three'
 
@@ -28,11 +28,16 @@ import { Color, SRGBColorSpace, type Mesh } from 'three'
 type Props = {
   rooms: RoomConfig[]
   decorations: DecorationConfig[]
+  // With walls, only rooms open to each other or with a door between them.
+  walls?: WallsConfig
   onRoom: (room: string, through: string[]) => void
 }
 
-export default function Passages({ rooms, decorations, onRoom }: Props) {
-  const passages = useMemo(() => rooms.flatMap(room => passagesOf(room, rooms, decorations)), [rooms, decorations])
+export default function Passages({ rooms, decorations, walls, onRoom }: Props) {
+  const passages = useMemo(
+    () => rooms.flatMap(room => passagesOf(room, rooms, decorations, walls)),
+    [rooms, decorations, walls],
+  )
   return passages.map(passage => {
     const index = rooms.findIndex(room => room.id === passage.to)
     return (

@@ -1000,6 +1000,7 @@ export default function Editor({ hass, config, onChange, onSave }: Props) {
         onAssignArea={assignArea}
         onFloor={setFloor}
         decorations={decorations}
+        walls={config.walls}
         onArrow={setArrow}
         onSaveCamera={saveRoomCamera}
         onShowCamera={showRoomCamera}

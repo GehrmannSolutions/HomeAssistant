@@ -240,6 +240,7 @@ Only entities that drive at least one of the things an item can show are on offe
 | `background`          |          | The background laid behind the view, as `light` and `dark`, each `graphite` (the default), `dusk`, `ocean`, `forest`, `ember` or `theme` (Plain in the editor) to keep the dashboard's own                                                                                                               |
 | `devices`             | `[]`     | Entities bound to decoration items, see below                                                                                                                                                                                                                                                            |
 | `decorations`         | `[]`     | List of placed decoration items, see below                                                                                                                                                                                                                                                               |
+| `walls`               |          | Walls along the rooms' outlines, see Walls below. Only floors without it                                                                                                                                                                                                                                 |
 | `models`              |          | Models imported into the editor's catalog, by id, see below                                                                                                                                                                                                                                              |
 
 Defaults for these and other visual values live in `src/theme.ts`.
@@ -256,6 +257,8 @@ Each room:
 | `color`   | Fill color override                                                                                                                                                                                                                        |
 | `floor`   | Wood on a room drawn in the editor. `material` from wood, tiles, terracotta, carpet, concrete, an optional `color` tint, `scale` as a multiplier on the pattern size, `rotation` in degrees and `intensity` for how much the pattern shows |
 | `camera`  | The view the camera flies to when the room's floor is clicked in the card, where the room then stands alone. A room without one is framed alone, from the side the card opens on                                                           |
+| `ceiling` | The room's own ceiling height in meters, as measured. Full walls reach up to it. The card's `walls.ceiling` without one                                                                                                                    |
+| `open_to` | Ids of rooms beside it with no wall between them, an open kitchen and its dining room. Only read with `walls`                                                                                                                              |
 
 A view, on the card or on a room, is where the camera stands and what it looks at, both as `[x, y, z]` in meters: `x` as on the plan, `y` up, `z` the plan's `y` with its sign flipped. It is saved from the editor's 3D view rather than written by hand.
 
@@ -302,6 +305,31 @@ Each model, under its id in `models`. It is written by the editor's Import a mod
 | `url`       | A .glb or .gltf to read the shape from instead, like `/local/models/chair.glb`. The parts then only carry their names                                                                             |
 
 Coordinates are in meters. `x` grows to the right and `y` grows upward on the plan.
+
+Walls, under `walls`. A stretch two rooms share is one wall between them, standing astride their line, unless one of them names the other in `open_to`; a door between them still leads through. The rest of each outline is an outer wall, standing just outside the floor so the room keeps all of it, and outer walls meet at their corners cut at the angle between them. Rooms drawn up to 15 cm apart still share their wall. Doors, sliding doors and garage doors leave their opening from the floor up, and a window between its sill and its top. With walls, a room only shows the way into a room beside it where it is open to it or has a door.
+
+| Key         | Default | Description                                                                                                                                          |
+| ----------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `height`    | `full`  | `full` up to the ceiling, `half` at half height, or a height in meters                                                                               |
+| `ceiling`   | `2.6`   | The ceiling height in meters, as measured, for every room without its own `ceiling`                                                                  |
+| `half`      |         | How high a half wall stands, in meters. Half of `ceiling` when not set                                                                               |
+| `cutaway`   | `true`  | With full walls, the part above half height is left out of every wall the camera looks at from outside its room, so no wall hides the room behind it |
+| `thickness` | `0.12`  | A wall between two rooms, in meters                                                                                                                  |
+| `outer`     | `0.3`   | An outer wall, in meters                                                                                                                             |
+| `color`     |         | The paint, a hex color                                                                                                                               |
+
+```yaml
+walls:
+  height: full
+  ceiling: 2.5
+rooms:
+  - id: kitchen
+    open_to: [dining]
+    points: [[0, 0], [4, 0], [4, 3], [0, 3]]
+  - id: cellar
+    ceiling: 2.2
+    points: [[4, 0], [7, 0], [7, 3], [4, 3]]
+```
 
 A piece or a device that names a room the plan no longer has is left out rather than taken as a reason to refuse the whole card, and a kind that has since been folded into another is carried over to it.
 

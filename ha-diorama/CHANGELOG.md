@@ -17,6 +17,7 @@ moves that section under the new version and uses it as the release notes.
 - Hold Shift to draw rooms and place pieces to the centimeter, and turn a piece a quarter at a time from buttons in its panel.
 - A smoke detector can stand in for a carbon monoxide sensor or a sensor that reports smoke in words, and anything that switches can stand in for a group.
 - Your own 3D models can be imported into the editor's catalog from a .glb or .gltf file, under My models, and placed, sized, recolored part by part and hung on a wall or a ceiling like any other piece, drawn in the card's own colors.
+- Walls along the rooms, set under `walls` in the card's YAML: up to the ceiling, which can be the measured height of each room, at half height, or at any height, with doors and windows leaving their openings, rooms open to each other left without a wall between them, and full walls dropping to half height where they would hide a room from the camera.
 
 ### Changed
 

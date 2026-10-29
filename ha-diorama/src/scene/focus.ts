@@ -13,6 +13,9 @@ export const HIDDEN_LAYER = 31
 const ROOM = 'room:'
 const MERGED = 'merged:'
 const DECORATION = 'decoration:'
+// The walls of a room, or of the two rooms they stand between, named with
+// their rooms in userData like a piece in a wall between two rooms.
+export const WALLS = 'walls:'
 // A sign on the floor that leads out of the room it is named for. Unlike
 // everything else it only shows around that room, never with the whole home.
 export const PASSAGE = 'passage:'
@@ -34,6 +37,7 @@ function sweep(object: Object3D, room: string | null, hide: boolean) {
   else if (name.startsWith(ROOM)) hide = name.slice(ROOM.length) !== room
   else if (name.startsWith(MERGED)) hide = name.slice(MERGED.length) !== room
   else if (name.startsWith(DECORATION)) hide = object.userData.room !== room && !alsoIn(object, room)
+  else if (name.startsWith(WALLS)) hide = !alsoIn(object, room)
   if (!(object as Light).isLight) {
     if (hide) {
       if (!kept.has(object)) {

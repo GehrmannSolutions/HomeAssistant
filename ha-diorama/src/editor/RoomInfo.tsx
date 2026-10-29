@@ -3,7 +3,7 @@ import { decorationKind } from '#/decoration/catalog.ts'
 import { ResetButton, SelectedHeader, Slider, Switch } from '#/editor/panel.tsx'
 import { neighboursOf } from '#/geometry/passages.ts'
 import { EDITOR_TINT_COLOR, FLOOR_MATERIALS, ROOM_COLORS } from '#/theme.ts'
-import type { Area, DecorationConfig, RoomConfig } from '#/types.ts'
+import type { Area, DecorationConfig, RoomConfig, WallsConfig } from '#/types.ts'
 import { useFlash } from '#/lib/flash.ts'
 import { cn } from '#/lib/utils.ts'
 import { colorWell, deleteButton, field, group, groupTitle, note, plainButton, row } from '#/editor/look.ts'
@@ -21,6 +21,8 @@ type Props = {
   // Every piece of the home, to tell which rooms beside this one a door
   // leads into.
   decorations: DecorationConfig[]
+  // With walls, only the rooms it is open to or has a door into are beside it.
+  walls?: WallsConfig
   // Shows or hides the sign on the floor into a room open beside this one.
   onArrow: (roomId: string, other: string, shown: boolean) => void
   // The room's view: saved from where the 3D view's camera stands now,
@@ -48,6 +50,7 @@ export default function RoomInfo({
   onAssignArea,
   onFloor,
   decorations,
+  walls,
   onArrow,
   onSaveCamera,
   onShowCamera,
@@ -68,7 +71,7 @@ export default function RoomInfo({
       style={{ background: room.color ?? ROOM_COLORS[(index < 0 ? 0 : index) % ROOM_COLORS.length] }}
     />
   )
-  const neighbours = neighboursOf(room, rooms, decorations)
+  const neighbours = neighboursOf(room, rooms, decorations, walls)
   // A setting of the floor put back to what the material comes with.
   const resetFloor = (key: 'color' | 'scale' | 'intensity' | 'rotation') => {
     if (!room.floor) return

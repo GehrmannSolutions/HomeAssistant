@@ -101,6 +101,13 @@ export type RoomConfig = {
   // Rooms open beside this one whose sign on the floor is left out of this
   // room's view, as room ids.
   hide_arrows?: string[]
+  // The room's own ceiling height in meters, as measured. Full walls reach
+  // up to it. The card's `walls.ceiling` without one.
+  ceiling?: number
+  // Rooms beside this one with no wall between them, as room ids, an open
+  // kitchen and the dining room it runs into. Only read with `walls` on: a
+  // stretch two rooms share is a wall unless either one names the other.
+  open_to?: string[]
 }
 
 // The side panel's section for the whole home.
@@ -239,9 +246,36 @@ export type CardConfig = {
   // follows the ones it does, in the plan's order.
   room_order?: string[]
   background?: BackgroundConfig
+  // Walls along the rooms' outlines, see WallsConfig. No walls without it,
+  // only the floors.
+  walls?: WallsConfig
   // Sizes of the side panel's layout for each screen it is seen on, by the
   // id the screen gave itself. Set from the card's settings on that screen.
   screens?: Record<string, ScreenConfig>
+}
+
+// Walls drawn along the rooms' outlines. A stretch two rooms share is one
+// wall between them, unless one of them is `open_to` the other, and the rest
+// of each outline is an outer wall standing just outside the floor. Doors
+// and windows in a wall leave their opening in it.
+export type WallsConfig = {
+  // How high the walls stand: `full` up to the ceiling, `half` at half
+  // height, or a height in meters. Full when not set.
+  height?: 'full' | 'half' | number
+  // The ceiling height in meters, as measured, for every room without its
+  // own `ceiling`. 2.6 when not set.
+  ceiling?: number
+  // How high a half wall stands, in meters. Half the ceiling when not set.
+  half?: number
+  // With full walls, the ones between the camera and the room behind them
+  // drop to half height while the camera looks over them, so every room
+  // stays in sight. On unless false.
+  cutaway?: boolean
+  // How thick a wall between two rooms is, and an outer wall, in meters.
+  thickness?: number
+  outer?: number
+  // Paint of the walls, a hex string.
+  color?: string
 }
 
 // One screen's sizes. Without them the diorama takes two thirds of the

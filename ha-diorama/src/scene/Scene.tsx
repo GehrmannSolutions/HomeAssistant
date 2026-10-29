@@ -20,6 +20,7 @@ import PickFallback from '#/scene/pick.tsx'
 import Room from '#/scene/Room.tsx'
 import Shadows from '#/scene/shadows.tsx'
 import Sky, { type SkyMode } from '#/scene/Sky.tsx'
+import Walls from '#/scene/Walls.tsx'
 import type { TryStates } from '#/editor/tryState.ts'
 import { FpsTicker, type FpsTicks } from '#/scene/FpsMeter.tsx'
 import type { CardConfig, HomeAssistant } from '#/types.ts'
@@ -147,6 +148,7 @@ export default function Scene({
         <CameraRig
           rooms={rooms}
           decorations={config.decorations ?? []}
+          walls={config.walls}
           view={config.camera}
           framed={config.frame_rooms}
           focus={focus}
@@ -174,7 +176,7 @@ export default function Scene({
         <PickFallback onHandled={markFallback} onRoom={onPickRoom} />
         {/* In the card, a focused room shows the way into a room open beside it. */}
         {!onPickDecoration && onPickRoom && (
-          <Passages rooms={rooms} decorations={config.decorations ?? []} onRoom={onPickRoom} />
+          <Passages rooms={rooms} decorations={config.decorations ?? []} walls={config.walls} onRoom={onPickRoom} />
         )}
         {/* The frame is finished from a buffer: shaded where things meet,
           tone mapped, softly darkened at the corners, and in the editor with
@@ -183,6 +185,7 @@ export default function Scene({
         {rooms.map((room, i) => (
           <Room key={room.id} room={room} rooms={rooms} index={i} radius={radius} gap={gap} />
         ))}
+        {config.walls && <Walls config={config} focus={focus} />}
         {frame && (
           <OrbitControls
             makeDefault
