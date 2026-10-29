@@ -357,3 +357,18 @@ def test_files_under_www_are_active_right_away():
     from ha_safe_mcp.config_files import NEXT, next_step
     assert next_step("www/floorplan/eg.svg").startswith("active right away: Home Assistant serves it as /local/floorplan/eg.svg")
     assert next_step("packages/heat.yaml") == NEXT
+
+
+# ------------------------------------------------------------------ template integration not loaded yet (2026-10-28)
+@pytest.mark.parametrize("loaded, hinted", [(False, True), (True, False)])
+async def test_template_yaml_without_loaded_template_integration_gets_the_no_restart_hint(tmp_path, loaded, hinted):
+    async def template_loaded():
+        return loaded
+    files, _ = make(tmp_path)
+    files.template_loaded = template_loaded
+    result = await files.write("my_templates/demo.yaml", "- sensor:\n    - name: x\n      state: \"{{ 1 }}\"\n")
+    top = await files.write("packages/t.yaml", "template:\n  - sensor:\n      - name: y\n        state: \"1\"\n")
+    other = await files.write("packages/a.yaml", "input_boolean:\n  a:\n    name: A\n")
+    assert ("hint" in result) is hinted and ("hint" in top) is hinted and "hint" not in other
+    if hinted:
+        assert "ha_start_integration_setup" in result["hint"] and "ha_reload" in result["hint"]

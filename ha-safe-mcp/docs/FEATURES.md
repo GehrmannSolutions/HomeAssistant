@@ -198,6 +198,7 @@ Running them is in [section 2](#2-switch-devices-run-scenes-and-scripts) (`ha_ru
 | `ha_get_dashboard` | A dashboard's views and cards. | Read |
 | `ha_create_dashboard` | Creates a new dashboard and checks it appears. Journaled. | Configure |
 | `ha_save_dashboard` | Saves views and cards and reads them back. Journaled. | Configure |
+| `ha_set_section_collapsible` | Makes sections of a sections view collapsible under their heading and sets whether each starts open or closed (or makes it normal again). Example: `{"Raumklima": "closed"}`. Needs the HACS card Expander Card. Journaled. | Configure |
 | `ha_update_dashboard` | Changes title, icon or sidebar display. Journaled. | Configure |
 | `ha_delete_dashboard` | Deletes a dashboard. Journaled. | Delete |
 | `ha_list_dashboard_resources` | Custom card files (JavaScript/CSS) the frontend loads. | Read |
@@ -287,8 +288,9 @@ Set up, configure and maintain integrations the way the HA UI does it, step by s
 | `ha_list_discovered` | Devices Home Assistant itself discovered and that wait for confirmation. This does not scan your network. | Read |
 | `ha_list_credentials` | Names of your stored logins and their fields (never the values). | Read |
 | `ha_start_integration_setup` | Starts adding an integration or a guided helper; returns the first form or menu. | Configure |
-| `ha_integration_setup_step` | Submits one form step. Password, token, API key and PIN fields only accept a reference to *Zugangsdaten*, never a plain value. A created integration is journaled (undo removes it). | Configure |
+| `ha_integration_setup_step` | Submits one form step. Password, token, API key and PIN fields only accept a reference to *Zugangsdaten*, never a plain value; inside form sections (e.g. "auth") each field is checked on its own. A created integration is journaled (undo removes it). | Configure |
 | `ha_abort_integration_setup` | Aborts a running setup. | Configure |
+| `ha_test_url_from_ha` | Tests whether the Home Assistant host itself reaches an address (e.g. a device's web page) and says why not. Nothing is created: HA fetches the address in a setup dialog that is aborted right away. No `?query`, no login in the URL. | Configure |
 | `ha_start_integration_options` | Opens the options of an integration with its current values. | Configure |
 | `ha_integration_options_step` | Submits one options step. | Configure |
 | `ha_abort_integration_options` | Closes the options without saving. | Configure |

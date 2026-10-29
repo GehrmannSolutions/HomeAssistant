@@ -313,6 +313,12 @@ Für alles, was die Oberfläche nicht ausdrücken kann: `configuration.yaml`, Pa
 - **Dashboard-Ressourcen** (eigene Karten): `ha_list_dashboard_resources`, `ha_add_dashboard_resource`,
   `ha_delete_dashboard_resource` (Lösch-Stufe). Ressourcen laufen als JavaScript im Browser jedes Benutzers, deshalb werden nur Dateien
   angenommen, die von diesem Home Assistant ausgeliefert werden (`/local/...`, `/hacsfiles/...`); externe Adressen werden abgelehnt.
+- **Einklappbare Abschnitte:** `ha_set_section_collapsible` mit `{"<Überschrift>": "open" | "closed" | "off"}` klappt
+  die Karten eines Abschnitts unter seine Überschrift (Doppelpfeil rechts, die ganze Titelzeile schaltet). Der Zustand
+  gilt bei jedem Öffnen der Seite. Braucht die HACS-Karte Expander Card (`MelleD/lovelace-expander-card`).
+- **Erreichbarkeit vom HA aus:** `ha_test_url_from_ha` `{"url": "http://192.168.1.20/"}` sagt, ob der HA-Rechner eine
+  Adresse erreicht, z. B. vor dem Einrichten von Scrape, REST oder einer Kamera. Ergebnisse: image, not_an_image
+  (eine Webseite, also erreichbar), auth_required, not_found, server_error, timeout, unreachable.
 - Alle Schreibzugriffe hier werden protokolliert und können rückgängig gemacht werden.
 
 ### Updates, Neuladen und Neustart

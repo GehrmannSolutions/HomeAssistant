@@ -126,11 +126,15 @@ class CredentialStore:
         return item["fields"][field]
 
 
-def resolve_refs(store: CredentialStore, data: dict) -> tuple[dict, dict[str, str]]:
-    """Replace top-level {"$credential": alias, "field": name} values; return the secret->label map for scrubbing."""
+def resolve_refs(store: CredentialStore, data: dict, _depth: int = 0) -> tuple[dict, dict[str, str]]:
+    """Replace {"$credential": alias, "field": name} values (top level and inside one level of form sections);
+    return the secret->label map for scrubbing."""
     resolved, used = {}, {}
     for key, value in data.items():
-        if isinstance(value, dict) and REF_KEY in value:
+        if isinstance(value, dict) and REF_KEY not in value and _depth == 0:
+            resolved[key], inner = resolve_refs(store, value, _depth=1)
+            used.update(inner)
+        elif isinstance(value, dict) and REF_KEY in value:
             alias, field = value.get(REF_KEY), value.get("field")
             if set(value) != {REF_KEY, "field"} or not isinstance(alias, str) or not isinstance(field, str):
                 raise CredentialError('Referenz braucht genau {"$credential": "<alias>", "field": "<feld>"}')

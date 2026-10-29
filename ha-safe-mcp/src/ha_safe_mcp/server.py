@@ -310,6 +310,13 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
                       integrations=integrations, organizer=organizer, customize=customize,
                       config_files=config_files, energy=energy, assist=assist, hacs=hacs)
 
+    async def template_loaded() -> bool:
+        services = await client._request("GET", "/api/services")
+        return any(isinstance(item, dict) and item.get("domain") == "template"
+                   and "reload" in (item.get("services") or {}) for item in services or [])
+
+    config_files.template_loaded = template_loaded
+
     async def journaled(tool_name: str, kind: str, target, writer, **options):
         result, change_id = await changes.apply(tool_name, kind, target, writer, **options)
         return changes.with_change(result, change_id)
@@ -445,6 +452,35 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         """Save and read back dashboard views; returns prior config for manual rollback. Admin write required."""
         return await journaled("ha_save_dashboard", "dashboard_config", url_path,
                                lambda: admin.dashboard_save(config, url_path=url_path or None))
+
+    @tool()
+    async def ha_set_section_collapsible(sections: dict, view: str, url_path: str = "") -> dict:
+        """Make sections of a sections view collapsible under their heading, set whether each starts open or
+        closed on every page load, or make it a normal section again. sections: {"<heading text>": "open" |
+        "closed" | "off"}, e.g. {"Raumklima": "closed", "Licht": "open"}; view: path, title or index from
+        ha_get_dashboard; url_path: dashboard (empty = default dashboard). Needs the HACS card Expander Card
+        (MelleD/lovelace-expander-card). Journaled, undo with ha_undo_change. Admin write required."""
+        from .collapsible import has_expander, set_collapsible
+        new, report = set_collapsible(await admin.dashboard_get(url_path or None), view, sections)
+        if not report["changed"]:
+            return {**report, "saved": False}
+        if any(item["was"] == "off" for item in report["changed"]) and not has_expander(
+                await customize.list_resources()):
+            raise ValueError("the Expander Card is not installed: install the HACS repository "
+                             "'MelleD/lovelace-expander-card' (ha_search_hacs 'expander', "
+                             "ha_install_hacs_repository), then try again")
+        result = await journaled("ha_set_section_collapsible", "dashboard_config", url_path,
+                                 lambda: admin.dashboard_save(new, url_path=url_path or None))
+        return {**report, "saved": True, "change_id": result.get("change_id")}
+
+    @tool()
+    async def ha_test_url_from_ha(url: str, verify_ssl: bool = True) -> dict:
+        """Test whether the Home Assistant host itself can reach a URL (device web page, camera snapshot, local
+        API), without creating anything: HA fetches it (GET, follows redirects, 10 s) in a temporary setup
+        dialog that is aborted. Answers reachable, result (image, not_an_image, auth_required, not_found,
+        server_error, timeout, unreachable ...) and a plain explanation. Only http(s) URLs without ?query,
+        user:password@ or templates. verify_ssl=false for self-signed certificates. Admin write required."""
+        return await integrations.test_url(url, verify_ssl=verify_ssl)
 
     @tool()
     async def ha_list_helpers(domain: str) -> list[dict]:

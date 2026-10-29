@@ -3,6 +3,31 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.33.0 – 2026-10-29
+
+Aus den Funden beim Ausbau echter Dashboards (28.10.):
+
+- **Abschnitte einklappen:** `ha_set_section_collapsible` macht Abschnitte einer Abschnitte-Ansicht unter ihrer
+  Überschrift einklappbar (Doppelpfeil rechts, die ganze Titelzeile schaltet). Pro Abschnitt `open`, `closed` oder
+  `off`, z. B. `{"Raumklima": "closed"}`. Das gilt bei jedem Öffnen der Seite. Halbe Kachelbreiten bleiben
+  nebeneinander, gleich breite Kacheln fließen je nach Fensterbreite. Ein kleines Modell braucht dafür nur einen
+  Aufruf statt das ganze Dashboard umzubauen. Braucht die HACS-Karte Expander Card. Im Änderungsjournal, also
+  rückgängig zu machen.
+- **Erreichbarkeit vom HA aus:** `ha_test_url_from_ha` prüft, ob der Home-Assistant-Rechner selbst eine Adresse
+  erreicht, und sagt in einfachen Worten, warum nicht (Zeitüberschreitung, Name unbekannt, Login nötig, 404 …).
+  Bisher musste dafür ein Einrichtungsdialog „missbraucht“ werden, und der Scrape-Dialog hat dabei sofort echte
+  Einträge angelegt. Jetzt nutzt das Werkzeug den Prüfschritt der generischen Kamera, der vor einer Bestätigung nie
+  etwas anlegt, und bricht den Dialog immer ab. Adressen mit `?…`, Anmeldedaten oder Templates werden abgelehnt,
+  weil ein Aufruf wie `/relay/0?turn=on` ein Gerät schalten würde.
+- **Formular-Abschnitte bei Integrationen:** Die Passwort-Sperre in `ha_integration_setup_step` hat einen leeren
+  Abschnitt abgelehnt, nur weil er „auth“ heißt (Scrape). Jetzt zählt jedes Feld im Abschnitt für sich:
+  `auth.password` braucht weiter einen Verweis auf *Zugangsdaten*, `auth.username` nicht. Verweise funktionieren
+  auch innerhalb von Abschnitten, Passwort-Vorgaben darin werden nie gezeigt, und bei Optionen bleiben fehlende Felder
+  eines Abschnitts einzeln erhalten.
+- **Template-YAML ohne geladene Template-Integration:** `ha_write_config_file`/`ha_edit_config_file` und
+  `ha_reload` sagen jetzt, wenn `template.reload` fehlt, und nennen den Weg ohne Neustart: einen Template-Helfer
+  über die Oberfläche anlegen und danach `ha_reload` `template`.
+
 ## 0.32.0 – 2026-10-28
 
 - **Aktionen von Integrationen auf ihre eigenen Entitäten:** `ha_call_service` lehnte bisher jeden Aufruf ab, bei

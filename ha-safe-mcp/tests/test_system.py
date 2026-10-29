@@ -71,6 +71,8 @@ async def test_config_check_and_reload():
         assert await system.reload("all") == {"reloaded": "all"}
         with pytest.raises(ValueError, match="no reload"):
             await system.reload("light")
+        with pytest.raises(ValueError, match="template helper.*ha_start_integration_setup"):
+            await system.reload("template")
     assert automation.called and everything.called
     with pytest.raises(ValueError, match="admin write disabled"):
         await make(admin=False).reload("automation")

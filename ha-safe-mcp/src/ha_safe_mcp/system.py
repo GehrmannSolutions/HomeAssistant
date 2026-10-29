@@ -33,6 +33,11 @@ SYSTEM_EVENTS = frozenset({
     "automation_reloaded", "automation_triggered", "script_started", "scene_reloaded", "persistent_notifications_updated",
     "recorder_5min_statistics_generated", "recorder_hourly_statistics_generated", "time_changed", "event_registry_updated",
     "repairs_issue_registry_updated"})
+TEMPLATE_NOT_LOADED = (
+    "the template integration is not loaded yet (no template.reload), so YAML under 'template:' is not active. "
+    "Without a restart: create one template helper in the UI way (ha_start_integration_setup with "
+    "handler='template', e.g. a sensor with state '{{ 1 }}'; it may be deleted again later), then ha_reload "
+    "'template'. Otherwise ha_restart.")
 REMOTE_HINT = ("Home Assistant is restarting; it is usually back within a minute. Check with ha_get_overview or "
                "ha_check_config before the next change.")
 
@@ -108,6 +113,8 @@ class HASystem:
             domain, service = "homeassistant", "reload_all" if target == "all" else "reload_core_config"
         else:
             domain, service = target, "reload"
+        if target == "template" and "reload" not in services.get("template", set()):
+            raise ValueError(TEMPLATE_NOT_LOADED)
         if service not in services.get(domain, set()):
             reloadable = sorted(str(d) for d, names in services.items() if d and "reload" in names)
             raise ValueError(f"{target} has no reload service; possible: all, core, {', '.join(reloadable)}")

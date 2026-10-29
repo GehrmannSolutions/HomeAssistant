@@ -201,6 +201,7 @@ Das Starten steht in [Abschnitt 2](#2-geräte-schalten-szenen-und-skripte-starte
 | `ha_get_dashboard` | Ansichten und Karten eines Dashboards. | Lesen |
 | `ha_create_dashboard` | Erstellt ein neues Dashboard und prüft, ob es erscheint. Im Änderungsjournal. | Konfigurieren |
 | `ha_save_dashboard` | Speichert Ansichten und Karten und liest sie zurück. Im Änderungsjournal. | Konfigurieren |
+| `ha_set_section_collapsible` | Macht Abschnitte einer Abschnitte-Ansicht unter ihrer Überschrift einklappbar und legt fest, ob sie beim Öffnen auf- oder zugeklappt sind (oder macht sie wieder normal). Beispiel: `{"Raumklima": "closed"}`. Braucht die HACS-Karte Expander Card. Im Änderungsjournal. | Konfigurieren |
 | `ha_update_dashboard` | Ändert Titel, Symbol oder die Anzeige in der Seitenleiste. Im Änderungsjournal. | Konfigurieren |
 | `ha_delete_dashboard` | Löscht ein Dashboard. Im Änderungsjournal. | Löschen |
 | `ha_list_dashboard_resources` | Dateien für eigene Karten (JavaScript/CSS), die das Frontend lädt. | Lesen |
@@ -292,8 +293,9 @@ Integrationen einrichten, konfigurieren und pflegen, so wie es die HA-Oberfläch
 | `ha_list_discovered` | Geräte, die Home Assistant selbst entdeckt hat und die auf Bestätigung warten. Dein Netzwerk wird dabei nicht durchsucht. | Lesen |
 | `ha_list_credentials` | Namen deiner gespeicherten Logins und ihre Felder (nie die Werte). | Lesen |
 | `ha_start_integration_setup` | Startet das Hinzufügen einer Integration oder eines geführten Helfers; liefert das erste Formular oder Menü. | Konfigurieren |
-| `ha_integration_setup_step` | Schickt einen Formularschritt ab. Felder für Passwort, Token, API-Schlüssel und PIN nehmen nur einen Verweis auf *Zugangsdaten* an, nie einen Klartextwert. Eine neu angelegte Integration kommt ins Änderungsjournal (Rückgängig entfernt sie). | Konfigurieren |
+| `ha_integration_setup_step` | Schickt einen Formularschritt ab. Felder für Passwort, Token, API-Schlüssel und PIN nehmen nur einen Verweis auf *Zugangsdaten* an, nie einen Klartextwert; in Formular-Abschnitten (z. B. „auth“) wird jedes Feld einzeln geprüft. Eine neu angelegte Integration kommt ins Änderungsjournal (Rückgängig entfernt sie). | Konfigurieren |
 | `ha_abort_integration_setup` | Bricht eine laufende Einrichtung ab. | Konfigurieren |
+| `ha_test_url_from_ha` | Prüft, ob der Home-Assistant-Rechner selbst eine Adresse erreicht (z. B. die Weboberfläche eines Geräts), und sagt, warum nicht. Es wird nichts angelegt: HA ruft die Adresse in einem Einrichtungsdialog ab, der sofort wieder abgebrochen wird. Kein `?query`, keine Anmeldedaten in der Adresse. | Konfigurieren |
 | `ha_start_integration_options` | Öffnet die Optionen einer Integration mit ihren aktuellen Werten. | Konfigurieren |
 | `ha_integration_options_step` | Schickt einen Optionsschritt ab. | Konfigurieren |
 | `ha_abort_integration_options` | Schließt die Optionen ohne zu speichern. | Konfigurieren |

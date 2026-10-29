@@ -61,7 +61,8 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_add_energy_device", "ha_remove_energy_device", "ha_remove_device",
                          "ha_remove_entity", "ha_save_assist_pipeline", "ha_set_preferred_assist_pipeline",
                          "ha_delete_assist_pipeline", "ha_set_exposure", "ha_set_expose_new_entities",
-                         "ha_install_hacs_repository", "ha_remove_hacs_repository", "ha_add_hacs_custom_repository"})
+                         "ha_install_hacs_repository", "ha_remove_hacs_repository", "ha_add_hacs_custom_repository",
+                         "ha_set_section_collapsible", "ha_test_url_from_ha"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
                            "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
@@ -148,6 +149,10 @@ EventSink = Callable[[dict], object]
 TOOL_TOPICS = (
     (r"automat|automatis|trigger|ausl[oö]s|fires?\b", {"ha_validate_automation", "ha_get_automation", "ha_save_automation", "ha_delete_automation"}),
     (r"dashboard|lovelace|ansicht|karte|\bcards?\b|\bviews?\b", {"ha_list_dashboards", "ha_get_dashboard", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard", "ha_delete_dashboard"}),
+    (r"klapp|collaps|expand|abschnitt|section|eingeklappt|ausgeklappt",
+     {"ha_list_dashboards", "ha_get_dashboard", "ha_set_section_collapsible", "ha_list_dashboard_resources"}),
+    (r"erreichbar|reachab|\bping\b|antwortet|vom ha aus|from (?:the )?ha|\burl\b.*(?:test|pr[üu]f)|"
+     r"(?:test|pr[üu]f).*\burl\b|https?://", {"ha_test_url_from_ha"}),
     (r"helper|helfer|input_(?:boolean|number|select|text|datetime|button)(?![.\w])|z[äa]hler|counter|\btimer|"
      r"stoppuhr|countdown|zeitplan|schedule|taster|toggle helper",
      {"ha_list_helpers", "ha_create_helper", "ha_update_helper", "ha_delete_helper", "ha_list_helper_types"}),

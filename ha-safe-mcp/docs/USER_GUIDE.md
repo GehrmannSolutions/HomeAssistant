@@ -312,6 +312,12 @@ For everything the UI cannot express: `configuration.yaml`, packages, template s
 - **Dashboard resources** (custom cards): `ha_list_dashboard_resources`, `ha_add_dashboard_resource`,
   `ha_delete_dashboard_resource` (delete level). Resources run as JavaScript in every user's browser, so only files
   served by this Home Assistant are accepted (`/local/...`, `/hacsfiles/...`); external URLs are refused.
+- **Collapsible sections:** `ha_set_section_collapsible` with `{"<heading>": "open" | "closed" | "off"}` folds the
+  cards of a section under its heading (double arrow on the right, the whole title line toggles). The state is the
+  default on every page load. Needs the HACS card Expander Card (`MelleD/lovelace-expander-card`).
+- **Reachability from HA:** `ha_test_url_from_ha` `{"url": "http://192.168.1.20/"}` answers whether the HA host
+  reaches an address, e.g. before setting up scrape, REST or a camera. Results: image, not_an_image (a web page,
+  i.e. reachable), auth_required, not_found, server_error, timeout, unreachable.
 - All writes here are journaled and can be undone.
 
 ### Updates, reload and restart

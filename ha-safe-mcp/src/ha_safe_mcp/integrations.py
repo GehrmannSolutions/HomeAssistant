@@ -13,9 +13,18 @@ Guardrails:
 - Secret-looking step fields (password, token, api_key, pin, ...) are accepted only as
   {"$credential": "<alias>", "field": "<field>"} references to the local credential store. Values are
   resolved here, right before the request, and scrubbed from every result; schema defaults are dropped.
+  Form sections (type ``expandable``, e.g. scrape's "auth") are not judged by their own name: every leaf field
+  inside is checked, shown and merged on its own (``auth.password`` must be a reference, ``auth.username`` not).
+- reachability test (admin write, no side effects in HA): ``test_url`` asks the HA host to fetch a URL through the
+  Generic Camera setup dialog (homeassistant/components/generic/config_flow.py, async_test_still: GET with
+  follow_redirects, 10 s timeout, error keys unable_still_load[_auth|_not_found|_server_error|_no_image] and
+  invalid_still_image). The dialog never reaches create_entry without a confirmation step and is always aborted.
+  Only plain http(s) URLs without query, credentials or templates, because a GET with a query can switch devices
+  (e.g. ``/relay/0?turn=on``).
 """
 
 import re
+import time
 
 from .credentials import CredentialError, CredentialStore, REF_KEY, resolve_refs, scrub
 from .server import IDENTIFIER, HAClient
@@ -33,13 +42,40 @@ ENTRY_UPDATE = frozenset({"title", "pref_disable_polling", "pref_disable_new_ent
 FLOW_FIELDS = ("type", "flow_id", "handler", "step_id", "errors", "description_placeholders", "reason",
                "last_step", "title", "menu_options", "progress_action")
 MAX_HANDLERS = 100
+PROBE_URL = re.compile(r"^https?://[^\s/?#@{}\\]+(?:/[^\s?#{}\\]*)?$")
+PROBE_RESULTS = {  # generic config flow error key -> (reachable, result, explanation)
+    None: (True, "image", "reachable: HTTP 2xx and the answer is an image"),
+    "invalid_still_image": (True, "not_an_image", "reachable: HTTP 2xx (after redirects), the answer is a web page, "
+                            "JSON or other data, not an image"),
+    "unable_still_load_no_image": (True, "empty", "reachable: HTTP 2xx but the answer was empty"),
+    "unable_still_load_auth": (True, "auth_required", "reachable, but it wants a login (HTTP 401 or 403)"),
+    "unable_still_load_not_found": (True, "not_found", "the server answers, but this path does not exist (HTTP 404)"),
+    "unable_still_load_server_error": (True, "server_error", "the server answers with an error (HTTP 500 or 503)"),
+    "unable_still_load": (False, "unreachable", "no usable answer: connection refused or timed out (10 s), name not "
+                          "resolvable, TLS certificate rejected, or another HTTP error code"),
+}
+PROBE_DETAILS = (("ConnectTimeout", False, "timeout: no answer within 10 s (device off, wrong address or firewall)"),
+                 ("TimeoutError", False, "timeout: no answer within 10 s (device off, wrong address or firewall)"),
+                 ("ReadTimeout", True, "timeout: connected, but no answer within 10 s"),
+                 ("ConnectError", False, "connection failed: refused, name not resolvable or TLS problem"),
+                 ("HTTPStatusError", True, "reachable, but it answered with an HTTP error code"))
 MAX_STEP_FIELDS = 30
 STEP_TIMEOUT = 90  # device handshakes (login, discovery probes) can outlast the default request timeout
 
 
 def _form_field(field: dict) -> dict:
     """One form field for the model. HA keeps the *current* value in description.suggested_value (options
-    and reconfigure forms); expose it as `current`, but never for secret fields, where every value is dropped."""
+    and reconfigure forms); expose it as `current`, but never for secret fields, where every value is dropped.
+    A section (type expandable) is judged by its leaf fields, not by its own name; its `current` is the dict of
+    the leaves' current values."""
+    if field.get("type") == "expandable" and isinstance(field.get("schema"), list):
+        out = {key: value for key, value in field.items() if key not in ("schema", "default", "description")}
+        out["schema"] = [_form_field(item) for item in field["schema"] if isinstance(item, dict)]
+        current = {item["name"]: item["current"] for item in out["schema"]
+                   if isinstance(item.get("name"), str) and "current" in item}
+        if current:
+            out["current"] = current
+        return out
     secret = bool(SECRET_FIELD.search(str(field.get("name", ""))))
     out = {key: value for key, value in field.items()
            if key != "description" and not (secret and key in ("default", "suggested_value"))}
@@ -143,13 +179,20 @@ class HAIntegrations:
             data = {}
         if not isinstance(data, dict) or len(data) > MAX_STEP_FIELDS:
             raise ValueError(f"step data must be an object with at most {MAX_STEP_FIELDS} fields")
-        for key, value in data.items():
-            if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_\-]{1,64}", key):
-                raise ValueError("invalid step field name")
-            is_ref = isinstance(value, dict) and REF_KEY in value
-            if SECRET_FIELD.search(key) and not is_ref and value not in ("", None):
-                raise ValueError(f"field '{key}' looks secret: pass it as a credential reference "
-                                 '{"$credential": "<alias>", "field": "<field>"} from ha_list_credentials')
+        def check(items: dict, prefix: str = ""):
+            for key, value in items.items():
+                if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_\-]{1,64}", key):
+                    raise ValueError("invalid step field name")
+                is_ref = isinstance(value, dict) and REF_KEY in value
+                if isinstance(value, dict) and not is_ref and not prefix:
+                    if len(value) > MAX_STEP_FIELDS:
+                        raise ValueError(f"section '{key}' has more than {MAX_STEP_FIELDS} fields")
+                    check(value, f"{key}.")  # a form section: judge its leaf fields, not its name
+                    continue
+                if SECRET_FIELD.search(key) and not is_ref and value not in ("", None):
+                    raise ValueError(f"field '{prefix}{key}' looks secret: pass it as a credential reference "
+                                     '{"$credential": "<alias>", "field": "<field>"} from ha_list_credentials')
+        check(data)
         try:
             return resolve_refs(self.credentials, data)
         except CredentialError as exc:
@@ -189,8 +232,16 @@ class HAIntegrations:
     def _merge_current(self, flow_id: str, data: dict) -> tuple[dict, list[str]]:
         """Fill fields the model left out with their current value, as the HA frontend does."""
         current = self._current.get(flow_id, {})
-        kept = sorted(key for key in current if key not in data)
-        return {**{key: current[key] for key in kept}, **data}, kept
+        merged = {**data}
+        kept = []
+        for key, value in current.items():
+            if key not in data:
+                merged[key], kept = value, kept + [key]
+            elif isinstance(value, dict) and isinstance(data[key], dict) and REF_KEY not in data[key]:
+                missing = [sub for sub in value if sub not in data[key]]
+                merged[key] = {**{sub: value[sub] for sub in missing}, **data[key]}
+                kept += [f"{key}.{sub}" for sub in missing]
+        return merged, sorted(kept)
 
     async def _step(self, base: str, flow_id: str, data: dict | None) -> dict:
         flow_id = self._flow_id(flow_id)
@@ -310,3 +361,66 @@ class HAIntegrations:
         if (current.get("disabled_by") == "user") != disabled:
             raise RuntimeError("Integration disable state not confirmed by read-back")
         return {**current, "require_restart": bool(isinstance(result, dict) and result.get("require_restart"))}
+
+    # ------------------------------------------------------------------ reachability from the HA host
+    async def test_url(self, url: str, verify_ssl: bool = True) -> dict:
+        """Can the Home Assistant host reach this URL? Uses a temporary Generic Camera setup dialog that is
+        always aborted, so nothing is created. Admin write (it starts a setup dialog)."""
+        self._check_write()
+        if not isinstance(url, str) or len(url) > 500 or not PROBE_URL.fullmatch(url.strip()):
+            raise ValueError("url: plain http:// or https:// address, e.g. 'http://192.168.1.20:8080/status'; no "
+                             "query (?...), no user:password@ and no templates (a GET with a query can switch devices)")
+        url = url.strip()
+        started = time.time() - 2
+        flow = await self.client._request("POST", "/api/config/config_entries/flow",
+                                          data={"handler": "generic", "show_advanced_options": False},
+                                          timeout=STEP_TIMEOUT)
+        flow_id = self._flow_id(flow.get("flow_id") if isinstance(flow, dict) else None)
+        try:
+            result = await self.client._request("POST", f"/api/config/config_entries/flow/{flow_id}",
+                                                data={"still_image_url": url,
+                                                      "advanced": {"framerate": 2, "verify_ssl": bool(verify_ssl)}},
+                                                timeout=STEP_TIMEOUT)
+        finally:
+            try:
+                await self.client._request("DELETE", f"/api/config/config_entries/flow/{flow_id}")
+            except Exception:  # noqa: BLE001 - an already finished dialog is fine
+                pass
+        if not isinstance(result, dict) or result.get("type") != "form":
+            raise RuntimeError(f"unexpected setup dialog result: {result.get('type') if isinstance(result, dict) else result}")
+        code = None if result.get("step_id") == "user_confirm" else (result.get("errors") or {}).get("still_image_url")
+        if code in ("malformed_url", "relative_url", "template_error"):
+            raise ValueError(f"Home Assistant rejected the URL: {code}")
+        reachable, verdict, explanation = PROBE_RESULTS.get(
+            code, (False, "unknown", f"Home Assistant answered with an unknown result: {code}"))
+        out = {"url": url, "reachable": reachable, "result": verdict, "explanation": explanation}
+        if code == "unable_still_load":
+            detail = await self._probe_detail(url, started)
+            for name, is_reachable, text in PROBE_DETAILS:
+                if detail and detail.startswith(name):
+                    out.update(reachable=is_reachable, explanation=text,
+                               result="http_error" if name == "HTTPStatusError" else ("timeout" if "Timeout" in name
+                                                                                      else "unreachable"))
+                    break
+            if detail:
+                # HA logs the whole response body after HTTPStatusError; the class name is enough (and private)
+                out["detail"] = detail.split()[0]
+        return {**out, "verify_ssl": bool(verify_ssl), "created": False,
+                "how": "fetched by the Home Assistant host (GET, follows redirects, 10 s) in a temporary Generic "
+                       "Camera setup dialog that was aborted; nothing was created"}
+
+    async def _probe_detail(self, url: str, since: float) -> str | None:
+        """The exact error class HA logged for this probe (ConnectTimeout, ConnectError, HTTPStatusError ...)."""
+        try:
+            entries = await self.ws.command("system_log/list")
+        except Exception:  # noqa: BLE001 - the log is only a bonus
+            return None
+        marker = f"Error getting camera image from {url}: "
+        for entry in sorted((e for e in entries or [] if isinstance(e, dict)),
+                            key=lambda e: -float(e.get("timestamp") or 0)):
+            if float(entry.get("timestamp") or 0) < since or "generic" not in str(entry.get("name", "")):
+                continue
+            for message in entry.get("message") or []:
+                if isinstance(message, str) and message.startswith(marker):
+                    return message[len(marker):][:200]
+        return None

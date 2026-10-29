@@ -131,3 +131,17 @@ def test_server_uses_the_credential_dir_from_the_environment(tmp_path, monkeypat
     from ha_safe_mcp import server as server_module
     monkeypatch.setenv("HA_CREDENTIALS_DIR", str(tmp_path / "creds"))
     assert server_module.credential_store_from_env().directory == tmp_path / "creds"
+
+
+def test_new_tools_of_0_33_are_registered_with_the_admin_level():
+    import asyncio
+    from ha_safe_mcp.ollama_client import WRITE_TOOLS, select_tool_names
+    from ha_safe_mcp.remote import tool_level
+    names = {tool.name for tool in asyncio.run(create_server(HAClient("http://ha:8123", "t")).list_tools())}
+    new = {"ha_set_section_collapsible", "ha_test_url_from_ha"}
+    assert new <= names and new <= WRITE_TOOLS
+    assert {tool_level(name) for name in new} == {"admin"}
+    picked = select_tool_names("klapp im Dashboard den Abschnitt Raumklima standardmäßig ein", names, allow_write=True)
+    assert "ha_set_section_collapsible" in picked
+    assert "ha_test_url_from_ha" in select_tool_names("ist http://192.168.1.20/ vom HA aus erreichbar?", names,
+                                                     allow_write=True)

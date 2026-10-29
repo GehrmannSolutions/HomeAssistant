@@ -376,3 +376,152 @@ async def test_kept_values_are_forgotten_after_the_flow_ends(tmp_path):
         await integrations.start_options(ENTRY)
         await integrations.abort_options(FLOW)
     assert integrations._current == {}
+
+
+# ---------------------------------------------------------------- form sections (found 2026-10-28 with scrape)
+SECTION_FORM = {"type": "form", "flow_id": FLOW, "handler": "scrape", "step_id": "user", "errors": {},
+                "data_schema": [
+                    {"name": "resource", "type": "string", "required": True},
+                    {"name": "auth", "type": "expandable", "expanded": False, "schema": [
+                        {"name": "username", "type": "string", "description": {"suggested_value": "admin"}},
+                        {"name": "password", "type": "string", "default": SECRET,
+                         "description": {"suggested_value": SECRET}}]},
+                    {"name": "advanced", "type": "expandable", "schema": [
+                        {"name": "timeout", "type": "integer", "description": {"suggested_value": 10}}]}]}
+
+
+@pytest.mark.asyncio
+async def test_section_named_auth_is_not_a_secret_but_its_leaf_fields_are_checked(tmp_path):
+    with respx.mock(base_url=URL) as router:
+        route = router.post(f"/api/config/config_entries/flow/{FLOW}").mock(
+            return_value=httpx.Response(200, json={"type": "abort", "flow_id": FLOW, "reason": "done"}))
+        await make(tmp_path).flow_step(FLOW, {"resource": "http://192.0.2.9/", "auth": {}, "advanced": {"timeout": 10}})
+        await make(tmp_path).flow_step(FLOW, {"auth": {"username": "admin", "password": {
+            "$credential": "shelly_login", "field": "password"}}})
+        with pytest.raises(ValueError, match="'auth.password' looks secret"):
+            await make(tmp_path).flow_step(FLOW, {"auth": {"username": "admin", "password": "klartext"}})
+    assert json.loads(route.calls[0].request.content)["auth"] == {}
+    assert json.loads(route.calls[1].request.content)["auth"] == {"username": "admin", "password": SECRET}
+    assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_secret_leaf_values_inside_sections_never_reach_the_model(tmp_path):
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/config/config_entries/flow").mock(return_value=httpx.Response(200, json=SECTION_FORM))
+        result = await make(tmp_path).start_flow("scrape")
+    assert SECRET not in json.dumps(result)
+    auth = next(field for field in result["data_schema"] if field["name"] == "auth")
+    assert [f.get("current") for f in auth["schema"]] == ["admin", None]
+    assert auth["current"] == {"username": "admin"}
+
+
+@pytest.mark.asyncio
+async def test_section_current_values_are_merged_field_by_field(tmp_path):
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/config/config_entries/options/flow").mock(
+            return_value=httpx.Response(200, json=SECTION_FORM))
+        step = router.post(f"/api/config/config_entries/options/flow/{FLOW}").mock(
+            return_value=httpx.Response(200, json={"type": "create_entry", "flow_id": FLOW, "handler": ENTRY}))
+        integrations = make(tmp_path)
+        await integrations.start_options(ENTRY)
+        result = await integrations.options_step(FLOW, {"advanced": {}})
+    sent = json.loads(step.calls[0].request.content)
+    assert sent["advanced"] == {"timeout": 10} and sent["auth"] == {"username": "admin"}
+    assert "advanced.timeout" in result["kept_current"]
+
+
+# ---------------------------------------------------------------- reachability test from the HA host
+def probe_routes(router, outcome):
+    start = router.post("/api/config/config_entries/flow").mock(return_value=httpx.Response(200, json={
+        "type": "form", "flow_id": FLOW, "handler": "generic", "step_id": "user", "data_schema": []}))
+    step = router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=outcome))
+    abort = router.delete(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json={}))
+    return start, step, abort
+
+
+@pytest.mark.parametrize("outcome, reachable, verdict", [
+    ({"type": "form", "step_id": "user_confirm", "errors": None}, True, "image"),
+    ({"type": "form", "step_id": "user", "errors": {"still_image_url": "invalid_still_image"}}, True, "not_an_image"),
+    ({"type": "form", "step_id": "user", "errors": {"still_image_url": "unable_still_load_auth"}}, True, "auth_required"),
+    ({"type": "form", "step_id": "user", "errors": {"still_image_url": "unable_still_load_not_found"}}, True, "not_found"),
+    ({"type": "form", "step_id": "user", "errors": {"still_image_url": "unable_still_load_server_error"}}, True,
+     "server_error"),
+    ({"type": "form", "step_id": "user", "errors": {"still_image_url": "unable_still_load"}}, False, "unreachable"),
+])
+@pytest.mark.asyncio
+async def test_url_probe_maps_results_and_always_aborts(tmp_path, outcome, reachable, verdict):
+    ws = FakeWS()
+    ws.command = _log_ws(ws, [])
+    with respx.mock(base_url=URL) as router:
+        start, step, abort = probe_routes(router, {"flow_id": FLOW, "handler": "generic", **outcome})
+        result = await make(tmp_path, ws=ws).test_url("http://192.0.2.10:8080/status", verify_ssl=False)
+    assert json.loads(start.calls[0].request.content)["handler"] == "generic"
+    assert json.loads(step.calls[0].request.content) == {
+        "still_image_url": "http://192.0.2.10:8080/status", "advanced": {"framerate": 2, "verify_ssl": False}}
+    assert abort.called
+    assert result["reachable"] is reachable and result["result"] == verdict
+    assert result["url"] == "http://192.0.2.10:8080/status" and result["created"] is False
+
+
+def _log_ws(ws, entries):
+    async def command(kind, payload=None):
+        ws.calls.append((kind, payload or {}))
+        if kind == "system_log/list":
+            return entries
+        raise AssertionError(kind)
+    return command
+
+
+@pytest.mark.asyncio
+async def test_url_probe_reads_the_exact_reason_from_the_log(tmp_path):
+    ws = FakeWS()
+    ws.command = _log_ws(ws, [{"name": "homeassistant.components.generic.config_flow", "timestamp": 1e10,
+                               "message": ["Error getting camera image from http://192.0.2.10/: ConnectTimeout"]}])
+    with respx.mock(base_url=URL) as router:
+        probe_routes(router, {"type": "form", "flow_id": FLOW, "step_id": "user",
+                              "errors": {"still_image_url": "unable_still_load"}})
+        result = await make(tmp_path, ws=ws).test_url("http://192.0.2.10/")
+    assert result["detail"] == "ConnectTimeout" and "timeout" in result["explanation"].lower()
+
+
+@pytest.mark.parametrize("url", ["ftp://host/x", "192.0.2.1", "http://host/a?turn=on", "http://host/{{ x }}",
+                                 "http://user:pw@host/", "http://host/" + "a" * 600])
+@pytest.mark.asyncio
+async def test_url_probe_rejects_unsafe_urls_before_touching_home_assistant(tmp_path, url):
+    with respx.mock(base_url=URL, assert_all_called=False) as router:
+        start = router.post("/api/config/config_entries/flow")
+        with pytest.raises(ValueError):
+            await make(tmp_path).test_url(url)
+    assert not start.called
+
+
+@pytest.mark.asyncio
+async def test_url_probe_needs_admin_write_and_aborts_even_on_errors(tmp_path):
+    with pytest.raises(ValueError, match="admin"):
+        await make(tmp_path, admin=False).test_url("http://192.0.2.10/")
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/config/config_entries/flow").mock(return_value=httpx.Response(200, json={
+            "type": "form", "flow_id": FLOW, "handler": "generic", "step_id": "user"}))
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(500))
+        abort = router.delete(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200))
+        with pytest.raises(RuntimeError):
+            await make(tmp_path).test_url("http://192.0.2.10/")
+    assert abort.called
+
+
+@pytest.mark.parametrize("logged, verdict, reachable, detail", [
+    ("TimeoutError", "timeout", False, "TimeoutError"),
+    ("HTTPStatusError <!DOCTYPE HTML><html>private page</html>", "http_error", True, "HTTPStatusError"),
+])
+@pytest.mark.asyncio
+async def test_url_probe_detail_variants_and_no_response_body(tmp_path, logged, verdict, reachable, detail):
+    ws = FakeWS()
+    ws.command = _log_ws(ws, [{"name": "homeassistant.components.generic.config_flow", "timestamp": 1e10,
+                               "message": [f"Error getting camera image from http://192.0.2.10/: {logged}"]}])
+    with respx.mock(base_url=URL) as router:
+        probe_routes(router, {"type": "form", "flow_id": FLOW, "step_id": "user",
+                              "errors": {"still_image_url": "unable_still_load"}})
+        result = await make(tmp_path, ws=ws).test_url("http://192.0.2.10/")
+    assert (result["result"], result["reachable"], result["detail"]) == (verdict, reachable, detail)
+    assert "private" not in json.dumps(result)

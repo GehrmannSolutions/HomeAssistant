@@ -52,6 +52,12 @@ NEXT = ("not active yet: reload the affected part with ha_reload (e.g. 'automati
         "changes to integrations configured in YAML or to homeassistant: need ha_restart")
 
 
+TOP_TEMPLATE = re.compile(r"(?m)^template:")
+TEMPLATE_YAML = re.compile(r"(?m)^(?:template:|[ \t]*-[ \t]+(?:sensor|binary_sensor|trigger|triggers|button|"
+                           r"image|number|select|switch|weather|light|cover|fan|lock|alarm_control_panel|vacuum|"
+                           r"event|update):)")
+
+
 def next_step(path: str) -> str:
     """What makes a change active: files under www/ are served right away as /local/..., YAML needs a reload."""
     if path.startswith("www/"):
@@ -361,6 +367,8 @@ class ConfigFiles:
         self.allow_admin_write, self.allow_delete = allow_admin_write, allow_delete
         self._backend = backend
         self.checker = checker
+        # async () -> bool: is the template integration loaded (template.reload exists)? set by the server
+        self.template_loaded: Callable[[], Awaitable[bool]] | None = None
 
     @property
     def backend(self):
@@ -439,6 +447,15 @@ class ConfigFiles:
                 after_check["note"] = "these errors or warnings existed before this change"
             result["config_check"] = after_check
         result["next"] = next_step(path)
+        if is_yaml and self.template_loaded is not None and TEMPLATE_YAML.search(after) and (
+                TOP_TEMPLATE.search(after) or "template" in path):
+            try:
+                loaded = await self.template_loaded()
+            except Exception:  # noqa: BLE001 - only a hint
+                loaded = True
+            if not loaded:
+                from .system import TEMPLATE_NOT_LOADED
+                result["hint"] = TEMPLATE_NOT_LOADED
         return result
 
     async def write(self, path: str, content: str) -> dict:
