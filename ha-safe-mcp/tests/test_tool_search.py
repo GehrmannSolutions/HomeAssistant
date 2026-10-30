@@ -127,6 +127,31 @@ async def test_entity_search_understands_german_domain_names():
     assert [e["entity_id"] for e in found] == ["sun.sun"]
 
 
+async def test_entity_search_finds_sensors_by_their_kind_in_english_and_german():
+    """English questions about German-named sensors: 'power' finds 'Fernseher Leistung' by its device class."""
+    from ha_safe_mcp.server import HAClient
+
+    class Client(HAClient):
+        async def _request(self, method, path, **kwargs):
+            return [{"entity_id": "sensor.fernseher_leistung", "state": "95",
+                     "attributes": {"friendly_name": "Fernseher Leistung", "device_class": "power"}},
+                    {"entity_id": "binary_sensor.fenster_bad", "state": "on",
+                     "attributes": {"friendly_name": "Fenster Bad", "device_class": "window"}},
+                    {"entity_id": "sensor.temperatur_bad", "state": "23",
+                     "attributes": {"friendly_name": "Temperatur Bad", "device_class": "temperature"}},
+                    {"entity_id": "light.flur", "state": "on", "attributes": {"friendly_name": "Flur"}}]
+    client = Client("http://x:8123", "t")
+
+    async def ids(query):
+        return [e["entity_id"] for e in await client.search_entities(query)]
+    assert await ids("power") == ["sensor.fernseher_leistung"]
+    assert await ids("Stromverbrauch") == ["sensor.fernseher_leistung"]
+    assert await ids("windows") == ["binary_sensor.fenster_bad"]
+    assert await ids("Fenster") == ["binary_sensor.fenster_bad"]
+    assert await ids("temperature") == ["sensor.temperatur_bad"]
+    assert await ids("Flur") == ["light.flur"]
+
+
 async def test_find_tools_accepts_other_argument_names_and_falls_back_to_the_question():
     transport, offered = ollama([call(FIND_TOOLS, keywords="Verlauf"), call(FIND_TOOLS),
                                  {"role": "assistant", "content": "ok"}])

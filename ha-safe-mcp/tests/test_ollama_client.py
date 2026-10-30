@@ -334,7 +334,100 @@ async def test_schema_invalid_write_is_returned_to_the_model_without_an_approval
     assert session.calls == asked
     rejected = seen[1][-1]
     assert rejected["role"] == "tool" and "helper_id" in rejected["content"]
-    assert [e for e in events if e["type"] == "tool_result"][0]["ok"] is False
+    failed = [e for e in events if e["type"] == "tool_result"][0]
+    assert failed["ok"] is False
+    assert failed["arguments"] == {"domain": "input_boolean", "helper_id": "Testschalter"}  # the chat shows the try
+
+
+class ServiceSession(FakeSession):
+    """ha_call_service with entity_id required at the top level, as the real server declares it."""
+
+    async def list_tools(self):
+        return SimpleNamespace(tools=[SimpleNamespace(name="ha_call_service", description="Call an action", inputSchema={
+            "type": "object", "required": ["domain", "service", "entity_id"], "properties": {
+                "domain": {"type": "string"}, "service": {"type": "string"},
+                "entity_id": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+                "service_data": {"anyOf": [{"type": "object"}, {"type": "null"}]}}})])
+
+    async def call_tool(self, name, arguments):
+        self.calls.append((name, arguments))
+        return SimpleNamespace(isError=False, structuredContent=None, content=[
+            SimpleNamespace(type="text", text='{"all_confirmed": true}')])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proposed, expected", [
+    ({"domain": "cover", "service": "close_cover", "target": {"entity_id": "cover.wohnzimmer"}},
+     {"domain": "cover", "service": "close_cover", "entity_id": "cover.wohnzimmer"}),
+    ({"domain": "cover", "service": "set_cover_position",
+      "service_data": {"entity_id": "cover.wohnzimmer", "position": 30}},
+     {"domain": "cover", "service": "set_cover_position", "entity_id": "cover.wohnzimmer",
+      "service_data": {"position": 30}}),
+    ({"domain": "light", "service": "turn_on", "data": {"entity_id": ["light.a", "light.b"], "brightness_pct": 40}},
+     {"domain": "light", "service": "turn_on", "entity_id": ["light.a", "light.b"],
+      "service_data": {"brightness_pct": 40}}),
+    ({"domain": "cover", "service": "set_cover_position", "entity_id": "cover.wohnzimmer", "position": 0},
+     {"domain": "cover", "service": "set_cover_position", "entity_id": "cover.wohnzimmer",
+      "service_data": {"position": 0}}),
+    ({"domain": "light", "service": "turn_on", "entity_id": "light.a", "brightness_pct": 40,
+      "service_data": {"transition": 2}},
+     {"domain": "light", "service": "turn_on", "entity_id": "light.a",
+      "service_data": {"transition": 2, "brightness_pct": 40}}),
+    ({"domain": "cover", "service": "set_cover_position",   # the object sent as a JSON string
+      "service_data": '{"entity_id": "cover.wohnzimmer", "position": 0}'},
+     {"domain": "cover", "service": "set_cover_position", "entity_id": "cover.wohnzimmer",
+      "service_data": {"position": 0}}),
+])
+async def test_entity_id_written_like_in_ha_yaml_is_lifted_before_the_approval_card(proposed, expected):
+    """Small models put entity_id into target/data as in HA YAML; the approval card shows what really runs."""
+    proposals = iter([{"name": "ha_call_service", "arguments": proposed}])
+
+    def respond(request):
+        proposal = next(proposals, None)
+        if proposal is None:
+            return httpx.Response(200, json={"message": {"role": "assistant", "content": "Erledigt."}})
+        return httpx.Response(200, json={"message": {"role": "assistant", "content": "",
+                                                     "tool_calls": [{"type": "function", "function": proposal}]}})
+
+    asked, events = [], []
+
+    async def approve(name, args):
+        asked.append((name, args))
+        return True
+
+    session = ServiceSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
+        answer = await run_chat(session, http, "small", "Fahr den Rollladen runter", allow_write=True,
+                                approve=approve, on_event=events.append)
+    assert answer == "Erledigt."
+    assert asked == [("ha_call_service", expected)] and session.calls == asked
+    assert all(e["ok"] for e in events if e["type"] == "tool_result")
+
+
+@pytest.mark.asyncio
+async def test_a_target_with_more_than_an_entity_id_is_not_guessed():
+    """target with area_id as well: lifting only entity_id would change what runs, so the schema error goes back."""
+    proposals = iter([{"name": "ha_call_service", "arguments": {
+        "domain": "light", "service": "turn_off", "target": {"entity_id": "light.a", "area_id": "keller"}}}])
+
+    def respond(request):
+        proposal = next(proposals, None)
+        if proposal is None:
+            return httpx.Response(200, json={"message": {"role": "assistant", "content": "Nicht ausgeführt."}})
+        return httpx.Response(200, json={"message": {"role": "assistant", "content": "",
+                                                     "tool_calls": [{"type": "function", "function": proposal}]}})
+
+    asked, events = [], []
+
+    async def approve(name, args):
+        asked.append((name, args))
+        return True
+
+    session = ServiceSession()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
+        await run_chat(session, http, "small", "Licht aus", allow_write=True, approve=approve, on_event=events.append)
+    assert asked == [] and session.calls == []
+    assert [e["ok"] for e in events if e["type"] == "tool_result"] == [False]
 
 
 @pytest.mark.asyncio

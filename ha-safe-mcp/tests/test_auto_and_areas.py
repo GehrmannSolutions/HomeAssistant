@@ -178,6 +178,38 @@ async def test_area_can_be_named_by_name_or_alias_and_unknown_areas_list_the_cho
             await registry.list_area_entities("Dachboden")
 
 
+class FloorWS(AreaWS):
+    """Both rooms on the Erdgeschoss (alias EG); the Keller has no room yet."""
+
+    async def command(self, kind, payload=None):
+        if kind == "config/floor_registry/list":
+            return [{"floor_id": "erdgeschoss", "name": "Erdgeschoss", "aliases": ["EG"], "level": 0},
+                    {"floor_id": "keller", "name": "Keller", "aliases": [], "level": -1}]
+        result = await super().command(kind, payload)
+        if kind == "config/area_registry/list":
+            return [{**area, "floor_id": "erdgeschoss"} for area in result]
+        return result
+
+
+async def test_a_floor_lists_the_entities_of_all_its_rooms():
+    """'Mach im Erdgeschoss alle Lichter aus': small models pass the floor where a room is expected."""
+    with respx.mock(base_url=URL) as router:
+        router.get("/api/states").mock(return_value=httpx.Response(200, json=STATES))
+        registry = HARegistry(HAClient(URL, "t"), FloorWS())
+        result = await registry.list_area_entities("Erdgeschoss", "light")
+        assert result["floor_id"] == "erdgeschoss" and result["name"] == "Erdgeschoss"
+        assert result["areas"] == ["Küche", "Wohnzimmer"]
+        assert sorted(result["available"]) == ["light.kuche", "light.stehlampe_1", "light.stehlampe_2"]
+        assert result["unavailable"] == ["light.leinwand"]
+        assert {e["entity_id"]: e["area"] for e in result["entities"]}["light.kuche"] == "Küche"
+        assert (await registry.list_area_entities("eg", "light"))["floor_id"] == "erdgeschoss"
+        empty = await registry.list_area_entities("Keller")
+        assert empty["areas"] == [] and empty["entities"] == [] and "no rooms" in empty["hint"]
+        assert (await registry.list_area_entities("Wohnzimmer"))["area_id"] == "wohnzimmer"   # rooms still win
+        with pytest.raises(ValueError, match="floors: Erdgeschoss, Keller"):
+            await registry.list_area_entities("Dachboden")
+
+
 async def test_groups_whose_members_are_in_the_area_are_reported_but_not_doubled():
     with respx.mock(base_url=URL) as router:
         router.get("/api/states").mock(return_value=httpx.Response(200, json=STATES))

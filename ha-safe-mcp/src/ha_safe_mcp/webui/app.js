@@ -685,7 +685,7 @@ const chat = {
       case "tool_result": {
         const open = [...this.items].reverse().find((item) => item.kind === "tool" && item.name === event.name && item.status === "running");
         if (open) { open.status = event.ok ? "ok" : "failed"; open.preview = event.preview; }
-        else this.items.push({ kind: "tool", name: event.name, args: {}, status: event.ok ? "ok" : "failed", preview: event.preview });
+        else this.items.push({ kind: "tool", name: event.name, args: event.arguments || {}, status: event.ok ? "ok" : "failed", preview: event.preview });
         this.typing = t("Model is thinking", "Modell denkt nach");
         break;
       }

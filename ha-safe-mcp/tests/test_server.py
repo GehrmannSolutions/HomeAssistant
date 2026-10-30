@@ -62,6 +62,27 @@ async def test_errors_do_not_expose_token():
 
 
 @pytest.mark.asyncio
+async def test_a_rejected_action_says_why_in_home_assistants_words():
+    """HA's own reason lets a small model correct itself ('does not support' -> use close_cover)."""
+    reason = "Entity cover.wohnzimmer does not support action cover.set_cover_position"
+    with respx.mock(base_url="http://ha:8123") as router:
+        router.post("/api/services/cover/set_cover_position").mock(
+            return_value=httpx.Response(400, json={"message": reason + "\n   (token secret)"}))
+        router.post("/api/services/cover/close_cover").mock(return_value=httpx.Response(400, text="<html>secret</html>"))
+        router.get("/api/states").mock(return_value=httpx.Response(500, json={"message": "Traceback secret"}))
+        client = HAClient("http://ha:8123", "secret", allow_write=True, allowed_domains=frozenset({"cover"}))
+        with pytest.raises(RuntimeError) as rejected:
+            await client.call_service("cover", "set_cover_position", "cover.wohnzimmer")
+        assert str(rejected.value) == f"Home Assistant returned HTTP 400: {reason} (token ***)"  # never echo the token
+        with pytest.raises(RuntimeError) as html:   # only HA's JSON message, never a raw body
+            await client.call_service("cover", "close_cover", "cover.wohnzimmer")
+        assert str(html.value) == "Home Assistant returned HTTP 400"
+        with pytest.raises(RuntimeError) as server_error:   # 5xx bodies stay out (tracebacks)
+            await client.search_entities("x")
+        assert str(server_error.value) == "Home Assistant returned HTTP 500"
+
+
+@pytest.mark.asyncio
 async def test_search_is_compact_for_small_models():
     with respx.mock(base_url="http://ha:8123") as router:
         router.get("/api/states").mock(return_value=httpx.Response(200, json=[

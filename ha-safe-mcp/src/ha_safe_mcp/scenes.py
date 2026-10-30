@@ -48,8 +48,9 @@ def action_names(node) -> set[str]:
 
 class HAScenes:
     def __init__(self, client: HAClient, ws, *, allow_admin_write: bool = False, allow_delete: bool = False,
-                 settle_seconds: float = 5.0):
+                 settle_seconds: float = 5.0, read_back_delays: tuple[float, ...] = (0.4, 0.8, 1.5)):
         self.client = client
+        self.read_back_delays = read_back_delays
         self.ws = ws
         self.allow_admin_write = allow_admin_write
         self.allow_delete = allow_delete
@@ -161,10 +162,60 @@ class HAScenes:
             raise RuntimeError("Scene still present after delete")
         return {"deleted": True}
 
-    async def activate_scene(self, entity_id: str) -> list | dict:
+    async def activate_scene(self, entity_id: str) -> dict:
         if "scene" not in self.client.allowed_domains:
             raise ValueError("activating scenes needs 'scene' in the allowed domains (settings)")
-        return await self.client.call_service("scene", "turn_on", entity_id)
+        await self.client.call_service("scene", "turn_on", entity_id)
+        return await self._scene_read_back(entity_id)
+
+    async def _scene_read_back(self, entity_id: str) -> dict:
+        """Read the scene's entities after activating it. A UI scene's stored config gives each entity's target
+        state, so members are re-read (about 3 s) until they show it and reported confirmed true/false, like
+        ha_call_service does; YAML scenes have no stored config, so their states come without a verdict."""
+        scene = await self.client._request("GET", f"/api/states/{entity_id}")
+        attributes = scene.get("attributes") if isinstance(scene, dict) else None
+        attributes = attributes if isinstance(attributes, dict) else {}
+        members = [m for m in attributes.get("entity_id") or [] if isinstance(m, str)][:50]
+        targets: dict[str, str] = {}
+        if attributes.get("id"):
+            try:
+                config = await self.client._request("GET", f"/api/config/scene/config/{attributes['id']}")
+            except RuntimeError:
+                config = None
+            for member, spec in ((config or {}).get("entities") or {}).items():
+                target = spec.get("state") if isinstance(spec, dict) else spec
+                if isinstance(target, str):
+                    targets[member] = target
+        states: dict[str, dict] = {}
+
+        def reached(member):
+            return member not in targets or states[member].get("state") == targets[member]
+        for delay in (0,) + tuple(self.read_back_delays):
+            if delay:
+                await asyncio.sleep(delay)
+            for member in members:
+                if member in states and reached(member):
+                    continue
+                try:
+                    states[member] = await self.client._request("GET", f"/api/states/{member}")
+                except RuntimeError:
+                    states[member] = {"state": "unknown"}
+            if all(reached(member) for member in members):
+                break
+        after = []
+        for member in members:
+            current = states[member]
+            item = {"entity_id": member, "name": (current.get("attributes") or {}).get("friendly_name"),
+                    "state": current.get("state")}
+            if member in targets:
+                item.update(target=targets[member], confirmed=current.get("state") == targets[member])
+            after.append(item)
+        confirmed = all(item["confirmed"] for item in after if "confirmed" in item) if targets else None
+        result = {"activated": entity_id, "states_after": after, "all_confirmed": confirmed}
+        if confirmed is False:
+            result["hint"] = ("not confirmed: some entities did not reach the scene's state within about 3 s (slow, "
+                              "offline or changed by something else). Tell the user what was reported.")
+        return result
 
     # ------------------------------------------------------------------ scripts
     async def list_scripts(self) -> list[dict]:

@@ -79,6 +79,24 @@ class HAClient:
         except Exception:  # noqa: BLE001 - auditing is best effort by design
             pass
 
+    def _rejection_reason(self, response: httpx.Response) -> str:
+        """Home Assistant's own short reason for a rejected request (HTTP 400), e.g. "Entity cover.x does not support
+        action cover.set_cover_position": with it a small model can correct its call. Only the JSON message of a 400,
+        one line, at most 300 characters, the token masked; other bodies (HTML, 5xx tracebacks) never pass."""
+        if response.status_code != 400:
+            return ""
+        try:
+            body = response.json()
+        except ValueError:
+            return ""
+        message = body.get("message") if isinstance(body, dict) else None
+        if not isinstance(message, str) or not message.strip():
+            return ""
+        message = " ".join(message.split())
+        if self.token:
+            message = message.replace(self.token, "***")
+        return message[:300]
+
     async def _request(self, method: str, path: str, *, data: dict | None = None, timeout: float = 15,
                        as_text: bool = False):
         started, status, error = time.monotonic(), None, None
@@ -91,7 +109,9 @@ class HAClient:
                 return response.text if as_text else response.json()
         except httpx.HTTPStatusError as exc:
             error = "HTTPStatusError"
-            raise RuntimeError(f"Home Assistant returned HTTP {exc.response.status_code}") from None
+            reason = self._rejection_reason(exc.response)
+            raise RuntimeError(f"Home Assistant returned HTTP {exc.response.status_code}"
+                               + (f": {reason}" if reason else "")) from None
         except (httpx.RequestError, ValueError) as exc:
             error = type(exc).__name__
             raise RuntimeError(f"Home Assistant request failed ({type(exc).__name__})") from None
@@ -108,10 +128,13 @@ class HAClient:
         if not isinstance(states, list):
             raise RuntimeError("Unexpected Home Assistant response")
         needle = query.casefold()
-        # German domain names ("Sonne", "Rollläden") find entities whose IDs and names are English (sun.sun)
-        from .domains import DOMAIN_INFO
+        # German domain names ("Sonne", "Rollläden") find entities whose IDs and names are English (sun.sun), and
+        # the kind of a sensor ("power", "Strom", "windows") finds it even when its name says it in another language
+        from .domains import DEVICE_CLASS_WORDS, DOMAIN_INFO
         label_domains = {d for d, names in DOMAIN_INFO.items() if len(needle) >= 3
                          and any(needle in label.casefold() for label, _ in names.values())}
+        kinds = {kind for kind, stems in DEVICE_CLASS_WORDS.items() if len(needle) >= 3
+                 and any(stem in needle for stem in stems)}
         return [{"entity_id": state["entity_id"], "state": state.get("state", ""),
                  "friendly_name": str(state.get("attributes", {}).get("friendly_name", ""))}
                 for state in states if isinstance(state, dict) and isinstance(state.get("entity_id"), str)
@@ -119,7 +142,8 @@ class HAClient:
                 and (not domain or state["entity_id"].startswith(domain + "."))
                 and (needle in state["entity_id"].casefold()
                      or needle in str(state["attributes"].get("friendly_name", "")).casefold()
-                     or state["entity_id"].split(".", 1)[0] in label_domains)][:limit]
+                     or state["entity_id"].split(".", 1)[0] in label_domains
+                     or state["attributes"].get("device_class") in kinds)][:limit]
 
     async def get_state(self, entity_id: str) -> dict:
         if not ENTITY.fullmatch(entity_id):
@@ -339,7 +363,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_search_entities(query: str = "", domain: str = "", limit: int = 50) -> list[dict]:
-        """Search current entity IDs and friendly names, optionally filter by domain."""
+        """Search current entity IDs and friendly names, optionally filter by domain. Also finds sensors by their
+        kind in English or German ('power'/'Strom', 'window'/'Fenster', 'temperature'), whatever their name says."""
         return await client.search_entities(query, domain, limit)
 
     @tool()
@@ -1051,9 +1076,10 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await journaled("ha_delete_scene", "scene", scene_id, lambda: scenes.delete_scene(scene_id))
 
     @tool()
-    async def ha_activate_scene(entity_id: str) -> list:
+    async def ha_activate_scene(entity_id: str) -> dict:
         """Activate a scene (scene.turn_on), e.g. entity_id 'scene.abendlicht'. Needs write and 'scene' in the
-        allowed domains."""
+        allowed domains. Returns states_after: the scene's entities read back, for UI scenes with their target
+        state and confirmed true/false (false = not reached; report that, do not claim success)."""
         return await scenes.activate_scene(entity_id)
 
     @tool()
@@ -1098,7 +1124,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_list_area_entities(area: str, domain: str = "") -> dict:
         """Entities of one room: area may be the area_id, its name or an alias (e.g. 'Wohnzimmer'). Follows the
         device's area like HA does. Returns available/unavailable entity_ids, the entities with state, and groups
-        whose members are in the room. Optional domain filter, e.g. 'light'."""
+        whose members are in the room. Optional domain filter, e.g. 'light'. A floor name such as 'Keller' or
+        'Erdgeschoss' returns the entities of all rooms on that floor (each with its room)."""
         return await registry.list_area_entities(area, domain)
 
     @tool()

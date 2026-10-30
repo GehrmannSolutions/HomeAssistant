@@ -3,6 +3,41 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.34.0 – 2026-10-30
+
+Aus den Chat-Tests mit dem größeren Demo-Zuhause (ein kleines lokales Modell, `qwen3-coder:30b`):
+
+- **Etagen statt Räume:** `ha_list_area_entities` nimmt jetzt auch einen Etagennamen oder Alias ("Keller",
+  "Erdgeschoss"). Dann kommen die Entitäten aller Bereiche dieser Etage, jede mit ihrem Bereich, dazu die Liste der
+  Bereiche. "Mach im Keller alle Lichter aus" braucht so einen Aufruf zum Lesen und einen zum Schalten statt einer
+  Rückfrage. Eine Etage ohne Bereiche sagt das; Bereiche gewinnen bei gleichem Namen. Bei unbekanntem Namen nennt
+  die Fehlermeldung auch die Etagen.
+- **Sensoren nach ihrer Art finden:** `ha_search_entities` findet Sensoren über ihre Geräteklasse, auf Deutsch und
+  Englisch: "power", "Strom" oder "Verbrauch" findet "Fernseher Leistung", "windows" die Fensterkontakte, dazu
+  Temperatur, Feuchte, Tür, Batterie, Bewegung, Rauch, CO2, Rollläden und mehr.
+- **Szenen werden zurückgelesen:** `ha_activate_scene` liefert jetzt `states_after`: die Entitäten der Szene nach
+  dem Aktivieren. Bei Szenen aus der Oberfläche wird jede mit dem in der Szene gespeicherten Zustand verglichen
+  (`confirmed` ja/nein, bis etwa 3 s nachgelesen), YAML-Szenen kommen ohne Urteil. Die Antwort kann so sagen, was
+  wirklich passiert ist. Das Werkzeug gibt dafür ein Objekt statt einer Liste zurück.
+- **Aufrufe wie in YAML:** Der Chat setzt eine `entity_id` aus `target`, `service_data` oder `data` an die oberste
+  Ebene, schiebt unbekannte Felder wie `position` in `service_data` und liest Objekte, die als JSON-Text kommen
+  (`"service_data": "{\"position\": 0}"`), als Objekt, bevor die Freigabekarte erscheint. Die Karte
+  zeigt also, was wirklich läuft. Ein `target` mit Bereichen oder Geräten wird nicht geraten: Das Modell bekommt den
+  Schemafehler zurück.
+- **Fehlgeschlagene Versuche sichtbar:** Ein vom Schema abgelehnter Aufruf zeigt im Chat jetzt die Argumente, die
+  das Modell geschickt hat.
+- **Home Assistants Grund bei HTTP 400:** Lehnt Home Assistant eine Anfrage mit einer JSON-Meldung ab, steht diese
+  Meldung (eine Zeile, höchstens 300 Zeichen, Token maskiert) jetzt in der Fehlermeldung. Andere Antworten (HTML,
+  Tracebacks bei 5xx) bleiben draußen.
+- **Demo-Zuhause für Doku und Tests:** `scripts/docs_demo_home.py` baut jetzt drei Etagen mit 17 Bereichen, 20
+  Lampen, 8 Geräten mit Leistungsmessung, 7 Rollläden (mit Position), einem Türschloss, Raumtemperaturen,
+  Fensterkontakten, vier Automationen, der Szene "Filmabend" und dem Skript "Alles aus", alles über die Werkzeuge
+  des MCP selbst. Neue Chat-Beispiele in der Funktionsübersicht: ganze Etage aus, Rollladen, Türschloss, Szene,
+  Stromverbrauch, offene Fenster (`scripts/doc_screenshots.py` Szenarien `floor-off`, `cover`, `lock`, `scene`,
+  `power`, `windows`).
+- **Beispiele ohne Privates:** Beispiele und Testdaten nutzen neutrale Namen (`vendor.set_plan`,
+  PV-Wechselrichter, eigene Vorlagen-Ordner).
+
 ## 0.33.0 – 2026-10-29
 
 Aus den Funden beim Ausbau echter Dashboards (28.10.):

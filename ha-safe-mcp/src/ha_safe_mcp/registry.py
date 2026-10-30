@@ -84,9 +84,11 @@ class HARegistry:
         return [{key: item.get(key) for key in FLOOR_FIELDS} for item in await self._list("floor")]
 
     async def list_area_entities(self, area: str, domain: str = "") -> dict:
-        """Entities in one area, resolved like HA: an entity's own area wins, otherwise its device's area."""
+        """Entities in one area, resolved like HA: an entity's own area wins, otherwise its device's area.
+        When no room has that name, a floor (floor_id, name or alias) stands for all of its rooms: small models
+        pass "Keller" or "Erdgeschoss" where a room is expected ("Mach im Keller alle Lichter aus")."""
         if not isinstance(area, str) or not area.strip() or len(area) > 100:
-            raise ValueError("area: area_id, name or alias of a room")
+            raise ValueError("area: area_id, name or alias of a room or a floor")
         if domain and (not isinstance(domain, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", domain)):
             raise ValueError("invalid domain, e.g. 'light'")
         areas = await self._list("area")
@@ -94,10 +96,22 @@ class HARegistry:
         match = next((a for a in areas if str(a.get("area_id", "")).casefold() == wanted), None) or next(
             (a for a in areas if str(a.get("name", "")).casefold() == wanted
              or wanted in (str(alias).casefold() for alias in a.get("aliases") or [])), None)
+        floor = None
         if match is None:
-            names = ", ".join(sorted(str(a.get("name")) for a in areas))
-            raise ValueError(f"unknown area '{area}'; known areas: {names}")
-        area_id = match["area_id"]
+            try:   # floors exist since HA 2024.4; without them the error below lists the rooms only
+                floors = await self._list("floor")
+            except Exception:  # noqa: BLE001 - optional fallback, the room lookup already failed
+                floors = []
+            floor = next((f for f in floors if str(f.get("floor_id", "")).casefold() == wanted), None) or next(
+                (f for f in floors if str(f.get("name", "")).casefold() == wanted
+                 or wanted in (str(alias).casefold() for alias in f.get("aliases") or [])), None)
+            if floor is None:
+                names = ", ".join(sorted(str(a.get("name")) for a in areas))
+                floor_names = ", ".join(sorted(str(f.get("name")) for f in floors))
+                raise ValueError(f"unknown area '{area}'; known areas: {names}"
+                                 + (f"; floors: {floor_names}" if floors else ""))
+        selected = ({match["area_id"]: match} if match is not None else
+                    {a["area_id"]: a for a in areas if a.get("floor_id") == floor.get("floor_id")})
         devices = {d.get("id"): d for d in await self._list("device")}
         entities = await self._list("entity")
         states = await self.client._request("GET", "/api/states")
@@ -113,12 +127,15 @@ class HARegistry:
                 continue
             own = entry.get("area_id")
             device_area = (devices.get(entry.get("device_id")) or {}).get("area_id")
-            if (own or device_area) != area_id:
+            room = own or device_area
+            if room not in selected:
                 continue
             state = state_by_id.get(entity_id) or {}
             attributes = state.get("attributes") if isinstance(state.get("attributes"), dict) else {}
-            found.append({"entity_id": entity_id, "name": attributes.get("friendly_name"),
-                          "state": state.get("state", "unknown")})
+            item = {"entity_id": entity_id, "name": attributes.get("friendly_name"), "state": state.get("state", "unknown")}
+            if floor is not None:
+                item["area"] = selected[room].get("name")
+            found.append(item)
         found.sort(key=lambda item: item["entity_id"])
         in_area = {item["entity_id"] for item in found}
         groups = []
@@ -132,10 +149,16 @@ class HARegistry:
                                "members": members})
         group_ids = {group["entity_id"] for group in groups}
         down = {"unavailable", "unknown"}
-        return {"area_id": area_id, "name": match.get("name"), "entities": found,
-                "available": [i["entity_id"] for i in found if i["state"] not in down and i["entity_id"] not in group_ids],
-                "unavailable": [i["entity_id"] for i in found if i["state"] in down],
-                "groups": sorted(groups, key=lambda g: g["entity_id"])}
+        head = ({"area_id": match["area_id"], "name": match.get("name")} if match is not None else
+                {"floor_id": floor.get("floor_id"), "name": floor.get("name"),
+                 "areas": sorted(str(a.get("name")) for a in selected.values())})
+        result = {**head, "entities": found,
+                  "available": [i["entity_id"] for i in found if i["state"] not in down and i["entity_id"] not in group_ids],
+                  "unavailable": [i["entity_id"] for i in found if i["state"] in down],
+                  "groups": sorted(groups, key=lambda g: g["entity_id"])}
+        if floor is not None and not selected:
+            result["hint"] = f"floor '{floor.get('name')}' has no rooms yet; assign areas to it first"
+        return result
 
     @staticmethod
     def _device(item: dict) -> dict:

@@ -33,7 +33,8 @@ class FakeWS:
 
 def make(*, write=True, admin=True, delete=False, ws=None, domains=frozenset({"light"})):
     client = HAClient(URL, "token", allow_write=write, allowed_domains=domains)
-    return HAScenes(client, ws or FakeWS(), allow_admin_write=admin, allow_delete=delete, settle_seconds=0)
+    return HAScenes(client, ws or FakeWS(), allow_admin_write=admin, allow_delete=delete, settle_seconds=0,
+                    read_back_delays=(0, 0))
 
 
 async def test_lists_scenes_and_scripts_with_their_config_ids():
@@ -149,6 +150,9 @@ async def test_activating_and_running_respect_the_domain_allowlist():
     with respx.mock(base_url=URL) as router:
         scene = router.post("/api/services/scene/turn_on").mock(return_value=httpx.Response(200, json=[]))
         script = router.post("/api/services/script/turn_on").mock(return_value=httpx.Response(200, json=[]))
+        router.get("/api/states/scene.abendlicht").mock(return_value=httpx.Response(200, json=STATES[0]))
+        router.get("/api/config/scene/config/1729760000000").mock(return_value=httpx.Response(200, json=SCENE))
+        router.get("/api/states/light.flur").mock(return_value=httpx.Response(200, json=STATES[3]))
         with pytest.raises(ValueError, match="scene"):
             await make().activate_scene("scene.abendlicht")
         allowed = make(domains=frozenset({"scene", "script"}))
@@ -160,6 +164,46 @@ async def test_activating_and_running_respect_the_domain_allowlist():
             await make(write=False, domains=frozenset({"scene"})).activate_scene("scene.abendlicht")
     assert json.loads(scene.calls[0].request.content) == {"entity_id": "scene.abendlicht"}
     assert script.called
+
+
+async def test_activating_a_scene_reads_its_entities_back_against_the_stored_targets():
+    """'Starte die Szene Abendlicht': the answer can name what the scene set, confirmed like ha_call_service."""
+    lit = {"entity_id": "light.flur", "state": "on", "attributes": {"friendly_name": "Flur", "brightness": 120}}
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/services/scene/turn_on").mock(return_value=httpx.Response(200, json=[]))
+        router.get("/api/states/scene.abendlicht").mock(return_value=httpx.Response(200, json=STATES[0]))
+        router.get("/api/config/scene/config/1729760000000").mock(return_value=httpx.Response(200, json=SCENE))
+        flur = router.get("/api/states/light.flur").mock(side_effect=[httpx.Response(200, json=STATES[3]),
+                                                                       httpx.Response(200, json=lit)])
+        result = await make(domains=frozenset({"scene"})).activate_scene("scene.abendlicht")
+    assert flur.call_count == 2   # read again until the stored target state shows
+    assert result == {"activated": "scene.abendlicht", "all_confirmed": True, "states_after": [
+        {"entity_id": "light.flur", "name": "Flur", "state": "on", "target": "on", "confirmed": True}]}
+
+
+async def test_a_scene_member_that_misses_its_target_is_reported_not_claimed():
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/services/scene/turn_on").mock(return_value=httpx.Response(200, json=[]))
+        router.get("/api/states/scene.abendlicht").mock(return_value=httpx.Response(200, json=STATES[0]))
+        router.get("/api/config/scene/config/1729760000000").mock(return_value=httpx.Response(200, json=SCENE))
+        router.get("/api/states/light.flur").mock(return_value=httpx.Response(200, json=STATES[3]))
+        result = await make(domains=frozenset({"scene"})).activate_scene("scene.abendlicht")
+    assert result["all_confirmed"] is False and "not confirmed" in result["hint"]
+    assert result["states_after"] == [{"entity_id": "light.flur", "name": "Flur", "state": "off", "target": "on",
+                                       "confirmed": False}]
+
+
+async def test_a_yaml_scene_reports_its_entities_without_targets():
+    """Scenes from YAML have no stored config to compare with: states only, confirmation unknown."""
+    yaml_scene = {"entity_id": "scene.yaml_scene", "state": "unknown",
+                  "attributes": {"friendly_name": "YAML", "entity_id": ["light.flur"]}}
+    with respx.mock(base_url=URL) as router:
+        router.post("/api/services/scene/turn_on").mock(return_value=httpx.Response(200, json=[]))
+        router.get("/api/states/scene.yaml_scene").mock(return_value=httpx.Response(200, json=yaml_scene))
+        router.get("/api/states/light.flur").mock(return_value=httpx.Response(200, json=STATES[3]))
+        result = await make(domains=frozenset({"scene"})).activate_scene("scene.yaml_scene")
+    assert result == {"activated": "scene.yaml_scene", "all_confirmed": None,
+                      "states_after": [{"entity_id": "light.flur", "name": "Flur", "state": "off"}]}
 
 
 def test_scene_and_script_tools_are_registered():

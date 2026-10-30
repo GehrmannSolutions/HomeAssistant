@@ -79,3 +79,25 @@ def summarize(states: list, services: list, allowed) -> list[dict]:
         items.append({"domain": domain, "label": label, "count": count, "actions": domain in with_actions,
                       "risk": risk, "allowed": domain in allowed})
     return sorted(items, key=lambda i: (not i["actions"], -i["count"], i["domain"]))
+
+
+# Device classes by the words people use for them, English and German (stems, matched inside the question's words),
+# so "power", "Stromverbrauch" or "windows" find "Fernseher Leistung" or "Fenster Bad" by their kind.
+DEVICE_CLASS_WORDS: dict[str, tuple[str, ...]] = {
+    "power": ("power", "leistung", "watt", "strom", "verbrauch", "consumption"),
+    "energy": ("energy", "energie", "kwh"),
+    "temperature": ("temperatur",),
+    "humidity": ("humid", "feuchte", "feuchtigkeit"),
+    "window": ("window", "fenster"),
+    "door": ("door", "tür", "tuer"),
+    "garage_door": ("garage",),
+    "battery": ("battery", "batterie", "akku"),
+    "motion": ("motion", "bewegung"),
+    "occupancy": ("occupancy", "presence", "anwesen", "präsenz"),
+    "smoke": ("smoke", "rauch"),
+    "moisture": ("moisture", "leak", "leck"),
+    "illuminance": ("illuminance", "helligkeit", "lux"),
+    "carbon_dioxide": ("co2", "kohlendioxid"),
+    "shutter": ("shutter", "rollladen", "rollläden", "rolladen"),
+    "blind": ("blind", "jalousie"),
+}

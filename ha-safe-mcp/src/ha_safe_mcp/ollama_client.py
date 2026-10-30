@@ -381,6 +381,64 @@ def _schema_problem(tool, args: dict) -> str | None:
     return None
 
 
+def _lift_entity_id(tool, args: dict) -> dict:
+    """Small models write actions the way HA YAML does: entity_id inside target/data, or service fields such as
+    position next to it. Move entity_id to the top level and unknown top-level fields into service_data, where the
+    tool expects them; the approval card then shows exactly what will run. Only unambiguous cases: a target that also
+    names areas or devices is left alone, so the schema error goes back to the model instead of a guess."""
+    schema = tool.inputSchema or {}
+    properties = schema.get("properties") or {}
+    args = _fields_into_service_data(properties, _decode_json_objects(properties, args))
+    if "entity_id" in args or "entity_id" not in (schema.get("required") or []):
+        return args
+    for key in ("target", "service_data", "data"):
+        nested = args.get(key)
+        if not isinstance(nested, dict) or "entity_id" not in nested:
+            continue
+        rest = {k: v for k, v in nested.items() if k != "entity_id"}
+        fixed = {k: v for k, v in args.items() if k != key}
+        fixed["entity_id"] = nested["entity_id"]
+        if not rest:
+            return fixed
+        if key == "target":
+            return args
+        home = key if key in properties else "service_data"
+        if home not in properties or (home != key and home in args):
+            return args
+        fixed[home] = rest
+        return fixed
+    return args
+
+
+def _decode_json_objects(properties: dict, args: dict) -> dict:
+    """Small models sometimes send an object as a JSON string ("service_data": "{\"position\": 0}"): parse it where
+    the schema wants an object and the string is one."""
+    fixed = dict(args)
+    for key, value in args.items():
+        if (isinstance(value, str) and value.lstrip().startswith("{")
+                and "object" in _schema_types(properties.get(key) or {})):
+            try:
+                decoded = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(decoded, dict):
+                fixed[key] = decoded
+    return fixed
+
+
+def _fields_into_service_data(properties: dict, args: dict) -> dict:
+    """{"service": "set_cover_position", "position": 0} -> position into service_data (fields there win)."""
+    if "service_data" not in properties:
+        return args
+    extra = {k: v for k, v in args.items() if k not in properties and k not in ("target", "data")}
+    nested = args.get("service_data")
+    if not extra or (nested is not None and not isinstance(nested, dict)):
+        return args
+    fixed = {k: v for k, v in args.items() if k not in extra}
+    fixed["service_data"] = {**extra, **(nested or {})}
+    return fixed
+
+
 def _json_tool_requests(content: str) -> list[dict] | None:
     """Small models sometimes write tool calls as text: one or several concatenated
     {"name": ..., "arguments": {...}} objects. Return them, or None if the content is anything else."""
@@ -520,14 +578,16 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
                 continue
             if name in permitted and name not in allowed:
                 offer(permitted[name])  # a real, permitted tool the preselection did not offer
+            if name in allowed and isinstance(args, dict):
+                args = _lift_entity_id(allowed[name], args)
             if name not in allowed or not isinstance(args, dict):
                 result = "Tool unavailable or invalid arguments"
                 await _emit(on_event, {"type": "tool_result", "name": name or "unknown", "ok": False,
-                                       "preview": result})
+                                       "preview": result, "arguments": args if isinstance(args, dict) else {}})
             elif name in WRITE_TOOLS and (problem := _schema_problem(allowed[name], args)) is not None:
                 result = problem
                 await _emit(on_event, {"type": "tool_result", "name": name, "ok": False,
-                                       "preview": result[:PREVIEW_CHARS]})
+                                       "preview": result[:PREVIEW_CHARS], "arguments": args})
             else:
                 is_write = name in WRITE_TOOLS
                 await _emit(on_event, {"type": "tool_call", "name": name, "arguments": args, "write": is_write})
