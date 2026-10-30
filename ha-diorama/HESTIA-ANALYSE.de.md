@@ -1,5 +1,8 @@
 # Diorama-Karte: Analyse (HESTIA, 29.10.2026)
 
+Stand vor dem Wände-Patch. Was daraus gebaut wurde, steht in [`hestia/README.md`](hestia/README.md); Bilder im
+[README des Repositorys](../README.md#what-it-looks-like).
+
 ## Was es ist
 
 | | |
@@ -30,7 +33,7 @@ Rollläden ein, und zwei Räume mit gemeinsamer Kante ohne Tür gelten als offen
 Absicht, kein Fehler: Man soll von oben in alle Räume schauen können.
 
 Seit heute früh gibt es dazu ein Issue: **#102 „Walls and take-from-wall/ceiling“**. Der Wunsch dort deckt sich mit
-deinem: Wände pro Kante ein/aus, wahlweise durchsichtig oder massiv, und Licht soll nicht durch Wände gehen.
+unserem: Wände pro Kante ein/aus, wahlweise durchsichtig oder massiv, und Licht soll nicht durch Wände gehen.
 #106 wünscht sich zusätzliche Eckpunkte an bestehenden Räumen.
 
 ## Wie Wände dazukommen könnten (Vorschlag)
@@ -50,15 +53,15 @@ Die Kamera-Durchsichtigkeit und der Editor kommen extra dazu.
 
 | Weg | Vorteil | Nachteil |
 |---|---|---|
-| **Pull Request ans Original** (Empfehlung) | Du bekommst weiter alle Updates über HACS, und andere profitieren auch (Issue #102) | Der Autor entscheidet, ob und wie er es übernimmt |
+| **Pull Request ans Original** (Empfehlung) | Man bekommt weiter alle Updates über HACS, und andere profitieren auch (Issue #102) | Der Autor entscheidet, ob und wie er es übernimmt |
 | Eigener Fork | volle Kontrolle | Das Original ändert sich fast täglich. Bei ~770 Commits in 6 Wochen sind wir ständig mit Nachziehen beschäftigt |
 
 Testen können wir unseren Build auf dem Dev-HA, ohne HACS anzufassen: Unser `card.js` wird als zweite Ressource
 unter eigenem Namen geladen, oder die HACS-Ressource zeigt vorübergehend auf unseren Build.
 
-## Für unseren Generator wichtig
+## Für einen eigenen Generator wichtig
 
 - Koordinaten in Metern, y nach oben; eine Karte pro Etage.
 - Wandteile drehen sich nach der Raumkante: oben 0°, links 90°, unten 180°, rechts 270°.
-- `blind` mit `params.outside: 1` hängt außen. Darum standen unsere Rollläden ein Stück vor dem Haus. Mit Wänden
-  sitzen sie dann richtig in der Wandflucht.
+- `blind` mit `params.outside: 1` hängt außen. Ohne Wände steht ein Rollladen darum ein Stück vor der Raumkante;
+  mit Wänden sitzt er richtig in der Wandflucht.

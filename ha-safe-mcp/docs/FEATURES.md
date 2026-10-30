@@ -3,10 +3,13 @@
 **English** · [Deutsch](FEATURES.de.md)
 
 This guide explains every function of ha-safe-mcp in plain words: what it does, how it is protected, and how
-you use it. The examples come from the web UI chat with a local model (Ollama, `qwen3-coder:30b`) on a small
-demo home with three lights (Stehlampe and Deckenlicht in the Wohnzimmer, Arbeitslicht in the Küche) and the
-automation "Abendlicht". The screenshots show the English web UI; the demo home keeps its German device and room
-names, so you also see how the model maps English questions to them.
+you use it. The examples come from the web UI chat with a local model (Ollama, `qwen3-coder:30b`) on a demo home
+built for these docs: three floors (Erdgeschoss, Keller, Dachgeschoss) with 17 rooms, 20 lights, 8 switched
+devices with power meters (TV, coffee machine, washing machine, ...), 7 shutters, a front door lock, room
+temperatures, window contacts, the automation "Abendlicht", the scene "Filmabend" and the script "Alles aus". The
+earlier examples use its first three lights (Stehlampe and Deckenlicht in the Wohnzimmer, Arbeitslicht in the
+Küche). The screenshots show the English web UI; the demo home keeps its German device and room names, so you also
+see how the model maps English questions to them.
 
 The screenshots are reproducible: `scripts/docs_demo_home.py` builds the demo home on a test instance and
 `scripts/doc_screenshots.py --lang en` takes the pictures (`--lang de` for the German guide). For every tool's exact parameters see the generated
@@ -110,9 +113,9 @@ Ask about anything in your home; reading never changes anything.
 
 | Tool | What it does | Level |
 |---|---|---|
-| `ha_search_entities` | Finds entities by name or ID, optionally of one domain ("Stehlampe" → `light.stehlampe`). | Read |
+| `ha_search_entities` | Finds entities by name or ID, optionally of one domain ("Stehlampe" → `light.stehlampe`), and sensors by their kind in English or German ("power" or "Strom" finds `sensor.fernseher_leistung`, "windows" finds the window contacts). | Read |
 | `ha_get_state` | Current state and attributes of one entity (on/off, brightness, temperature, ...). | Read |
-| `ha_list_area_entities` | Everything in one room, by name or alias ("Wohnzimmer"), split into available and unavailable, plus groups. | Read |
+| `ha_list_area_entities` | Everything in one room, by name or alias ("Wohnzimmer"), split into available and unavailable, plus groups. A floor name ("Keller", "Erdgeschoss") returns all rooms on that floor, each entity with its room. | Read |
 | `ha_list_areas` | All rooms with ID, floor, icon and aliases. | Read |
 | `ha_list_floors` | All floors with level. | Read |
 | `ha_list_devices` | Devices with manufacturer, model and room; filter by room or text, or find devices without a room. | Read |
@@ -125,12 +128,23 @@ entities and answers from the live states:
 
 ![Chat: reading a room](images/en/03-chat-read.png)
 
+**Example**: *"How much power is the house using right now, and which device uses the most?"* The power sensors
+have German names ("Fernseher Leistung"); the search finds them by their kind (`device_class: power`), and the
+model adds them up:
+
+![Chat: power right now](images/en/29-chat-power.png)
+
+**Example**: *"Which windows are open right now?"* One search for windows finds the window contacts by their kind,
+and the model names the open one:
+
+![Chat: open windows](images/en/30-chat-windows.png)
+
 ## 2. Switch devices, run scenes and scripts
 
 | Tool | What it does | Level |
 |---|---|---|
 | `ha_call_service` | Runs an action on one entity or up to 20 of the same domain (e.g. all lights of a room), then **reads the targets back** and reports per entity whether the expected state was reached. `return_response` returns data from actions that answer (e.g. `todo.get_items`). | Control |
-| `ha_activate_scene` | Activates a scene (`scene.turn_on`). Needs `scene` in the allowed domains. | Control |
+| `ha_activate_scene` | Activates a scene (`scene.turn_on`) and **reads its entities back**; for scenes made in the UI each entity is compared with the state stored in the scene (confirmed true/false). Needs `scene` in the allowed domains. | Control |
 | `ha_run_script` | Starts a script (`script.turn_on`). Needs `script` in the allowed domains. | Control |
 | `ha_fire_event` | Fires a custom event (e.g. `doorbell_pressed`) that automations with an event trigger react to. Events Home Assistant emits itself (`state_changed`, `homeassistant_start`, ...) are refused. | Configure |
 
@@ -138,6 +152,12 @@ How it is protected: only allowed domains can be switched, at most 20 entities o
 every call is followed by a read-back, so a target that did not reach the expected state is reported as not
 confirmed instead of "done". The chat model is additionally instructed to switch the individual entities of a
 room (not a group on top of its members) and to name unavailable ones instead of switching them.
+
+Small models often write the target the way Home Assistant YAML does, `target: {entity_id: ...}` or `entity_id`
+inside `service_data`, put fields such as `position` next to it, or send `service_data` as a JSON string. The chat
+puts everything where the tool expects it **before** the approval card is shown, so the card shows exactly what
+will run. When the target also names areas or devices, nothing is
+guessed: the model gets the schema error back and corrects the call itself.
 
 **Example**: *"Turn on the Stehlampe in the living room"* (with *Allow actions* ticked). The model finds the
 lamp and asks for approval:
@@ -152,6 +172,26 @@ After *Run* the MCP switches, reads the lamp back and the model reports the conf
 after approval the MCP refuses and the model explains what is missing:
 
 ![Chat: domain not allowed](images/en/13-chat-domain-blocked.png)
+
+**Example**: *"Turn off all lights in the basement (Keller)."* The Keller is a floor, not a room. One call lists
+the lights of all rooms on that floor, one call switches them (one approval card for all), and the read-back
+confirms every lamp:
+
+![Chat: one approval card for a whole floor](images/en/25a-chat-floor-off-card.png)
+
+![Chat: a whole floor switched off](images/en/25-chat-floor-off.png)
+
+**Example**: *"Close the shutter in the living room"* and *"Is the front door (Haustür) locked? If not, lock it."*
+The read-back reports the shutter's position and the lock's new state:
+
+![Chat: shutter closed](images/en/26-chat-cover.png)
+
+![Chat: front door locked](images/en/27-chat-lock.png)
+
+**Example**: *"Start the scene Filmabend."* After activating, the MCP reads the scene's entities back and compares
+them with the states stored in the scene, so the answer names what really happened:
+
+![Chat: scene started](images/en/28-chat-scene.png)
 
 ## 3. Automations
 

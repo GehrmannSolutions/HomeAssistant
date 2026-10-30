@@ -24,6 +24,10 @@ The UI wizard tests your Home Assistant address and token before saving them. Co
 
 **[Feature guide](docs/FEATURES.md)**: every function in plain words, with examples and screenshots.
 
+- **Made for small local models:** rooms and whole floors as targets ("all lights in the Keller"), sensors found
+  by their kind in English and German ("power" finds "Fernseher Leistung"), and calls written like Home Assistant
+  YAML repaired before the approval card, so a 30B model on your own hardware gets things done in one or two calls.
+
 - Read states, discover entities and services; discover entities in a room; call allowed services on one or up to 20 entities of the same domain.
 - A **fixed, documented REST route catalog** plus typed tools for automations, dashboards, helpers, registry metadata, areas/floors/devices (including removing devices and orphaned entities), scenes/scripts, integration config flows and settings, Home Assistant backups, the energy dashboard (plugs, solar, battery storage) and Assist (pipelines, exposure to voice assistants, sentence test).
 - Separate gates for control, admin changes, and deletion; CLI/UI per-call confirmation by default. Other MCP clients must implement their own human approval.

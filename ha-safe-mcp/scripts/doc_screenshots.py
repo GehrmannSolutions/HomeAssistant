@@ -142,7 +142,7 @@ SCENARIOS = {
                                                          "Welche Dateien bindet die configuration.yaml ein?")),
     "label": lambda ui: chat(ui, "08-chat-label", P("Create a blue label 'Docs demo'", "Lege ein Label 'Doku-Demo' in Blau an"),
                              allow_write=True, approve=True, card_name="08a-chat-label-card"),
-    "changes": lambda ui: (ui.view("changes"), ui.element_shot("09-changes", "#view-changes")),
+    "changes": lambda ui: (ui.view("changes"), ui.element_shot("09-changes", "#view-changes", max_height=900)),
     "weather": lambda ui: chat(ui, "10-chat-weather", P("What will the weather be like tomorrow?", "Wie wird das Wetter morgen?")),
     "history": lambda ui: chat(ui, "11-chat-history", P("When was the Stehlampe in the living room on today? Check the history.",
                                                        "Wann war die Stehlampe im Wohnzimmer heute an? Schau im Verlauf nach.")),
@@ -161,6 +161,23 @@ SCENARIOS = {
                                                           "Wie viel Strom haben meine Geräte in den letzten 7 Tagen verbraucht?")),
     "assist": lambda ui: chat(ui, "22-chat-assist", P("Would Assist understand 'turn off the Deckenlicht'?",
                                                      "Würde Assist den Satz 'schalte das Deckenlicht aus' verstehen?")),
+    # the larger demo home of docs_demo_home.py: several devices at once, a shutter, the lock, a scene, advice
+    "floor-off": lambda ui: chat(ui, "25-chat-floor-off", P("Turn off all lights in the basement (Keller).",
+                                                           "Mach im Keller alle Lichter aus."),
+                                 allow_write=True, approve=True, card_name="25a-chat-floor-off-card"),
+    "cover": lambda ui: chat(ui, "26-chat-cover", P("Close the shutter in the living room (Rollladen Wohnzimmer).",
+                                                   "Fahr den Rollladen im Wohnzimmer runter."),
+                             allow_write=True, approve=True),
+    "lock": lambda ui: chat(ui, "27-chat-lock", P("Is the front door (Haustür) locked? If not, lock it.",
+                                                 "Ist die Haustür abgeschlossen? Wenn nicht, schließ sie ab."),
+                            allow_write=True, approve=True),
+    "scene": lambda ui: chat(ui, "28-chat-scene", P("Start the scene Filmabend.", "Starte die Szene Filmabend."),
+                             allow_write=True, approve=True),
+    "power": lambda ui: chat(ui, "29-chat-power", P("How much power is the house using right now, and which device "
+                                                   "uses the most?", "Wie viel Strom verbraucht das Haus gerade, und "
+                                                   "welches Gerät zieht am meisten?")),
+    "windows": lambda ui: chat(ui, "30-chat-windows", P("Which windows are open right now?",
+                                                       "Welche Fenster sind gerade offen?")),
     # the card is shot, then rejected: nothing is removed
     "remove-device": lambda ui: chat(ui, "23-chat-remove-device", P("Remove the device Outlet 4.", "Entferne das Gerät Outlet 4."),
                                      allow_write=True, card_name="23a-remove-device-card", reject=True,

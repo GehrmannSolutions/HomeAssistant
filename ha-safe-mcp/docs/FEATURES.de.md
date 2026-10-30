@@ -4,8 +4,11 @@
 
 Diese Anleitung erklärt jede Funktion von ha-safe-mcp in einfachen Worten: was sie tut, wie sie abgesichert ist
 und wie du sie benutzt. Die Beispiele stammen aus dem Chat der Weboberfläche mit einem lokalen Modell (Ollama,
-`qwen3-coder:30b`) in einem kleinen Demo-Zuhause mit drei Lampen (Stehlampe und Deckenlicht im Wohnzimmer,
-Arbeitslicht in der Küche) und der Automation "Abendlicht". Die Screenshots zeigen die Weboberfläche auf Deutsch,
+`qwen3-coder:30b`) in einem Demo-Zuhause, das für diese Anleitung gebaut wird: drei Etagen (Erdgeschoss, Keller,
+Dachgeschoss) mit 17 Räumen, 20 Lampen, 8 geschalteten Geräten mit Leistungsmessung (Fernseher, Kaffeemaschine,
+Waschmaschine …), 7 Rollläden, einem Türschloss, Raumtemperaturen, Fensterkontakten, der Automation "Abendlicht",
+der Szene "Filmabend" und dem Skript "Alles aus". Die ersten Beispiele nutzen seine ersten drei Lampen (Stehlampe
+und Deckenlicht im Wohnzimmer, Arbeitslicht in der Küche). Die Screenshots zeigen die Weboberfläche auf Deutsch,
 deshalb sind auch Fragen und Antworten auf Deutsch.
 
 Die Screenshots lassen sich reproduzieren: `scripts/docs_demo_home.py` baut das Demo-Zuhause auf einer
@@ -112,9 +115,9 @@ Frag nach allem in deinem Zuhause; Lesen verändert nie etwas.
 
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
-| `ha_search_entities` | Findet Entitäten nach Name oder ID, optional nur einer Domain ("Stehlampe" → `light.stehlampe`). | Lesen |
+| `ha_search_entities` | Findet Entitäten nach Name oder ID, optional nur einer Domain ("Stehlampe" → `light.stehlampe`), und Sensoren nach ihrer Art, auf Deutsch oder Englisch ("Strom" oder "power" findet `sensor.fernseher_leistung`, "Fenster" die Fensterkontakte). | Lesen |
 | `ha_get_state` | Aktueller Zustand und Attribute einer Entität (an/aus, Helligkeit, Temperatur, ...). | Lesen |
-| `ha_list_area_entities` | Alles in einem Bereich, nach Name oder Alias ("Wohnzimmer"), aufgeteilt in verfügbar und nicht verfügbar, dazu Gruppen. | Lesen |
+| `ha_list_area_entities` | Alles in einem Bereich, nach Name oder Alias ("Wohnzimmer"), aufgeteilt in verfügbar und nicht verfügbar, dazu Gruppen. Ein Etagenname ("Keller", "Erdgeschoss") liefert alle Bereiche dieser Etage, jede Entität mit ihrem Bereich. | Lesen |
 | `ha_list_areas` | Alle Bereiche mit ID, Etage, Symbol und Aliasen. | Lesen |
 | `ha_list_floors` | Alle Etagen mit Ebene. | Lesen |
 | `ha_list_devices` | Geräte mit Hersteller, Modell und Bereich; Filter nach Bereich oder Text, oder Geräte ohne Bereich finden. | Lesen |
@@ -127,12 +130,22 @@ Bereichs ab und antwortet anhand der aktuellen Zustände:
 
 ![Chat: einen Bereich lesen](images/de/03-chat-read.png)
 
+**Beispiel**: *"Wie viel Strom verbraucht das Haus gerade, und welches Gerät am meisten?"* Die Suche findet die
+Leistungssensoren über ihre Art (`device_class: power`), und das Modell rechnet zusammen:
+
+![Chat: Verbrauch gerade](images/de/29-chat-power.png)
+
+**Beispiel**: *"Welche Fenster sind gerade offen?"* Eine Suche nach Fenstern findet die Fensterkontakte über ihre
+Art, und das Modell nennt das offene:
+
+![Chat: offene Fenster](images/de/30-chat-windows.png)
+
 ## 2. Geräte schalten, Szenen und Skripte starten
 
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
 | `ha_call_service` | Führt eine Aktion auf einer Entität oder bis zu 20 Entitäten derselben Domain aus (z. B. alle Lampen eines Bereichs), **liest die Ziele danach zurück** und meldet pro Entität, ob der erwartete Zustand erreicht wurde. `return_response` liefert Daten von Aktionen, die antworten (z. B. `todo.get_items`). | Steuern |
-| `ha_activate_scene` | Aktiviert eine Szene (`scene.turn_on`). Braucht `scene` in den erlaubten Domains. | Steuern |
+| `ha_activate_scene` | Aktiviert eine Szene (`scene.turn_on`) und **liest ihre Entitäten zurück**; bei Szenen aus der Oberfläche wird jede Entität mit dem in der Szene gespeicherten Zustand verglichen (bestätigt ja/nein). Braucht `scene` in den erlaubten Domains. | Steuern |
 | `ha_run_script` | Startet ein Skript (`script.turn_on`). Braucht `script` in den erlaubten Domains. | Steuern |
 | `ha_fire_event` | Löst ein eigenes Ereignis aus (z. B. `doorbell_pressed`), auf das Automationen mit Ereignis-Auslöser reagieren. Ereignisse, die Home Assistant selbst sendet (`state_changed`, `homeassistant_start`, ...), werden abgelehnt. | Konfigurieren |
 
@@ -141,6 +154,13 @@ Aufruf, und nach jedem Aufruf wird zurückgelesen. Ein Ziel, das den erwarteten 
 deshalb als nicht bestätigt gemeldet statt als "erledigt". Das Chat-Modell ist zusätzlich angewiesen, die
 einzelnen Entitäten eines Bereichs zu schalten (nicht eine Gruppe zusätzlich zu ihren Mitgliedern) und nicht
 verfügbare Entitäten zu nennen, statt sie zu schalten.
+
+Kleine Modelle schreiben das Ziel oft so wie in Home-Assistant-YAML, `target: {entity_id: ...}` oder `entity_id`
+in `service_data`, stellen Felder wie `position` daneben oder schicken `service_data` als JSON-Text. Der Chat
+setzt alles an die Stelle, an der das Werkzeug es erwartet, und zwar **bevor** die Freigabekarte erscheint: Die
+Karte zeigt also genau das, was ausgeführt wird. Nennt das Ziel
+zusätzlich Bereiche oder Geräte, wird nichts geraten: Das Modell bekommt den Schemafehler zurück und korrigiert den
+Aufruf selbst.
 
 **Beispiel**: *"Schalte die Stehlampe im Wohnzimmer aus"* (mit angehaktem *Aktionen erlauben*). Das Modell findet
 die Lampe und bittet um Freigabe:
@@ -155,6 +175,26 @@ Nach *Ausführen* schaltet der MCP, liest die Lampe zurück und das Modell melde
 Auch nach der Freigabe lehnt der MCP ab und das Modell erklärt, was fehlt:
 
 ![Chat: Domain nicht erlaubt](images/de/13-chat-domain-blocked.png)
+
+**Beispiel**: *"Mach im Keller alle Lichter aus."* Der Keller ist eine Etage, kein Bereich. Ein Aufruf listet die
+Lampen aller Bereiche dieser Etage, ein Aufruf schaltet sie (eine Freigabekarte für alle), und das Zurücklesen
+bestätigt jede Lampe:
+
+![Chat: eine Freigabekarte für eine ganze Etage](images/de/25a-chat-floor-off-card.png)
+
+![Chat: eine ganze Etage ausgeschaltet](images/de/25-chat-floor-off.png)
+
+**Beispiel**: *"Fahr den Rollladen im Wohnzimmer runter."* und *"Ist die Haustür abgeschlossen? Wenn nicht, schließ
+sie ab."* Das Zurücklesen meldet die Position des Rollladens und den neuen Zustand des Schlosses:
+
+![Chat: Rollladen geschlossen](images/de/26-chat-cover.png)
+
+![Chat: Haustür abgeschlossen](images/de/27-chat-lock.png)
+
+**Beispiel**: *"Starte die Szene Filmabend."* Nach dem Aktivieren liest der MCP die Entitäten der Szene zurück und
+vergleicht sie mit den in der Szene gespeicherten Zuständen. So nennt die Antwort, was wirklich passiert ist:
+
+![Chat: Szene gestartet](images/de/28-chat-scene.png)
 
 ## 3. Automationen
 

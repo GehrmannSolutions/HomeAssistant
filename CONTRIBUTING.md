@@ -7,7 +7,8 @@ Thanks for improving the reusable tooling. The [MIT license](LICENSE) applies to
 - **No secrets or household data:** never include `.env`, long-lived access tokens, passwords, key files, real entity/device IDs, serials, MAC addresses, private addresses, hostnames, log excerpts, camera images, or config exports. Use `example.com`, documentation-only IP ranges (`192.0.2.0/24`) and fictional entity IDs for examples. Review the **full diff and untracked files**, not only a quick keyword search.
 - State which Home Assistant Core version you tested if changing version-sensitive configuration tools. Test first against a disposable instance, never a production home.
 - Do not add arbitrary HTTP/WS proxy capabilities to bypass the fixed catalog. For a new write tool, document its effect, permission class, validation, failure mode, and read-back limitations.
-- The UI and its error messages are currently German; changes to localization should be explicit rather than silently mixing strings.
+- The web UI and its messages exist in English and German; when you change a text, change both (`L(...)`/`t(...)` pairs) instead of mixing languages.
+- Pictures for the docs come from the demo home on a throwaway instance (`scripts/docs_demo_home.py`, `scripts/doc_screenshots.py`), never from a real home.
 
 ## Local checks
 

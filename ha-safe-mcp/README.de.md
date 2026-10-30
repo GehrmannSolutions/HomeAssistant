@@ -24,6 +24,11 @@ Der Einrichtungsassistent der Oberfläche testet deine Home-Assistant-Adresse un
 
 **[Funktionsübersicht](docs/FEATURES.de.md)**: jede Funktion in einfachen Worten, mit Beispielen und Screenshots.
 
+- **Für kleine lokale Modelle gemacht:** Bereiche und ganze Etagen als Ziel ("alle Lichter im Keller"), Sensoren
+  nach ihrer Art auf Deutsch und Englisch ("Strom" findet "Fernseher Leistung") und Aufrufe im Stil von
+  Home-Assistant-YAML, die vor der Freigabekarte repariert werden. So schafft ein 30B-Modell auf eigener Hardware
+  das meiste mit ein oder zwei Aufrufen.
+
 - Zustände lesen, Entitäten und Dienste finden; Entitäten in einem Raum finden; erlaubte Dienste für eine Entität oder bis zu 20 Entitäten derselben Domain aufrufen.
 - Ein **fester, dokumentierter Katalog von REST-Routen** sowie typisierte Werkzeuge für Automationen, Dashboards, Helfer, Registry-Metadaten, Bereiche/Etagen/Geräte (auch Geräte und verwaiste Entitäten entfernen), Szenen/Skripte, Konfigurationsabläufe (Config Flows) und Einstellungen von Integrationen, Home-Assistant-Backups, das Energie-Dashboard (Steckdosen, Solar, Batteriespeicher) und Assist (Pipelines, Freigabe für Sprachassistenten, Satzprüfung).
 - Getrennte Schalter für Steuerung, administrative Änderungen und Löschen; in CLI und Oberfläche standardmäßig eine Bestätigung pro Aufruf. Andere MCP-Clients müssen ihre eigene menschliche Freigabe umsetzen.
