@@ -6,6 +6,7 @@
 | `planRooms.test.ts` | Checks for the room search in a plan picture, `src/editor/planRooms.ts` (prototype, not wired into the editor yet). |
 | `plan_to_diorama.ts` | Reads a plan picture (local grey raster) into rooms, doors and windows for the card, in meters: `node hestia/plan_to_diorama.ts <file.gray> <w> <h> <px per m> <out.json>`. Plans stay local, never in the repo. |
 | `plan_view.py` | Check picture for that output: rooms, doors (green), windows (blue) over the plan. |
+| `check_walls.ts` | Runs a dashboard config through the card's own wall builder (`wallsOf`, openings as `Walls.tsx` reads them): wall blocks, heights, and every door or window that cuts no wall (too far from a wall line it would silently stay shut): `node hestia/check_walls.ts <dashboard.json> [view ...]`. |
 | `deploy_dev.py` | Puts `dist/card.js` on the DEV Home Assistant over the HACS copy and gives the resource a new `?hestia=<hash>` URL (HA serves `/hacsfiles/` with a 31 day cache). `--restore` puts the HACS original back. Never for prod. |
 
 Walls patch, state 2026-10-29: `src/geometry/walls.ts` (geometry, pure), `src/scene/Walls.tsx` (drawing, cutaway),
