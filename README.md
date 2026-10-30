@@ -64,10 +64,12 @@ The [feature guide](ha-safe-mcp/docs/FEATURES.md) walks through all functions wi
 
 ## Built with an AI agent
 
-These projects are developed by Marius Gehrmann together with **HESTIA**, his AI agent for Home Assistant (built
-on the Hermes agent framework). HESTIA writes most of the code, tests and documentation; Marius sets the goals,
-reviews the changes and tests them in his own home. Commits authored by HESTIA are AI-generated. Some commits carry
-a `Co-Authored-By` line of the language model that HESTIA ran on at the time.
+These projects are developed by Marius Gehrmann together with **HESTIA**, his AI agent for Home Assistant (a
+Hermes agent on Claude Code with Claude Opus 5.5). HESTIA writes most of the code, tests and documentation; Marius
+sets the goals, reviews the changes and tests them in his own home. Every commit is marked as AI work: the line
+`AI-Agent: HESTIA (Claude Code, Claude Opus 5.5)` names the agent and `Co-Authored-By: Claude Opus 5.5` the model
+that wrote it. A few early commits were made while the agent briefly ran on another model; they carry only the line
+`AI-Agent: HESTIA`.
 
 ## Quick start
 

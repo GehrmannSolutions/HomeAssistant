@@ -65,10 +65,12 @@ Die [Funktionsübersicht](ha-safe-mcp/docs/FEATURES.de.md) geht alle Funktionen 
 
 ## Mit einem KI-Agenten gebaut
 
-Diese Projekte entwickelt Marius Gehrmann zusammen mit **HESTIA**, seinem KI-Agenten für Home Assistant (gebaut auf
-dem Agenten-Framework Hermes). HESTIA schreibt den größten Teil von Code, Tests und Doku; Marius setzt die Ziele,
-prüft die Änderungen und testet sie in seinem eigenen Zuhause. Commits mit HESTIA als Autor sind KI-generiert.
-Manche Commits tragen eine `Co-Authored-By`-Zeile des Sprachmodells, auf dem HESTIA damals lief.
+Diese Projekte entwickelt Marius Gehrmann zusammen mit **HESTIA**, seinem KI-Agenten für Home Assistant (ein
+Hermes-Agent auf Claude Code mit Claude Opus 5.5). HESTIA schreibt den größten Teil von Code, Tests und Doku; Marius
+setzt die Ziele, prüft die Änderungen und testet sie in seinem eigenen Zuhause. Jeder Commit ist als KI-Arbeit
+gekennzeichnet: Die Zeile `AI-Agent: HESTIA (Claude Code, Claude Opus 5.5)` nennt den Agenten, `Co-Authored-By:
+Claude Opus 5.5` das Modell, das ihn geschrieben hat. Einige frühe Commits entstanden, als der Agent kurz auf einem
+anderen Modell lief; sie tragen nur die Zeile `AI-Agent: HESTIA`.
 
 ## Schnellstart
 
