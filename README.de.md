@@ -2,8 +2,8 @@
 
 [English](README.md) · **Deutsch**
 
-Zwei Projekte, mit denen ein KI-Modell, auch ein kleines auf eigener Hardware, beim Betrieb eines Home-Assistant-
-Zuhauses hilft, ohne dass man ihm die Schlüssel übergibt:
+Zwei Projekte, mit denen ein KI-Modell, auch ein kleines auf eigener Hardware, beim Betrieb eines
+Home-Assistant-Zuhauses hilft, ohne dass man ihm die Schlüssel übergibt:
 
 | Projekt | Was es ist | Einstieg |
 |---|---|---|
