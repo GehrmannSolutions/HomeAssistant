@@ -3,6 +3,27 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.35.1 – 2026-11-04
+
+Aus dem Live-Test auf der Testinstanz (2026.11.0, Hinweis des Marketplace bestätigt) und Chat-Tests mit
+`qwen3-coder:30b`:
+
+- **Marketplace live geprüft:** Eine Karte installieren (Ressource unter `/local/community/...` lädt), über das
+  Änderungsjournal rückgängig machen (Datei und Ressource wieder weg), eine Integration mit Einrichtung über die
+  Oberfläche installieren (sofort einrichtbar, kein Neustart) und wieder entfernen.
+- **Entfernen sagt jetzt auch, ob ein Neustart nötig ist:** Beim Marketplace folgt `ha_remove_hacs_repository`
+  seiner Reparatur „Neustart erforderlich“, statt immer `ha_restart` zu empfehlen.
+- **Schon im Store:** `ha_add_hacs_custom_repository` für ein Repository, das der Store schon kennt, schreibt nichts
+  und verweist auf `ha_install_hacs_repository`. Vorher versuchte das Modell es so und bekam nur
+  „repository_exists“.
+- **Kurze Antworten im Chat:** „Ja, installiere sie.“ oder „Entferne sie wieder.“ behalten jetzt die Werkzeuge des
+  letzten Austauschs (Frage und Antwort davor). Vorher fehlten die Store-Werkzeuge, das Modell suchte falsch und
+  gab auf.
+- **Keine erfundenen Erfolge:** Behauptet das Modell nach einer Aufforderung eine Änderung („wurde entfernt“),
+  obwohl in diesem Durchgang kein Schreibaufruf gelungen ist, hängt der Chat einen sichtbaren Hinweis an. Im Test
+  hatte das Modell genau das getan. Zusätzlich steht die Regel jetzt im Systemtext.
+- **Werkzeugsuche:** „custom component“ und „benutzerdefinierte Komponente“ führen zum Installations-Werkzeug.
+
 ## 0.35.0 – 2026-11-04
 
 Home Assistant 2026.11 baut HACS als *Marketplace* ein. Getestet auf einer Testinstanz mit 2026.11.0b6, die sich

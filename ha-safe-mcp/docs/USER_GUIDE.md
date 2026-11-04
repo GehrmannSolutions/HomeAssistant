@@ -272,11 +272,15 @@ For everything the UI cannot express: `configuration.yaml`, packages, template s
 - `ha_list_addons` (state, version, pending update) and `ha_get_system_info` (Core, Supervisor and OS versions,
   Supervisor health, board, disk usage) need a Supervisor install (HA OS / Supervised); without one they say so.
   The Supervisor proxy is limited to these read endpoints.
-- `ha_list_hacs_repositories`: what is installed through HACS with installed/available version.
-- HACS store (writes): `ha_search_hacs` and `ha_get_hacs_repository` read; `ha_install_hacs_repository` (admin,
+- `ha_list_hacs_repositories`: what is installed through HACS or, from Home Assistant 2026.11, the built-in
+  Marketplace, with installed/available version (and whether the Marketplace notice is accepted).
+- Store (writes): `ha_search_hacs` and `ha_get_hacs_repository` read; `ha_install_hacs_repository` (admin,
   always an approval card in the chat, journaled) installs or updates; `ha_add_hacs_custom_repository` (admin,
-  GitHub only) adds a repository outside the store; `ha_remove_hacs_repository` (delete) removes one. Cards are
-  registered as dashboard resource by HACS itself; integrations need `ha_restart`.
+  GitHub only) adds a repository outside the store and points to the install tool when the repository is already
+  in the store; `ha_remove_hacs_repository` (delete) removes one. Cards are registered as dashboard resource by the
+  store itself. For integrations HACS needs `ha_restart`; with the Marketplace the answer says whether a restart
+  is needed (it follows the Marketplace's "restart required" repair). The Marketplace refuses installs until the
+  token's user accepted its notice once in Settings > Marketplace.
 - `ha_list_zigbee_devices`: ZHA devices with availability, link quality (`lqi`, weak below 80), `rssi`, last seen
   and role; `problems_only: true` lists only unavailable or weak devices.
 - `ha_list_thread_networks`: Thread networks (name, channel, preferred, source).
@@ -436,7 +440,7 @@ On Home Assistant OS the database choice must match the backup: a backup that co
 | Integration flow fails or secret is rejected | Follow the returned form schema/flow ID, use stored alias references for secret fields, and check the HA user's permissions. Discovery depends on **HA's** network, not this adapter's reachability. Abort abandoned flows. |
 | REST call rejected | Run `ha_rest_catalog`; only cataloged method/path pairs and route-specific query keys are accepted. `ha_rest_query` allows GET and only the catalog's template/config-check POSTs. Even these can consume HA resources. `ha_rest_write` on `/api/states/<entity_id>` sets a temporary state, **not** a persistent helper or a physical device action. |
 | UI unreachable or wrong model | Open the UI on the same machine via `http://localhost:8765/`; check its running process, Ollama service/model and UI **Settings**. A foreign Host header is rejected. Do not use `--allow-remote` on an unauthenticated network. |
-| Model gives a stale/unsupported answer | Ask it to use a named read tool to fetch the *current* state or start a new chat. Small Ollama models get a keyword-based preselection of tools plus the local `find_tools` search (and any real tool they call by name is loaded on demand); a plausible answer is not verification. |
+| Model gives a stale/unsupported answer | Ask it to use a named read tool to fetch the *current* state or start a new chat. Small Ollama models get a keyword-based preselection of tools plus the local `find_tools` search (and any real tool they call by name is loaded on demand); a plausible answer is not verification. A short follow-up ("Yes, do it", "Remove it again") keeps the tools of the last exchange. If the model claims a change after a request although no change ran in that turn, the chat adds a note saying so. |
 
 The REST gateway is an allowlisted subset, **not** an arbitrary HTTP or WebSocket proxy. It cannot edit arbitrary HA files, schedule backups, restore add-ons or folders, or remove an individual device from the registry. The HA token still has its underlying HA authority outside this adapter. Prefer a separate less-privileged HA account for routine reads, backups before admin changes, and manual verification in HA after consequential writes.
 

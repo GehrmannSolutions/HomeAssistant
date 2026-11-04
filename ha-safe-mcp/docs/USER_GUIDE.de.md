@@ -272,12 +272,16 @@ Für alles, was die Oberfläche nicht ausdrücken kann: `configuration.yaml`, Pa
 - `ha_list_addons` (Zustand, Version, ausstehendes Update) und `ha_get_system_info` (Versionen von Core, Supervisor und OS,
   Supervisor-Zustand, Board, Speicherbelegung) brauchen eine Supervisor-Installation (HA OS / Supervised); ohne sie sagen sie das.
   Der Supervisor-Proxy ist auf diese Lese-Endpunkte beschränkt.
-- `ha_list_hacs_repositories`: was über HACS installiert ist, mit installierter und verfügbarer Version.
-- HACS-Store (schreibend): `ha_search_hacs` und `ha_get_hacs_repository` lesen; `ha_install_hacs_repository`
+- `ha_list_hacs_repositories`: was über HACS oder, ab Home Assistant 2026.11, den eingebauten Marketplace
+  installiert ist, mit installierter und verfügbarer Version (und ob der Hinweis des Marketplace bestätigt ist).
+- Store (schreibend): `ha_search_hacs` und `ha_get_hacs_repository` lesen; `ha_install_hacs_repository`
   (Admin, im Chat immer mit Freigabe-Karte, im Journal) installiert oder aktualisiert;
-  `ha_add_hacs_custom_repository` (Admin, nur GitHub) fügt ein Repository außerhalb des Stores hinzu;
-  `ha_remove_hacs_repository` (Löschen) entfernt eins. Karten trägt HACS selbst als Dashboard-Ressource ein;
-  Integrationen brauchen `ha_restart`.
+  `ha_add_hacs_custom_repository` (Admin, nur GitHub) fügt ein Repository außerhalb des Stores hinzu und verweist
+  auf das Installations-Werkzeug, wenn es schon im Store ist; `ha_remove_hacs_repository` (Löschen) entfernt eins.
+  Karten trägt der Store selbst als Dashboard-Ressource ein. Bei Integrationen braucht HACS `ha_restart`; beim
+  Marketplace sagt die Antwort, ob ein Neustart nötig ist (sie folgt seiner Reparatur „Neustart erforderlich“). Der
+  Marketplace lehnt Installationen ab, bis der Benutzer des Tokens einmal seinen Hinweis unter Einstellungen >
+  Marketplace bestätigt hat.
 - `ha_list_zigbee_devices`: ZHA-Geräte mit Verfügbarkeit, Verbindungsqualität (`lqi`, schwach unter 80), `rssi`, zuletzt gesehen
   und Rolle; `problems_only: true` listet nur nicht verfügbare oder schwache Geräte.
 - `ha_list_thread_networks`: Thread-Netzwerke (Name, Kanal, bevorzugt, Quelle).
@@ -437,7 +441,7 @@ Auf Home Assistant OS muss die Datenbank-Wahl zum Backup passen: Ein Backup mit 
 | Integrationsablauf schlägt fehl oder Geheimnis wird abgelehnt | Halte dich an das zurückgegebene Formularschema und die Flow-ID, verwende für geheime Felder Verweise auf gespeicherte Aliase und prüfe die Berechtigungen des HA-Benutzers. Die Gerätesuche hängt vom Netzwerk **von HA** ab, nicht davon, was dieser Adapter erreicht. Brich liegengebliebene Abläufe ab. |
 | REST-Aufruf abgelehnt | Führe `ha_rest_catalog` aus; nur Paare aus Methode und Pfad, die im Katalog stehen, und routenspezifische Abfrageschlüssel werden angenommen. `ha_rest_query` erlaubt GET und nur die POSTs des Katalogs für Templates und Konfigurationsprüfung. Auch diese können HA-Ressourcen beanspruchen. `ha_rest_write` auf `/api/states/<entity_id>` setzt einen vorübergehenden Zustand, **keinen** dauerhaften Helfer und keine echte Geräteaktion. |
 | Oberfläche nicht erreichbar oder falsches Modell | Öffne die Oberfläche auf demselben Rechner über `http://localhost:8765/`; prüfe den laufenden Prozess, den Ollama-Dienst und das Modell sowie die **Einstellungen** der Oberfläche. Ein fremder Host-Header wird abgelehnt. Verwende `--allow-remote` nicht in einem Netzwerk ohne Anmeldung. |
-| Modell gibt eine veraltete oder nicht gestützte Antwort | Bitte es, mit einem namentlich genannten Lese-Werkzeug den *aktuellen* Zustand abzurufen, oder beginne einen neuen Chat. Kleine Ollama-Modelle bekommen eine Vorauswahl an Werkzeugen anhand von Stichwörtern plus die lokale Suche `find_tools` (und jedes echte Werkzeug, das sie beim Namen aufrufen, wird bei Bedarf nachgeladen); eine plausible Antwort ist keine Überprüfung. |
+| Modell gibt eine veraltete oder nicht gestützte Antwort | Bitte es, mit einem namentlich genannten Lese-Werkzeug den *aktuellen* Zustand abzurufen, oder beginne einen neuen Chat. Kleine Ollama-Modelle bekommen eine Vorauswahl an Werkzeugen anhand von Stichwörtern plus die lokale Suche `find_tools` (und jedes echte Werkzeug, das sie beim Namen aufrufen, wird bei Bedarf nachgeladen); eine plausible Antwort ist keine Überprüfung. Eine kurze Rückfrage-Antwort („Ja, mach das“, „Entferne sie wieder“) behält die Werkzeuge des letzten Austauschs. Behauptet das Modell nach einer Aufforderung eine Änderung, obwohl in diesem Durchgang keine lief, hängt der Chat einen Hinweis an. |
 
 Das REST-Gateway ist eine freigegebene Teilmenge, **kein** beliebiger HTTP- oder WebSocket-Proxy. Es kann keine beliebigen HA-Dateien bearbeiten, keine Backups planen, keine Add-ons oder Ordner wiederherstellen und kein einzelnes Gerät aus dem Register entfernen. Das HA-Token behält außerhalb dieses Adapters seine eigentliche HA-Befugnis. Nutze am besten ein eigenes, weniger berechtigtes HA-Konto für alltägliches Lesen, mach Backups vor Administrator-Änderungen und prüfe nach folgenreichen Schreibzugriffen von Hand in HA.
 

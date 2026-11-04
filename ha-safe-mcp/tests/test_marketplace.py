@@ -68,6 +68,8 @@ class FakeMarketplace:
             return {"issues": list(self.issues)}
         if kind == "marketplace/repository/uninstall":
             item = next(r for r in self.repos if r["id"] == payload["repository"])
+            if item["category"] == "integration" and not item.get("config_flow", True):   # YAML-only: core keeps it
+                self.issues.append({"domain": "marketplace", "issue_id": f"restart_required_{item['id']}_uninstall"})
             item.update(installed=False, installed_version=None)
             return None
         if kind == "marketplace/repositories/add":
@@ -155,6 +157,17 @@ async def test_remove_uses_uninstall():
     assert result["removed"] is True and ("marketplace/repository/uninstall", {"repository": "333"}) in ws.calls
 
 
+async def test_removing_a_marketplace_integration_follows_the_restart_repair():
+    ws = FakeMarketplace()
+    ws.repos[2].update(installed=True, installed_version="v1.0.0")              # config flow, no repair
+    clean = await make(ws, delete=True).remove("someone/heating-integration")
+    assert "ha_restart" not in clean["next"] and "config entries" in clean["next"]
+    ws.repos.append(repo("777", "someone/yaml-thing", category="integration", installed=True, version="v1",
+                         config_flow=False))
+    yaml_only = await make(ws, delete=True).remove("someone/yaml-thing")
+    assert "ha_restart" in yaml_only["next"]
+
+
 async def test_custom_repository_through_the_marketplace_and_github_hint():
     ws = FakeMarketplace()
     with pytest.raises(ValueError, match="integration, plugin, theme, template"):
@@ -166,6 +179,58 @@ async def test_custom_repository_through_the_marketplace_and_github_hint():
     assert added["repository"]["full_name"] == "owner/new-card"
     with pytest.raises(ValueError, match="GitHub"):
         await make(FakeMarketplace(github=False)).add_custom("owner/other", "plugin")
+
+
+async def test_adding_a_repository_that_is_already_in_the_store_points_to_install():
+    ws = FakeMarketplace()
+    with pytest.raises(ValueError, match="already in the Marketplace") as err:
+        await make(ws).add_custom("thomasloven/lovelace-card-mod", "plugin")
+    assert "ha_install_hacs_repository" in str(err.value)
+    assert not any(kind == "marketplace/repositories/add" for kind, _ in ws.calls)
+    with pytest.raises(ValueError, match="already installed"):
+        await make(ws).add_custom("https://github.com/piitaya/lovelace-mushroom", "plugin")
+
+
+async def test_tool_search_offers_the_install_tool_for_custom_component_words():
+    from ha_safe_mcp.ollama_client import rank_tools
+    from ha_safe_mcp.server import create_server
+    server = create_server(HAClient(URL, "t", allow_write=True), allow_admin_write=True, allow_delete=True)
+    tools = await server.list_tools()
+    for query in ("custom component installation", "benutzerdefinierte Komponente installieren"):
+        assert "ha_install_hacs_repository" in [t.name for t in rank_tools(query, tools)], query
+
+
+async def test_a_confirmation_keeps_the_tools_of_the_previous_turn():
+    from types import SimpleNamespace
+
+    from ha_safe_mcp.ollama_client import run_chat
+    names = ["ha_search_entities", "ha_get_state", "ha_search_hacs", "ha_get_hacs_repository",
+             "ha_install_hacs_repository", "ha_list_dashboards"]
+
+    class Session:
+        async def list_tools(self):
+            return SimpleNamespace(tools=[SimpleNamespace(name=n, description=n, inputSchema={"type": "object",
+                                                                                            "properties": {}})
+                                          for n in names])
+
+        async def call_tool(self, name, arguments):
+            raise AssertionError("no tool call expected")
+
+    offered = []
+
+    def respond(request):
+        offered.append([t["function"]["name"] for t in json.loads(request.content)["tools"]])
+        return httpx.Response(200, json={"message": {"role": "assistant", "content": "ok"}})
+
+    history = [{"role": "user", "content": "Installiere die mini-graph-card aus dem Marktplatz."},
+               {"role": "assistant", "content": "Die Karte hat 3.910 Sterne. Soll ich sie installieren?"}]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
+        await run_chat(Session(), http, "small", "Ja, installiere sie.", allow_write=True,
+                       approve=lambda n, a: True, history=history)
+        await run_chat(Session(), http, "small", "Ja, installiere sie.", allow_write=True,
+                       approve=lambda n, a: True)
+    assert "ha_install_hacs_repository" in offered[0]
+    assert "ha_install_hacs_repository" not in offered[1]   # without the earlier turn nothing points to the store
 
 
 async def test_ecosystem_lists_marketplace_repositories():
@@ -213,3 +278,73 @@ async def test_a_core_update_that_drops_the_connection_is_reported_as_started():
         result = await system.install_update("update.home_assistant_core_update")
     assert json.loads(install.calls[0].request.content) == {"entity_id": "update.home_assistant_core_update"}
     assert result["started"] is True and result["version"] == "2026.10.4" and "restart" in result["hint"]
+
+
+class ToolSession:
+    """Lists the given tool names; every call succeeds with a small JSON result."""
+
+    def __init__(self, names):
+        from types import SimpleNamespace
+        self.ns, self.names, self.calls = SimpleNamespace, names, []
+
+    async def list_tools(self):
+        return self.ns(tools=[self.ns(name=n, description=n, inputSchema={"type": "object", "properties": {}})
+                              for n in self.names])
+
+    async def call_tool(self, name, arguments):
+        self.calls.append((name, arguments))
+        return self.ns(isError=False, content=[self.ns(type="text", text='{"removed": true}')])
+
+
+async def test_the_last_answer_also_keeps_the_topic():
+    from ha_safe_mcp.ollama_client import run_chat
+    offered = []
+
+    def respond(request):
+        offered.append([t["function"]["name"] for t in json.loads(request.content)["tools"]])
+        return httpx.Response(200, json={"message": {"role": "assistant", "content": "ok"}})
+
+    history = [{"role": "user", "content": "Ja, installiere sie."},
+               {"role": "assistant", "content": "Die mini-graph-card wurde aus dem Marktplatz installiert."}]
+    names = ["ha_search_entities", "ha_get_state", "ha_remove_hacs_repository", "ha_list_dashboards"]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://ollama:11434") as http:
+        await run_chat(ToolSession(names), http, "small", "Entferne die mini-graph-card wieder.", allow_write=True,
+                       approve=lambda n, a: True, history=history)
+    assert "ha_remove_hacs_repository" in offered[0]
+
+
+@pytest.mark.parametrize("language, marker", [("en", "nothing was changed"), ("de", "wurde nichts geändert")])
+async def test_a_claimed_change_without_any_write_gets_a_note(language, marker):
+    from ha_safe_mcp.i18n import ui_language
+    from ha_safe_mcp.ollama_client import run_chat
+    claim = {"message": {"role": "assistant", "content": "Die mini-graph-card wurde erfolgreich entfernt."}}
+    token = ui_language.set(language)
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=claim)),
+                                     base_url="http://ollama:11434") as http:
+            answer = await run_chat(ToolSession(["ha_get_state"]), http, "small",
+                                    "Entferne die mini-graph-card wieder.", allow_write=True,
+                                    approve=lambda n, a: True)
+    finally:
+        ui_language.reset(token)
+    assert answer.startswith("Die mini-graph-card wurde erfolgreich entfernt.") and marker in answer
+
+
+async def test_no_note_after_a_real_write_or_for_a_question():
+    from ha_safe_mcp.ollama_client import WRITE_TOOLS, run_chat
+    assert "ha_remove_hacs_repository" in WRITE_TOOLS
+    steps = iter([
+        {"message": {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
+            "name": "ha_remove_hacs_repository", "arguments": {"repository": "kalkih/mini-graph-card"}}}]}},
+        {"message": {"role": "assistant", "content": "Die mini-graph-card wurde entfernt."}},
+        {"message": {"role": "assistant", "content": "Das Licht wurde um 18 Uhr eingeschaltet."}},
+    ])
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=next(steps))),
+                                 base_url="http://ollama:11434") as http:
+        session = ToolSession(["ha_get_state", "ha_remove_hacs_repository"])
+        done = await run_chat(session, http, "small", "Entferne die mini-graph-card aus dem Marketplace.",
+                              allow_write=True, approve=lambda n, a: True)
+        question = await run_chat(session, http, "small", "Wann wurde das Licht eingeschaltet?", allow_write=True,
+                                  approve=lambda n, a: True)
+    assert session.calls == [("ha_remove_hacs_repository", {"repository": "kalkih/mini-graph-card"})]
+    assert done == "Die mini-graph-card wurde entfernt." and question == "Das Licht wurde um 18 Uhr eingeschaltet."

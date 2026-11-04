@@ -115,7 +115,8 @@ SYSTEM = ("You are a Home Assistant assistant. Use tools for current states inst
           "Give times and values only from tool results, never estimate. "
           "Weather for a given day: ha_get_weather_forecast with day='today' or day='tomorrow'. "
           "After ha_call_service, states_after counts: report success only if confirmed is true; otherwise name the "
-          "reported state.")
+          "reported state. Say that something was done (installed, removed, switched, saved) only after a tool call "
+          "for exactly that returned success.")
 
 
 def read_only_hint() -> str:
@@ -253,7 +254,8 @@ TOOL_TOPICS = (
       "ha_list_statistic_ids", "ha_search_entities"}),
     (r"hacs|community store|marketplace|marktplatz|custom card|karte installier|card install|"
      r"install(?:ier)? .*card|plugin|"
-     r"custom integration|benutzerdefinierte integration|theme install|mushroom|bubble|card-mod|auto-entities",
+     r"custom (?:integration|component)|benutzerdefinierte (?:integration|komponente)|theme install|mushroom|bubble|"
+     r"card-mod|auto-entities",
      {"ha_search_hacs", "ha_get_hacs_repository", "ha_install_hacs_repository", "ha_remove_hacs_repository",
       "ha_add_hacs_custom_repository", "ha_list_hacs_repositories", "ha_list_dashboard_resources"}),
     (r"assist|sprach|stimme|wake ?word|aktivierungswort|pipeline|alexa|google assistant|voice|speech|"
@@ -505,6 +507,27 @@ def no_tool_answer() -> str:
              "Bitte die Anfrage genauer formulieren.")
 
 
+ACTION_REQUEST = re.compile(r"\b(?:entferne|lösche|loesche|deinstalliere|installiere|schalte|mach|mache|setze|"
+                            r"stelle|erstelle|speichere|aktiviere|deaktiviere|füge|fuege|lege|remove|delete|"
+                            r"uninstall|install|turn|switch|create|save|enable|disable|add)\b", re.IGNORECASE)
+CLAIMED_CHANGE = re.compile(
+    r"\b(?:wurde|wurden|ist|sind|habe|hab|hat|has been|have been|was|were|i have|i've)\b[^.!?\n]{0,80}\b(?:"
+    r"entfernt|gelöscht|geloescht|deinstalliert|installiert|eingeschaltet|ausgeschaltet|angeschaltet|geschaltet|"
+    r"gespeichert|angelegt|erstellt|hinzugefügt|geändert|aktiviert|deaktiviert|gesetzt|eingestellt|removed|deleted|"
+    r"uninstalled|installed|turned (?:on|off)|switched|saved|created|added|changed|enabled|disabled)\b",
+    re.IGNORECASE)
+
+
+def unconfirmed_claim_note(prompt: str, answer: str) -> str:
+    """Small models sometimes report an action that never ran. After a request for a change (not a question) with
+    no successful write in this run, an answer that claims a change gets a visible note."""
+    if "?" in prompt or not ACTION_REQUEST.search(prompt) or not CLAIMED_CHANGE.search(answer):
+        return answer
+    return answer + "\n\n" + L("Note: nothing was changed in this run; the answer above is not confirmed by a tool.",
+                                "Hinweis: In diesem Durchgang wurde nichts geändert; die Antwort oben ist nicht "
+                                "durch ein Werkzeug bestätigt.")
+
+
 def language_hint() -> str:
     """The chat answers in the UI language unless the user writes in another one."""
     # Instructions to the model stay English; only the target language follows the UI.
@@ -518,7 +541,11 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
                    on_event: EventSink | None = None) -> str:
     """Run a bounded Ollama tool loop. Mutations require per-call human approval (sync or async)."""
     listed = await session.list_tools()
-    selected = select_tool_names(prompt, {tool.name for tool in listed.tools}, allow_write=allow_write)
+    # a short follow-up ("Ja, mach das", "Entferne sie wieder") keeps the topic of the last exchange
+    earlier = [str(m["content"])[:400] for m in sanitize_history(history or [])[-2:]]
+    selected = select_tool_names(" ".join(earlier + [prompt]), {tool.name for tool in listed.tools},
+                                 allow_write=allow_write)
+    done_writes = 0
     # every tool this chat may use at all; the preselection only decides what is offered up front
     permitted = {tool.name: tool for tool in listed.tools
                  if tool.name in (READ_TOOLS | WRITE_TOOLS if allow_write else READ_TOOLS)}
@@ -556,7 +583,8 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
         if any(call.get("function", {}).get("name") in WRITE_TOOLS for call in calls) and not allow_write:
             return write_blocked()
         if not calls:
-            return re.sub(r"\s*</?tool_call>\s*$", "", str(message.get("content", ""))).strip()
+            answer = re.sub(r"\s*</?tool_call>\s*$", "", str(message.get("content", ""))).strip()
+            return unconfirmed_claim_note(prompt, answer) if not done_writes else answer
         messages.append({"role": "assistant", "content": "", "tool_calls": calls})
         for call in calls:
             func = call.get("function", {})
@@ -622,6 +650,8 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
                     result = _tool_text(outcome)
                     if outcome.isError:
                         result = "Tool error: " + result
+                    elif is_write:
+                        done_writes += 1
                 result = result[:6000]
                 await _emit(on_event, {"type": "tool_result", "name": name, "ok": not outcome.isError,
                                        "preview": result[:PREVIEW_CHARS]})

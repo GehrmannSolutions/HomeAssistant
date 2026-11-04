@@ -566,9 +566,10 @@ ist die Karte nutzbar.
 - Eigene Repositories brauchen die GitHub-Verbindung des Marketplace (einmal in Home Assistant anmelden). Er nimmt
   die Kategorien `integration`, `plugin`, `theme` und `template`; HACS kannte zusätzlich `python_script`,
   `appdaemon` und `netdaemon`.
-- Eine neue eigene Integration mit Einrichtung über die Oberfläche läuft meist ohne Neustart. Braucht es einen
-  (Updates, reine YAML-Integrationen), legt der Marketplace die Reparatur „Neustart erforderlich“ an, und die
-  Antwort von `ha_install_hacs_repository` sagt, dass neu gestartet werden muss.
+- Eine neue eigene Integration mit Einrichtung über die Oberfläche läuft meist ohne Neustart, ebenso ihr
+  Entfernen. Braucht es einen (Updates, reine YAML-Integrationen), legt der Marketplace die Reparatur „Neustart
+  erforderlich“ an, und die Antworten von `ha_install_hacs_repository` und `ha_remove_hacs_repository` sagen, dass
+  neu gestartet werden muss.
 - Kartendateien liegen unter `/local/community/<name>/` statt `/hacsfiles/<name>/`. Der Umstieg auf 2026.11
   schreibt die vorhandenen Dashboard-Ressourcen von selbst um.
 

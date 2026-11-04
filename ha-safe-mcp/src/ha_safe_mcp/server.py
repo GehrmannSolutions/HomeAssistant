@@ -671,11 +671,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_install_hacs_repository(repository: str, version: str = "") -> dict:
-        """Install or update a repository of HACS or the Marketplace ('owner/repo' or id; version = a release tag,
-        default the newest). Downloads third-party code into Home Assistant. Cards are registered as dashboard
-        resource by the store; for integrations the answer says whether ha_restart is needed. The Marketplace
-        refuses until the token's user accepted its notice once in Settings > Marketplace (the error says so).
-        Journaled: undo removes a new install or goes back to the previous version. Admin write required."""
+        """Install or update a custom integration (custom component), dashboard card or theme from HACS or the
+        Marketplace ('owner/repo' or id; version = a release tag, default the newest). Downloads third-party code
+        into Home Assistant. Cards are registered as dashboard resource by the store; for integrations the answer
+        says whether ha_restart is needed. The Marketplace refuses until the token's user accepted its notice once in
+        Settings > Marketplace (the error says so). Journaled: undo removes a new install or goes back to the
+        previous version. Admin write required."""
         return await journaled("ha_install_hacs_repository", "hacs", repository,
                                lambda: hacs.install(repository, version or None),
                                target_from=lambda r: r["full_name"])

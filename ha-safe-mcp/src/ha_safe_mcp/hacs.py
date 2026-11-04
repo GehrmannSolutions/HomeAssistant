@@ -277,6 +277,9 @@ class HAHacs:
                                  "its leftover config entries",
                   "theme": "reload themes (ha_reload 'frontend'); users who picked it fall back to the default"
                   }.get(category, "see the repository's instructions for leftovers")
+        if category == "integration" and self.store == "marketplace" and not await self._restart_needed(item):
+            follow = ("the Marketplace removed it without asking for a restart; delete its leftover config entries, "
+                      "if any")
         return {"removed": True, "full_name": item.get("full_name"), "category": category,
                 "was_version": item.get("installed_version"), "store": self.store, "next": follow}
 
@@ -288,8 +291,12 @@ class HAHacs:
         if category not in CATEGORIES:
             raise ValueError(f"category must be one of {', '.join(CATEGORIES)}")
         full_name = match.group(1)
-        if not self.store:
-            await self._all()   # detects the store
+        items = await self._all()   # also detects the store
+        known = next((i for i in items if str(i.get("full_name", "")).casefold() == full_name.casefold()), None)
+        if known:   # small models reach for 'custom repository' when they mean 'install'
+            state = "already installed" if known.get("installed") else "not installed yet"
+            raise ValueError(f"{known.get('full_name')} is already in {self._label()} ({state}): no need to add it, "
+                             "install or update it with ha_install_hacs_repository")
         if self.store == "marketplace" and category not in MARKETPLACE_CATEGORIES:
             raise ValueError(f"the Marketplace takes only these categories: {', '.join(MARKETPLACE_CATEGORIES)} "
                              f"('{category}' existed only in HACS)")

@@ -553,9 +553,9 @@ update, "registers a dashboard resource"), you approve, and the card can be used
 - Custom repositories need the Marketplace's GitHub connection (signed in once in Home Assistant). It takes the
   categories `integration`, `plugin`, `theme` and `template`; HACS also had `python_script`, `appdaemon` and
   `netdaemon`.
-- A new custom integration with UI setup usually works without a restart. When one is needed (updates, YAML-only
-  integrations), the Marketplace raises the repair "restart required" and the answer of
-  `ha_install_hacs_repository` says to restart.
+- A new custom integration with UI setup usually works without a restart, and so does removing one. When a
+  restart is needed (updates, YAML-only integrations), the Marketplace raises the repair "restart required" and the
+  answers of `ha_install_hacs_repository` and `ha_remove_hacs_repository` say to restart.
 - Card files are served under `/local/community/<name>/` instead of `/hacsfiles/<name>/`. The move to 2026.11
   rewrites the existing dashboard resources by itself.
 
