@@ -169,6 +169,11 @@ class HASystem:
             if "ReadTimeout" in str(exc):
                 return {"entity_id": entity_id, "started": True, "version": target,
                         "hint": "still installing in Home Assistant; check ha_list_updates (in_progress)"}
+            if "request failed" in str(exc):   # Core/OS updates restart HA and drop the connection mid-call
+                return {"entity_id": entity_id, "started": True, "version": target,
+                        "hint": "Home Assistant dropped the connection: a Core or OS update restarts it. Wait a "
+                                "few minutes, then check ha_list_updates and ha_get_system_info; an OS update may "
+                                "still need the reboot that ha_list_repairs shows ('System reboot required')"}
             raise
         return {"entity_id": entity_id, "installed": target}
 

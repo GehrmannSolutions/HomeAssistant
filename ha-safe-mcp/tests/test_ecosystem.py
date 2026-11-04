@@ -34,6 +34,8 @@ class FakeWS:
                 "/host/info": {"operating_system": "Home Assistant OS 16.2", "kernel": "6.12", "disk_total": 28.0,
                                "disk_used": 9.5, "disk_free": 18.5, "hostname": "homeassistant", "chassis": "embedded"},
             }[payload["endpoint"]]
+        if kind.startswith("marketplace/"):   # HA before 2026.11 has no Marketplace
+            raise RuntimeError("Home Assistant WebSocket error: unknown_command")
         if kind == "hacs/repositories/list":
             if not self.hacs:
                 raise RuntimeError("Home Assistant WebSocket error: unknown_command")

@@ -3,6 +3,30 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.35.0 – 2026-11-04
+
+Home Assistant 2026.11 baut HACS als *Marketplace* ein. Getestet auf einer Testinstanz mit 2026.11.0b6, die sich
+nur in der Versionsnummer von 2026.11.0 unterscheidet:
+
+- **Store-Werkzeuge mit dem Marketplace:** `ha_list_hacs_repositories`, `ha_search_hacs`, `ha_get_hacs_repository`,
+  `ha_install_hacs_repository`, `ha_remove_hacs_repository` und `ha_add_hacs_custom_repository` sprechen ab 2026.11
+  mit dem Marketplace und bei älteren Versionen weiter mit HACS. Die Namen bleiben, jede Antwort nennt den Store
+  (`store`). Vorher meldete das MCP auf 2026.11 „HACS nicht installiert“. Wird Home Assistant während einer
+  laufenden Sitzung umgestellt, merkt das MCP es beim nächsten Aufruf.
+- **Hinweis des Marketplace:** Installieren geht erst, wenn der Home-Assistant-Benutzer des Tokens einmal unter
+  Einstellungen > Marketplace „Ich verstehe die Risiken und stimme zu“ gewählt hat. Das MCP bestätigt das nie
+  selbst. Die Fehlermeldung sagt, was zu tun ist, und `ha_list_hacs_repositories` zeigt `notice_accepted`.
+- **Eigene Repositories** brauchen die GitHub-Verbindung des Marketplace. Er nimmt nur die Kategorien
+  `integration`, `plugin`, `theme` und `template`; andere werden mit einer klaren Meldung abgelehnt.
+- **Neustart nur, wenn nötig:** Nach dem Installieren einer Integration fragt das MCP die Reparatur
+  „Neustart erforderlich“ des Marketplace ab und sagt dann „Neustart nötig“ oder „gleich einrichten“.
+- **Updates von Core und OS:** `ha_install_update` meldete einen Fehler, wenn Home Assistant beim Update die
+  Verbindung trennte, obwohl das Update lief. Jetzt kommt `started: true` mit dem Hinweis, nach ein paar Minuten
+  nachzusehen und nach einem OS-Update auf „System reboot required“ in `ha_list_repairs` zu achten.
+- **Kleine Modelle:** „Marketplace“ und „Marktplatz“ führen jetzt zu den Store-Werkzeugen.
+- **Diorama-Testkarte:** `ha-diorama/hestia/deploy_dev.py` nutzt den neuen Pfad `/local/community/ha-diorama/`,
+  wenn die Instanz ihn hat.
+
 ## 0.34.0 – 2026-10-30
 
 Aus den Chat-Tests mit dem größeren Demo-Zuhause (ein kleines lokales Modell, `qwen3-coder:30b`):

@@ -510,22 +510,25 @@ hallway."* The automation then uses `{"use_blueprint": {"path": "...", "input": 
 
 ## 18. Add-ons, system, HACS, Zigbee and Thread
 
-Everything here is read-only except the HACS store: there you can search, install, update and remove (see the
-second table). Without a Supervisor, HACS or ZHA the tools say so instead of failing. No device addresses, IP
+Everything here is read-only except the community store (HACS, or the Marketplace that replaced it in Home
+Assistant 2026.11): there you can search, install, update and remove (see the second table). Without a Supervisor, a
+store or ZHA the tools say so instead of failing. No device addresses, IP
 addresses, host names or network keys are returned.
 
 | Tool | What it does | Level |
 |---|---|---|
 | `ha_list_addons` | Installed add-ons with state, version and pending update. | Read |
 | `ha_get_system_info` | Versions of Core, Supervisor and OS, Supervisor health, board and disk usage. | Read |
-| `ha_list_hacs_repositories` | What is installed through HACS, with installed and available version. | Read |
+| `ha_list_hacs_repositories` | What is installed through HACS or the Marketplace, with installed and available version; for the Marketplace also whether its notice is accepted. | Read |
 | `ha_list_zigbee_devices` | Zigbee devices with availability, signal quality and last contact; `problems_only` shows only unavailable or weak ones. | Read |
 | `ha_list_thread_networks` | Thread networks (name, channel, preferred). | Read |
 
 **Example**: *"Which Zigbee devices have poor reception or are offline?"*
 
-**HACS store: install cards, custom integrations and themes.** HACS is the community store for Home Assistant
-(it must already be installed in Home Assistant). Whatever comes from there is code from strangers that runs with
+**Community store (HACS or Marketplace): install cards, custom integrations and themes.** HACS is the community
+store for Home Assistant. Up to version 2026.10 it is installed separately; from 2026.11 it is built in as the
+*Marketplace* (Settings > Marketplace), and an existing HACS installation moves there by itself. The tools keep their
+names and use whichever store the instance has; every answer says which one (`store`). Whatever comes from there is code from strangers that runs with
 Home Assistant's rights, so installing always shows an approval card with stars, last update and what happens next.
 
 | Tool | What it does | Level |
@@ -540,6 +543,21 @@ Home Assistant's rights, so installing always shows an approval card with stars,
 update, "registers a dashboard resource"), you approve, and the card can be used after a browser reload.
 
 ![Approval card for a HACS install](images/en/24-chat-hacs-install.png)
+
+**What is different with the Marketplace (Home Assistant 2026.11 and later):**
+
+- Before the first install, the Home Assistant user of the MCP's token accepts the Marketplace notice once:
+  log in as that user, open Settings > Marketplace and select "I understand the risks and agree". The notice is a
+  person's consent per user, so the MCP never accepts it. Until then installing fails with exactly this
+  instruction, and `ha_list_hacs_repositories` shows `notice_accepted: false`.
+- Custom repositories need the Marketplace's GitHub connection (signed in once in Home Assistant). It takes the
+  categories `integration`, `plugin`, `theme` and `template`; HACS also had `python_script`, `appdaemon` and
+  `netdaemon`.
+- A new custom integration with UI setup usually works without a restart. When one is needed (updates, YAML-only
+  integrations), the Marketplace raises the repair "restart required" and the answer of
+  `ha_install_hacs_repository` says to restart.
+- Card files are served under `/local/community/<name>/` instead of `/hacsfiles/<name>/`. The move to 2026.11
+  rewrites the existing dashboard resources by itself.
 
 ## 19. Energy: plugs, solar, battery storage
 

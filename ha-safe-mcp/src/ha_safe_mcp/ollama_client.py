@@ -202,7 +202,7 @@ TOOL_TOPICS = (
     (r"add.?ons?\b|supervisor|speicherplatz|festplatte|disk|betriebssystem|home assistant os|systeminfo|"
      r"storage|free space|operating system|system info",
      {"ha_list_addons", "ha_get_system_info"}),
-    (r"hacs|custom (?:integration|card|component)", {"ha_list_hacs_repositories"}),
+    (r"hacs|marketplace|marktplatz|custom (?:integration|card|component)", {"ha_list_hacs_repositories"}),
     (r"zigbee|\bzha\b|funk|empfang|signal|lqi|rssi|mesh|reception|offline", {"ha_list_zigbee_devices"}),
     (r"thread|matter|border.?router", {"ha_list_thread_networks"}),
     (r"\bevent|ereignis|feuer|signal senden|send (?:a )?signal", {"ha_fire_event", "ha_get_automation", "ha_search_entities"}),
@@ -251,7 +251,8 @@ TOOL_TOPICS = (
      {"ha_get_energy_config", "ha_find_energy_sensors", "ha_get_energy_usage", "ha_get_solar_forecast",
       "ha_save_energy_config", "ha_add_energy_device", "ha_remove_energy_device", "ha_get_statistics",
       "ha_list_statistic_ids", "ha_search_entities"}),
-    (r"hacs|community store|custom card|karte installier|card install|install(?:ier)? .*card|plugin|"
+    (r"hacs|community store|marketplace|marktplatz|custom card|karte installier|card install|"
+     r"install(?:ier)? .*card|plugin|"
      r"custom integration|benutzerdefinierte integration|theme install|mushroom|bubble|card-mod|auto-entities",
      {"ha_search_hacs", "ha_get_hacs_repository", "ha_install_hacs_repository", "ha_remove_hacs_repository",
       "ha_add_hacs_custom_repository", "ha_list_hacs_repositories", "ha_list_dashboard_resources"}),

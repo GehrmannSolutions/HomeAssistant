@@ -60,17 +60,26 @@ class HAEcosystem:
         return {"supervisor_available": True, **info}
 
     async def list_hacs(self, installed_only: bool = True) -> dict:
-        try:
-            items = await self.ws.command("hacs/repositories/list")
-        except RuntimeError as exc:
-            if _missing(exc):
-                return {"hacs_installed": False}
-            raise
-        items = [i for i in items or [] if isinstance(i, dict)]
+        from .hacs import list_store   # HACS, or the Marketplace that replaced it in HA 2026.11
+        store, items = await list_store(self.ws)
+        if store is None:
+            return {"hacs_installed": False}
         chosen = [i for i in items if i.get("installed")] if installed_only else items
         repos = sorted(({key: item.get(key) for key in HACS_FIELDS} for item in chosen),
                        key=lambda r: (not r["pending_upgrade"], str(r["full_name"]).casefold()))
-        return {"hacs_installed": True, "repositories": repos[:300], "known_repositories": len(items)}
+        result = {"hacs_installed": True, "store": store, "repositories": repos[:300], "known_repositories": len(items)}
+        if store == "marketplace":
+            try:
+                info = await self.ws.command("marketplace/info") or {}
+            except RuntimeError:
+                info = {}
+            if info:
+                result["marketplace"] = {"notice_accepted": info.get("warning_accepted"),
+                                         "github_connected": info.get("github_connected")}
+                if info.get("warning_accepted") is False:
+                    from .hacs import NOTICE
+                    result["hint"] = f"installing needs the accepted notice first: {NOTICE}"
+        return result
 
     async def zigbee_devices(self, problems_only: bool = False) -> dict:
         try:

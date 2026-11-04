@@ -647,47 +647,52 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_list_hacs_repositories(installed_only: bool = True) -> dict:
-        """What is ALREADY INSTALLED through HACS (custom integrations, cards, themes) with installed/available
-        version and pending upgrades. To find something new in the store (a card that does X), use ha_search_hacs."""
+        """What is ALREADY INSTALLED through HACS or the Marketplace that replaced it in Home Assistant 2026.11
+        (custom integrations, cards, themes) with installed/available version and pending upgrades; names the store
+        and, for the Marketplace, whether its notice is accepted (needed to install). To find something new in the
+        store (a card that does X), use ha_search_hacs."""
         return await ecosystem.list_hacs(installed_only)
 
     @tool()
     async def ha_search_hacs(query: str = "", category: str = "", limit: int = 20,
                              installed_only: bool = False) -> dict:
-        """Search the HACS store (custom integrations, dashboard cards = category 'plugin', themes, ...) by words in
-        name, description and topics (at least half of the words must match; fill words like 'card' are ignored).
+        """Search the community store (HACS, or the Marketplace from Home Assistant 2026.11; custom integrations,
+        dashboard cards = category 'plugin', themes, ...) by words in name, description and topics (at least half of the words must match; fill words like 'card' are ignored).
         Repositories whose name has all words come first, then the most GitHub stars. The store is in English:
         translate the user's words into short English search words (e.g. 'Verlaufsgraph' -> 'graph'). Read only."""
         return await hacs.search(query, category, limit, installed_only)
 
     @tool()
     async def ha_get_hacs_repository(repository: str) -> dict:
-        """One HACS repository ('owner/repo' or id) with stars, last update, releases, installed version and what
-        installing it means (install_impact). Show this to the user before installing. Read only."""
+        """One repository of HACS or the Marketplace ('owner/repo' or id) with stars, last update, releases,
+        installed version and what installing it means (install_impact). Show this to the user before installing.
+        Read only."""
         return await hacs.get(repository)
 
     @tool()
     async def ha_install_hacs_repository(repository: str, version: str = "") -> dict:
-        """Install or update a HACS repository ('owner/repo' or id; version = a release tag, default the newest).
-        Downloads third-party code into Home Assistant. Cards are registered as dashboard resource by HACS;
-        integrations need ha_restart. Journaled: undo removes a new install or goes back to the previous version.
-        Admin write required."""
+        """Install or update a repository of HACS or the Marketplace ('owner/repo' or id; version = a release tag,
+        default the newest). Downloads third-party code into Home Assistant. Cards are registered as dashboard
+        resource by the store; for integrations the answer says whether ha_restart is needed. The Marketplace
+        refuses until the token's user accepted its notice once in Settings > Marketplace (the error says so).
+        Journaled: undo removes a new install or goes back to the previous version. Admin write required."""
         return await journaled("ha_install_hacs_repository", "hacs", repository,
                                lambda: hacs.install(repository, version or None),
                                target_from=lambda r: r["full_name"])
 
     @tool()
     async def ha_remove_hacs_repository(repository: str) -> dict:
-        """Remove an installed HACS repository (its files; a card left in a dashboard shows an error). Journaled,
-        undo reinstalls the same version. Admin write and delete required."""
+        """Remove an installed repository of HACS or the Marketplace (its files; a card left in a dashboard shows
+        an error). Journaled, undo reinstalls the same version. Admin write and delete required."""
         return await journaled("ha_remove_hacs_repository", "hacs", repository, lambda: hacs.remove(repository),
                                target_from=lambda r: r["full_name"])
 
     @tool()
     async def ha_add_hacs_custom_repository(repository: str, category: str) -> dict:
-        """Add a GitHub repository that is not in the HACS store ('owner/repo' or https://github.com/owner/repo;
-        category: integration, plugin, theme, python_script, template, appdaemon, netdaemon). Only adds it to the
-        list; install with ha_install_hacs_repository. Admin write required."""
+        """Add a GitHub repository that is not in the store ('owner/repo' or https://github.com/owner/repo;
+        category: integration, plugin, theme, template; HACS also python_script, appdaemon, netdaemon). Only adds it
+        to the list; install with ha_install_hacs_repository. The Marketplace needs its GitHub connection for this.
+        Admin write required."""
         return await hacs.add_custom(repository, category)
 
     @tool()

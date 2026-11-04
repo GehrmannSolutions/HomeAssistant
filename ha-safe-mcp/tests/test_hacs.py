@@ -28,7 +28,7 @@ class FakeWS:
     async def command(self, kind, payload=None):
         payload = payload or {}
         self.calls.append((kind, payload))
-        if not self.hacs:
+        if not self.hacs or kind.startswith("marketplace/"):   # HA before 2026.11 has no Marketplace
             raise RuntimeError("Home Assistant WebSocket error: unknown_command")
         if kind == "hacs/repositories/list":
             return [dict(r) for r in self.repos]

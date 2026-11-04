@@ -1,9 +1,12 @@
-"""Put the walls build of the Diorama card on a TEST Home Assistant that has the card installed from HACS.
+"""Put the walls build of the Diorama card on a TEST Home Assistant that has the card installed from HACS or from
+the Marketplace that replaced HACS in Home Assistant 2026.11.
 
-Copies dist/card.js over the HACS copy in that instance's config folder (the original is kept once in --orig-dir),
-writes the .gz next to it, and points the dashboard resource at a new ?hestia=<hash> URL through ha-safe-mcp:
-Home Assistant serves /hacsfiles/ with a 31-day cache and proxies such as Cloudflare key their cache on the query,
-so every build needs its own URL. --restore puts the original HACS copy back.
+Copies dist/card.js over the store's copy in that instance's config folder (the original is kept once in
+--orig-dir), writes the .gz next to it, and points the dashboard resource at a new ?hestia=<hash> URL through
+ha-safe-mcp: Home Assistant serves the card with a 31-day cache and proxies such as Cloudflare key their cache on the
+query, so every build needs its own URL. HACS serves it under /hacsfiles/ha-diorama/, the Marketplace under
+/local/community/ha-diorama/ (it migrated the old resource there); the existing resource decides which one is used.
+--restore puts the original copy back.
 
     pnpm build
     cd ../ha-safe-mcp && .venv/bin/python ../ha-diorama/hestia/deploy_dev.py --env-file /path/to/test.env \\
@@ -28,8 +31,14 @@ from ha_safe_mcp.ollama_client import HA_ENV_KEYS, mcp_parameters_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(HERE, "..", "dist", "card.js")
-PREFIX = "/hacsfiles/ha-diorama/card.js"
-HACS_TAG = "13768699041829"  # what HACS itself appends to the upstream resource URL
+PREFIXES = {"hacs": "/hacsfiles/ha-diorama/card.js", "marketplace": "/local/community/ha-diorama/card.js"}
+HACS_TAG = "13768699041829"  # what HACS (?hacstag=) and the Marketplace (?v=) append to the upstream resource URL
+
+
+def resource_url(store: str, digest: str | None) -> str:
+    """The resource URL for one store; digest None = the store's own URL (restore)."""
+    tag = f"?v={HACS_TAG}" if store == "marketplace" else f"?hacstag={HACS_TAG}"
+    return PREFIXES[store] + tag + (f"&hestia={digest}" if digest else "")
 
 
 def copy(target: str, *cmd: str) -> None:
@@ -65,10 +74,12 @@ async def main(args) -> None:
             await s.initialize()
             resources = data(await s.call_tool("ha_list_dashboard_resources", {}))
             items = resources if isinstance(resources, list) else resources.get("resources", [])
-            for item in items:
-                if str(item.get("url", "")).startswith(PREFIX):
-                    data(await s.call_tool("ha_delete_dashboard_resource", {"resource_id": str(item["id"])}))
-            url = f"{PREFIX}?hacstag={HACS_TAG}" + ("" if args.restore else f"&hestia={digest}")
+            ours = [i for i in items if any(str(i.get("url", "")).startswith(p) for p in PREFIXES.values())]
+            store = "marketplace" if any(str(i.get("url", "")).startswith(PREFIXES["marketplace"]) for i in ours) \
+                else "hacs"
+            for item in ours:
+                data(await s.call_tool("ha_delete_dashboard_resource", {"resource_id": str(item["id"])}))
+            url = resource_url(store, None if args.restore else digest)
             res = data(await s.call_tool("ha_add_dashboard_resource", {"url": url, "res_type": "module"}))
     print("deployed", "original" if args.restore else "walls build", digest, url,
           res.get("change_id") if isinstance(res, dict) else res)

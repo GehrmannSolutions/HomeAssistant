@@ -520,22 +520,25 @@ Flur."* Die Automation verwendet dann `{"use_blueprint": {"path": "...", "input"
 
 ## 18. Add-ons, System, HACS, Zigbee und Thread
 
-Hier ist alles nur lesend, außer dem HACS-Store: dort kannst du suchen, installieren, aktualisieren und entfernen
-(siehe zweite Tabelle). Ohne Supervisor, HACS oder ZHA sagen die Werkzeuge das, statt mit einem Fehler abzubrechen.
+Hier ist alles nur lesend, außer dem Community-Store (HACS oder der Marketplace, der HACS in Home Assistant
+2026.11 ersetzt): dort kannst du suchen, installieren, aktualisieren und entfernen (siehe zweite Tabelle). Ohne
+Supervisor, Store oder ZHA sagen die Werkzeuge das, statt mit einem Fehler abzubrechen.
 Es werden keine Geräteadressen, IP-Adressen, Hostnamen oder Netzwerkschlüssel zurückgegeben.
 
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
 | `ha_list_addons` | Installierte Add-ons mit Zustand, Version und ausstehendem Update. | Lesen |
 | `ha_get_system_info` | Versionen von Core, Supervisor und OS, Zustand des Supervisors, Board und Speicherplatzbelegung. | Lesen |
-| `ha_list_hacs_repositories` | Was über HACS installiert ist, mit installierter und verfügbarer Version. | Lesen |
+| `ha_list_hacs_repositories` | Was über HACS oder den Marketplace installiert ist, mit installierter und verfügbarer Version; beim Marketplace auch, ob sein Hinweis bestätigt ist. | Lesen |
 | `ha_list_zigbee_devices` | Zigbee-Geräte mit Verfügbarkeit, Signalqualität und letztem Kontakt; `problems_only` zeigt nur nicht verfügbare oder schwache Geräte. | Lesen |
 | `ha_list_thread_networks` | Thread-Netzwerke (Name, Kanal, bevorzugt). | Lesen |
 
 **Beispiel**: *"Welche Zigbee-Geräte haben schlechten Empfang oder sind offline?"*
 
-**HACS-Store: Karten, eigene Integrationen und Themes installieren.** HACS ist der Community-Store für Home
-Assistant (er muss in Home Assistant schon installiert sein). Was von dort kommt, ist Code von Fremden, der mit den
+**Community-Store (HACS oder Marketplace): Karten, eigene Integrationen und Themes installieren.** HACS ist der
+Community-Store für Home Assistant. Bis Version 2026.10 wird er extra installiert, ab 2026.11 ist er als
+*Marketplace* eingebaut (Einstellungen > Marketplace), und eine vorhandene HACS-Installation zieht von selbst dorthin
+um. Die Werkzeuge behalten ihre Namen und nutzen den Store, den die Instanz hat; jede Antwort nennt ihn (`store`). Was von dort kommt, ist Code von Fremden, der mit den
 Rechten von Home Assistant läuft. Deshalb zeigt eine Installation immer eine Freigabe-Karte mit Sternen, letzter
 Aktualisierung und dem, was danach passiert.
 
@@ -552,6 +555,22 @@ letzte Aktualisierung, "trägt eine Dashboard-Ressource ein"), du gibst frei, un
 ist die Karte nutzbar.
 
 ![Freigabe-Karte für eine HACS-Installation](images/de/24-chat-hacs-install.png)
+
+**Was beim Marketplace anders ist (Home Assistant 2026.11 und neuer):**
+
+- Vor der ersten Installation bestätigt der Home-Assistant-Benutzer des MCP-Tokens einmal den Hinweis des
+  Marketplace: als dieser Benutzer anmelden, Einstellungen > Marketplace öffnen und „Ich verstehe die Risiken und
+  stimme zu“ wählen. Der Hinweis ist die Zustimmung einer Person, je Benutzer; das MCP bestätigt ihn deshalb nie
+  selbst. Bis dahin schlägt eine Installation mit genau dieser Anleitung fehl, und `ha_list_hacs_repositories`
+  zeigt `notice_accepted: false`.
+- Eigene Repositories brauchen die GitHub-Verbindung des Marketplace (einmal in Home Assistant anmelden). Er nimmt
+  die Kategorien `integration`, `plugin`, `theme` und `template`; HACS kannte zusätzlich `python_script`,
+  `appdaemon` und `netdaemon`.
+- Eine neue eigene Integration mit Einrichtung über die Oberfläche läuft meist ohne Neustart. Braucht es einen
+  (Updates, reine YAML-Integrationen), legt der Marketplace die Reparatur „Neustart erforderlich“ an, und die
+  Antwort von `ha_install_hacs_repository` sagt, dass neu gestartet werden muss.
+- Kartendateien liegen unter `/local/community/<name>/` statt `/hacsfiles/<name>/`. Der Umstieg auf 2026.11
+  schreibt die vorhandenen Dashboard-Ressourcen von selbst um.
 
 ## 19. Energie: Steckdosen, Solar, Batteriespeicher
 
