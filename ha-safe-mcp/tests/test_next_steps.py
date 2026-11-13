@@ -25,6 +25,14 @@ STATES = [
     {"entity_id": "light.h3d_ba_licht", "state": "off", "attributes": {"friendly_name": "Bad"}},
     {"entity_id": "light.stehlampe", "state": "on", "attributes": {"friendly_name": "Stehlampe"}},
     {"entity_id": "light.garten", "state": "off", "attributes": {"friendly_name": "Garten"}},
+    # live demo house 2026-11-13: "tv" inside "paketverlust", a TV helper and a meter came before the TV itself,
+    # and "garage" matched shutters by their device class
+    {"entity_id": "sensor.udm_paketverlust", "state": "0", "attributes": {"friendly_name": "UDM Paketverlust"}},
+    {"entity_id": "input_boolean.h3d_wz_tv_state", "state": "off",
+     "attributes": {"friendly_name": "Fernseher (Zustand)"}},
+    {"entity_id": "input_number.demo_plug_tv_kwh", "state": "3.1", "attributes": {"friendly_name": "TV plug meter"}},
+    {"entity_id": "cover.rl_kuche", "state": "open",
+     "attributes": {"friendly_name": "Rollladen Küche", "device_class": "garage"}},
 ]
 
 
@@ -72,8 +80,18 @@ async def test_a_domain_filtered_search_without_hits_names_matches_in_other_doma
         result = parse(await make_server().call_tool("ha_search_entities", {"query": "TV",
                                                                              "domain": "media_player"}))
     assert result["results"] == []
-    assert [e["entity_id"] for e in result["other_domains"]] == ["switch.h3d_wz_tv"]
+    others = [e["entity_id"] for e in result["other_domains"]]
+    assert others[0] == "switch.h3d_wz_tv"                  # switchable first, also found by "Fernseher"
+    assert "sensor.udm_paketverlust" not in others         # whole words only
     assert "switch" in result["hint"]
+
+
+async def test_the_other_domain_fallback_ignores_device_classes():
+    with respx.mock(base_url=URL) as router:
+        router.get("/api/states").mock(return_value=httpx.Response(200, json=STATES))
+        result = parse(await make_server().call_tool("ha_search_entities", {"query": "garage", "domain": "light"}))
+    assert result["results"] == [] and "other_domains" not in result
+    assert "cover.rl_kuche" not in json.dumps(result)
 
 
 async def test_english_words_find_german_names_and_back():

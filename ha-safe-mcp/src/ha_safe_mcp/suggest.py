@@ -43,3 +43,38 @@ def similar_entities(states, wanted: str, domain: str = "", n: int = 5) -> list[
 def describe(suggestions: list[dict]) -> str:
     return ", ".join(f"{s['entity_id']} ({s['friendly_name']})" if s.get("friendly_name") else s["entity_id"]
                      for s in suggestions)
+
+
+# Domains a request usually means when it names a device ("the TV", "the washing machine"); helpers and sensors
+# about that device come after them.
+ACTIONABLE = ("switch", "light", "fan", "climate", "cover", "media_player", "lock", "vacuum", "humidifier",
+              "water_heater", "valve", "siren", "remote", "scene", "script", "button")
+
+
+def _words(text: str) -> set[str]:
+    return {word for word in re.split(r"[^\wäöüß]+", text.casefold().replace("_", " ")) if word}
+
+
+def word_matches(states, phrases: list[str], exclude_domain: str = "", n: int = 10) -> list[dict]:
+    """Entities whose ID or friendly name contains one of the phrases as whole words ('tv' finds 'switch.wz_tv',
+    never 'Paketverlust'); actionable domains first. No device-class matching: a fallback names devices, not kinds."""
+    wanted = [_words(phrase) for phrase in phrases if _words(phrase)]
+    found = []
+    for item in states if isinstance(states, list) else []:
+        if not isinstance(item, dict):
+            continue
+        entity_id = item.get("entity_id")
+        if not isinstance(entity_id, str) or "." not in entity_id:
+            continue
+        domain = entity_id.split(".", 1)[0]
+        if domain == exclude_domain:
+            continue
+        attributes = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
+        name = str(attributes.get("friendly_name") or "")
+        words = _words(entity_id.split(".", 1)[1]) | _words(name)
+        if any(phrase <= words for phrase in wanted):
+            rank = ACTIONABLE.index(domain) if domain in ACTIONABLE else len(ACTIONABLE)
+            found.append((rank, entity_id, {"entity_id": entity_id, "state": item.get("state", ""),
+                                            "friendly_name": name}))
+    found.sort(key=lambda f: (f[0], f[1]))
+    return [entry for _, _, entry in found[:n]]

@@ -377,7 +377,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         and rooms/devices by their English or German word ('washing machine' finds 'Waschmaschine'). Without a hit
         it says where else to look: matches in other domains (a TV on a smart plug is a switch) or similar names."""
         from .domains import translations
-        from .suggest import similar_entities
+        from .suggest import similar_entities, word_matches
         results = await client.search_entities(query, domain, limit)
         if results or not query.strip():
             return results
@@ -387,12 +387,11 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
             if results:
                 return results
         if domain:
-            for word in [query, *translations(query)]:
-                others = await client.search_entities(word, "", 10, states=states)
-                if others:
-                    return {"results": [], "other_domains": others,
-                            "hint": f"no {domain} entity matches '{query}', but these entities of other domains do "
-                                    "(a device on a smart plug is a switch); use their own entity_id and domain"}
+            others = word_matches(states, [query, *translations(query)], exclude_domain=domain)
+            if others:
+                return {"results": [], "other_domains": others,
+                        "hint": f"no {domain} entity matches '{query}', but these entities of other domains do "
+                                "(a device on a smart plug is a switch); use their own entity_id and domain"}
         similar = similar_entities(states, query, domain)
         return {"results": [], "similar": similar,
                 "hint": f"nothing matches '{query}'" + (f" in domain {domain}" if domain else "") + ". "

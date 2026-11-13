@@ -13,7 +13,9 @@ Antwort den nächsten Schritt:
   („washing machine“ findet „Waschmaschine“, „bathroom“ findet „Bad“). Mit Domain-Filter nennt sie passende
   Entitäten anderer Domains, sonst ähnliche Namen. Dazu kommt der Hinweis, einen ähnlichen Namen nur zu nehmen, wenn
   er eindeutig gemeint ist. Der Fernseher am Zwischenstecker ist ein `switch`, das Modell suchte einen
-  `media_player`; das allein kostete 6 Fehlschläge.
+  `media_player`; das allein kostete 6 Fehlschläge. Für die anderen Domains zählen nur ganze Wörter in Name oder
+  ID, schaltbare Geräte kommen zuerst (live im Demo-Haus geprüft: vorher stand dort auch „Paketverlust“, weil es
+  „tv“ enthält, und bei „garage“ kamen Rollläden über ihre Geräteklasse).
 - **Unbekannte Entität:** `ha_call_service` auf eine erfundene ID (im Test `light.garage`) ist jetzt ein Fehler
   „existiert nicht, es ist nichts passiert“ mit ähnlichen Entitäten. Vorher kam ein Ergebnis mit `confirmed: false`,
   als wäre das Gerät nur langsam. In einer Liste mit gültigen Zielen steht die fehlende unter `unknown_entities`, die
