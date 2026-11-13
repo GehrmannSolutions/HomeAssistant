@@ -37,6 +37,13 @@ def test_the_german_versions_exist():
     assert light["label"] == "Licht"
 
 
+@pytest.mark.usefixtures("german")
+def test_the_answer_language_holds_against_german_names_in_tool_results():
+    # mcp-eval 2026-11-13: qwen3.5:9b answered 9-12 of 15 English questions in German (German names in the tool
+    # results); with this sentence 0 of 15 (preselect and search)
+    assert "even when entity names, room names or tool results are in another language" in language_hint()
+
+
 async def test_the_web_ui_answers_in_the_language_of_the_header(tmp_path):
     app, _, _ = make_app(tmp_path)
     body = {"ha_url": "ftp://x", "token": TOKEN}

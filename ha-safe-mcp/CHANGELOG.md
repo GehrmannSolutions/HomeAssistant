@@ -3,6 +3,14 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.36.1 – 2026-11-13
+
+- **Antwortsprache im Chat:** Der Systemtext sagt jetzt zusätzlich, immer in der Sprache der letzten Frage zu
+  antworten, auch wenn Namen oder Werkzeugergebnisse in einer anderen Sprache sind. Im Messsatz hatte
+  `qwen3.5:9b` 9 bzw. 12 von 15 englischen Fragen auf Deutsch beantwortet (die Namen im Demo-Haus sind deutsch). Mit
+  dem Systemtext des Chats und diesem Satz waren es 0 von 15. Bestanden: mit Vorauswahl 24 statt 15 von 30, mit
+  Vorauswahl und Werkzeugsuche 24 statt 12.
+
 ## 0.36.0 – 2026-11-13
 
 Aus dem ersten Lauf des gemeinsamen Messsatzes der Flotte (`mcp-eval`: 15 Aufgaben auf Deutsch und Englisch gegen

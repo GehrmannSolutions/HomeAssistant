@@ -529,10 +529,13 @@ def unconfirmed_claim_note(prompt: str, answer: str) -> str:
 
 
 def language_hint() -> str:
-    """The chat answers in the UI language unless the user writes in another one."""
+    """The chat answers in the UI language unless the user writes in another one. The last sentence keeps small
+    models from switching to the language of German entity names in tool results (mcp-eval 2026-11-13)."""
     # Instructions to the model stay English; only the target language follows the UI.
     language = L("English", "German")
-    return f" Answer in {language} unless the user writes in another language; then answer in that language."
+    return (f" Answer in {language} unless the user writes in another language; then answer in that language."
+            " Always answer in the language of the user's last message, even when entity names, room names or tool"
+            " results are in another language.")
 
 
 async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, prompt: str,
