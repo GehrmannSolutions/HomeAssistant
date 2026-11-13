@@ -93,9 +93,7 @@ class HARegistry:
             raise ValueError("invalid domain, e.g. 'light'")
         areas = await self._list("area")
         wanted = area.strip().casefold()
-        match = next((a for a in areas if str(a.get("area_id", "")).casefold() == wanted), None) or next(
-            (a for a in areas if str(a.get("name", "")).casefold() == wanted
-             or wanted in (str(alias).casefold() for alias in a.get("aliases") or [])), None)
+        match = self._match_area(areas, area)
         floor = None
         if match is None:
             try:   # floors exist since HA 2024.4; without them the error below lists the rooms only
@@ -163,6 +161,37 @@ class HARegistry:
     @staticmethod
     def _device(item: dict) -> dict:
         return {"device_id": item.get("id"), **{key: item.get(key) for key in DEVICE_FIELDS}}
+
+    @staticmethod
+    def _match_area(areas: list, area: str) -> dict | None:
+        """An area by area_id, name or alias, also by its English/German word ('kitchen' finds 'Küche')."""
+        from .domains import translations
+        for wanted in [str(area).strip().casefold(), *translations(area)]:
+            match = next((a for a in areas if str(a.get("area_id", "")).casefold() == wanted), None) or next(
+                (a for a in areas if str(a.get("name", "")).casefold() == wanted
+                 or wanted in (str(alias).casefold() for alias in a.get("aliases") or [])), None)
+            if match is not None:
+                return match
+        return None
+
+    async def find_devices(self, area: str = "", query: str = "", limit: int = 200) -> list[dict] | dict:
+        """list_devices with the room given by area_id, name, alias or its English/German word. A room without
+        devices answers with the next step: its lamps and helpers often have no device (ha_list_area_entities)."""
+        if not area or area == "none":
+            return await self.list_devices(area, query, limit)
+        if not isinstance(area, str) or len(area) > 100:
+            raise ValueError("area_id: area_id or name of a room, or 'none'")
+        areas = await self._list("area")
+        match = self._match_area(areas, area)
+        if match is None:
+            names = ", ".join(sorted(str(a.get("name")) for a in areas))
+            raise ValueError(f"unknown area '{area}'; known areas: {names}")
+        devices = await self.list_devices(match["area_id"], query, limit)
+        if devices or query:
+            return devices
+        return {"devices": [], "area_id": match["area_id"],
+                "hint": f"no devices are assigned to area '{match['area_id']}'. Entities can belong to a room without "
+                        f"a device: ha_list_area_entities(area='{match['area_id']}') lists everything in it."}
 
     async def list_devices(self, area_id: str = "", query: str = "", limit: int = 200) -> list[dict]:
         if area_id and area_id != "none":

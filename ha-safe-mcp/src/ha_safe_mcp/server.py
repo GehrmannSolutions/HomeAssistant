@@ -119,12 +119,15 @@ class HAClient:
             self.log(channel="rest", method=method, route=path, status=status, ok=error is None,
                      ms=(time.monotonic() - started) * 1000, error=error)
 
-    async def search_entities(self, query: str = "", domain: str = "", limit: int = 50) -> list[dict]:
+    async def search_entities(self, query: str = "", domain: str = "", limit: int = 50, *,
+                              states=None) -> list[dict]:
+        """states: an already fetched /api/states list, so follow-up searches need no second request."""
         if domain and not IDENTIFIER.fullmatch(domain):
             raise ValueError("invalid domain")
         if not 1 <= limit <= 200:
             raise ValueError("limit must be between 1 and 200")
-        states = await self._request("GET", "/api/states")
+        if states is None:
+            states = await self._request("GET", "/api/states")
         if not isinstance(states, list):
             raise RuntimeError("Unexpected Home Assistant response")
         needle = query.casefold()
@@ -228,17 +231,23 @@ async def read_back(client: HAClient, domain: str, service: str, entity_id, data
         if delay:
             await asyncio.sleep(delay)
         for target in targets:
-            if target in states and expected is not None and states[target].get("state") in expected:
+            if target in states and (states[target].get("missing")
+                                     or expected is not None and states[target].get("state") in expected):
                 continue
             try:
                 states[target] = await client._request("GET", f"/api/states/{target}")
-            except RuntimeError:
-                states[target] = {"state": "unknown"}
-        if expected is None or all(states[t].get("state") in expected for t in targets):
+            except RuntimeError as exc:
+                # 404: no such entity, HA ignored it in the call (small models guess IDs like light.garage)
+                states[target] = {"missing": True} if "HTTP 404" in str(exc) else {"state": "unknown"}
+        if expected is None or all(states[t].get("state") in expected for t in targets
+                                   if not states[t].get("missing")):
             break
     after = []
     for target in targets:
         current = states[target]
+        if current.get("missing"):
+            after.append({"entity_id": target, "exists": False, "confirmed": False})
+            continue
         attributes = current.get("attributes") or {}
         after.append({"entity_id": target, "state": current.get("state"),
                       "confirmed": None if expected is None else current.get("state") in expected,
@@ -362,10 +371,34 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     tool = _audited_tool(server, client)
 
     @tool()
-    async def ha_search_entities(query: str = "", domain: str = "", limit: int = 50) -> list[dict]:
+    async def ha_search_entities(query: str = "", domain: str = "", limit: int = 50) -> list[dict] | dict:
         """Search current entity IDs and friendly names, optionally filter by domain. Also finds sensors by their
-        kind in English or German ('power'/'Strom', 'window'/'Fenster', 'temperature'), whatever their name says."""
-        return await client.search_entities(query, domain, limit)
+        kind in English or German ('power'/'Strom', 'window'/'Fenster', 'temperature'), whatever their name says,
+        and rooms/devices by their English or German word ('washing machine' finds 'Waschmaschine'). Without a hit
+        it says where else to look: matches in other domains (a TV on a smart plug is a switch) or similar names."""
+        from .domains import translations
+        from .suggest import similar_entities
+        results = await client.search_entities(query, domain, limit)
+        if results or not query.strip():
+            return results
+        states = await client._request("GET", "/api/states")
+        for word in translations(query):
+            results = await client.search_entities(word, domain, limit, states=states)
+            if results:
+                return results
+        if domain:
+            for word in [query, *translations(query)]:
+                others = await client.search_entities(word, "", 10, states=states)
+                if others:
+                    return {"results": [], "other_domains": others,
+                            "hint": f"no {domain} entity matches '{query}', but these entities of other domains do "
+                                    "(a device on a smart plug is a switch); use their own entity_id and domain"}
+        similar = similar_entities(states, query, domain)
+        return {"results": [], "similar": similar,
+                "hint": f"nothing matches '{query}'" + (f" in domain {domain}" if domain else "") + ". "
+                        + ("Similar names are listed under 'similar'; use one only if it is clearly what the user "
+                           "meant, otherwise tell the user it does not exist. " if similar else "")
+                        + "To browse a room use ha_list_areas and ha_list_area_entities."}
 
     @tool()
     async def ha_get_state(entity_id: str) -> dict:
@@ -403,6 +436,24 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
                                              return_response=bool(return_response),
                                              integration_targets=frozenset(own))
         result = await read_back(client, domain, service, entity_id, service_data)
+        missing = [item["entity_id"] for item in result["states_after"] if item.get("exists") is False]
+        if missing:
+            from .suggest import describe, similar_entities
+            states = await client._request("GET", "/api/states")
+            similar = list({s["entity_id"]: s for target in missing
+                            for s in similar_entities(states, target)}.values())[:5]
+            one = len(missing) == 1
+            text = (f"{', '.join(missing)} {'does' if one else 'do'} not exist in Home Assistant, so nothing happened "
+                    f"for {'it' if one else 'them'}. "
+                    + (f"Similar entities: {describe(similar)}; use one only if it is clearly what the user meant, "
+                       "otherwise tell the user. " if similar else "")
+                    + "Find entities with ha_search_entities or ha_list_area_entities.")
+            if len(missing) == len(result["states_after"]):
+                raise ValueError(text)
+            slow = any(item.get("confirmed") is False and item.get("exists") is not False
+                       for item in result["states_after"])
+            result["unknown_entities"] = missing
+            result["hint"] = text + (" Others: " + result["hint"] if slow and result.get("hint") else "")
         if return_response:
             answer = response.get("service_response") if isinstance(response, dict) else None
             text = json.dumps(answer, default=str)
@@ -1135,10 +1186,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         return await registry.list_area_entities(area, domain)
 
     @tool()
-    async def ha_list_devices(area_id: str = "", query: str = "", limit: int = 200) -> list[dict]:
-        """List devices with device_id, name, manufacturer, model and area_id. Filter by area_id, or
-        area_id='none' for devices without an area; query matches name/manufacturer/model."""
-        return await registry.list_devices(area_id, query, limit)
+    async def ha_list_devices(area_id: str = "", query: str = "", limit: int = 200) -> list[dict] | dict:
+        """List devices of the device registry with device_id, name, manufacturer, model and area_id. Filter by a
+        room (area_id or its name, e.g. 'Küche'), or area_id='none' for devices without an area; query matches
+        name/manufacturer/model. To see what is in a room prefer ha_list_area_entities: lamps and helpers often
+        sit in a room without a device."""
+        return await registry.find_devices(area_id, query, limit)
 
     @tool()
     async def ha_create_area(name: str, floor_id: str | None = None, icon: str | None = None) -> dict:

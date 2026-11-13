@@ -82,6 +82,20 @@ CONTROL_TYPES = frozenset({"calendar/event/update"})
 # pop-ups and floor plans easily pass 64 KiB. 1 MiB stays far below HA's limit and still stops runaway payloads.
 MAX_WS_PAYLOAD = 1024 * 1024
 
+# HA 2024.10 renamed an automation's trigger/condition/action to triggers/conditions/actions and still accepts the
+# old keys. Small models write the old ones (learned from older examples); they are renamed, keeping the key order.
+AUTOMATION_SECTIONS = (("triggers", "trigger"), ("conditions", "condition"), ("actions", "action"))
+AUTOMATION_EXAMPLE = ('{"alias": "TV off at night", "triggers": [{"trigger": "time", "at": "22:00:00"}], '
+                      '"actions": [{"action": "switch.turn_off", "target": {"entity_id": "switch.tv"}}]}')
+
+
+def current_automation_format(config: dict) -> dict:
+    for new, old in AUTOMATION_SECTIONS:
+        if old in config and new in config:
+            raise ValueError(f"use either '{new}' or '{old}', not both")
+    renamed = {old: new for new, old in AUTOMATION_SECTIONS}
+    return {renamed.get(key, key): value for key, value in config.items()}
+
 
 class HAWebSocket:
     def __init__(self, client: HAClient, *, allow_admin_write: bool = False, allow_delete: bool = False):
@@ -190,9 +204,11 @@ class HAAdmin:
     async def automation_validate(self, config: dict):
         if not isinstance(config, dict):
             raise ValueError("automation config must be an object")
-        payload = {key: config[key] for key in ("triggers", "conditions", "actions") if key in config}
+        config = current_automation_format(config)
+        payload = {key: config[key] for key, _ in AUTOMATION_SECTIONS if key in config}
         if not payload:
-            raise ValueError("triggers, conditions or actions required")
+            raise ValueError("an automation needs 'triggers' and 'actions' (lists; 'conditions' optional), e.g. "
+                             + AUTOMATION_EXAMPLE)
         return await self.ws.command("validate_config", payload)
 
     @staticmethod
@@ -206,12 +222,17 @@ class HAAdmin:
 
     async def automation_save(self, config_id: str, config: dict):
         self._check_write()
+        if isinstance(config, dict):
+            config = current_automation_format(config)
         if not isinstance(config, dict) or not isinstance(config.get("alias"), str) or not config.get("alias") or "id" in config:
             raise ValueError("automation requires alias and must not override id")
         path = self._automation_path(config_id)
         validation = await self.automation_validate(config)
-        if any(isinstance(item, dict) and not item.get("valid", False) for item in validation.values()):
-            raise ValueError("Home Assistant rejected automation configuration")
+        rejected = {key: item.get("error") for key, item in validation.items()
+                    if isinstance(item, dict) and not item.get("valid", False)}
+        if rejected:
+            reasons = "; ".join(f"{key}: {error or 'invalid'}" for key, error in rejected.items())
+            raise ValueError(f"Home Assistant rejected the automation ({reasons}); fix that part and save again")
         result = await self.client._request("POST", path, data=config)
         if result.get("result") != "ok":
             raise RuntimeError("Automation save was not confirmed")

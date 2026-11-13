@@ -101,3 +101,61 @@ DEVICE_CLASS_WORDS: dict[str, tuple[str, ...]] = {
     "shutter": ("shutter", "rollladen", "rollläden", "rolladen"),
     "blind": ("blind", "jalousie"),
 }
+
+
+# Rooms and household devices by their English and German words (each tuple is one meaning). Small models with
+# English tools search "washing machine", "bathroom" or "TV" in a home whose names are German ("Waschmaschine",
+# "Bad", "Fernseher"), and the other way round; an empty search or an unknown room then tries the other words.
+HOUSEHOLD_WORDS: tuple[tuple[str, ...], ...] = (
+    ("bathroom", "bath", "bad", "badezimmer"),
+    ("kitchen", "küche", "kueche"),
+    ("living room", "lounge", "wohnzimmer"),
+    ("bedroom", "schlafzimmer"),
+    ("children's room", "kids room", "nursery", "kinderzimmer"),
+    ("dining room", "esszimmer"),
+    ("hallway", "hall", "corridor", "flur", "diele"),
+    ("entrance", "porch", "windfang", "eingang"),
+    ("guest room", "gästezimmer", "gaestezimmer"),
+    ("office", "study", "büro", "buero", "arbeitszimmer"),
+    ("basement", "cellar", "keller"),
+    ("attic", "loft", "dachboden"),
+    ("garden", "yard", "garten"),
+    ("terrace", "patio", "terrasse"),
+    ("balcony", "balkon"),
+    ("laundry room", "laundry", "waschküche", "waschkueche"),
+    ("workshop", "werkstatt"),
+    ("toilet", "wc", "toilette"),
+    ("staircase", "stairs", "treppe", "treppenhaus"),
+    ("tv", "television", "fernseher"),
+    ("washing machine", "washer", "waschmaschine"),
+    ("dryer", "tumble dryer", "trockner", "wäschetrockner"),
+    ("dishwasher", "spülmaschine", "geschirrspüler"),
+    ("oven", "backofen", "ofen"),
+    ("stove", "cooker", "herd"),
+    ("fridge", "refrigerator", "kühlschrank"),
+    ("freezer", "gefrierschrank", "tiefkühler"),
+    ("heater", "heating", "heizung", "heizstrahler", "heizkörper"),
+    ("fan", "ventilator", "lüfter"),
+    ("lamp", "light", "lampe", "licht", "leuchte"),
+    ("ceiling light", "deckenlicht", "deckenlampe", "decke"),
+    ("floor lamp", "stehlampe"),
+    ("coffee machine", "coffee maker", "kaffeemaschine"),
+    ("doorbell", "klingel", "türklingel"),
+    ("socket", "outlet", "plug", "steckdose", "zwischenstecker"),
+    ("speaker", "lautsprecher"),
+    ("vacuum", "robot vacuum", "staubsauger", "saugroboter"),
+    ("dehumidifier", "entfeuchter", "luftentfeuchter"),
+    ("air purifier", "luftreiniger"),
+    ("monitor", "screen", "bildschirm", "monitore"),
+)
+
+
+def translations(phrase: str) -> list[str]:
+    """The other words for the same room or device ('washing machine' -> ['washer', 'waschmaschine']); whole
+    phrases only, so a search never drifts from what was asked."""
+    wanted = " ".join(str(phrase or "").casefold().split())
+    found: list[str] = []
+    for group in HOUSEHOLD_WORDS:
+        if wanted in group:
+            found.extend(word for word in group if word != wanted and word not in found)
+    return found

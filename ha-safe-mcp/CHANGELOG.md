@@ -3,6 +3,31 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.36.0 – 2026-11-13
+
+Aus dem ersten Lauf des gemeinsamen Messsatzes der Flotte (`mcp-eval`: 15 Aufgaben auf Deutsch und Englisch gegen
+das Demo-Haus, `qwen3-coder:30b`). 11 der 26 Fehlschläge lagen am MCP. Jetzt nennt jede leere oder fehlgeschlagene
+Antwort den nächsten Schritt:
+
+- **Suche ohne Treffer:** `ha_search_entities` versucht bei leerem Ergebnis das englische bzw. deutsche Wort
+  („washing machine“ findet „Waschmaschine“, „bathroom“ findet „Bad“). Mit Domain-Filter nennt sie passende
+  Entitäten anderer Domains, sonst ähnliche Namen. Dazu kommt der Hinweis, einen ähnlichen Namen nur zu nehmen, wenn
+  er eindeutig gemeint ist. Der Fernseher am Zwischenstecker ist ein `switch`, das Modell suchte einen
+  `media_player`; das allein kostete 6 Fehlschläge.
+- **Unbekannte Entität:** `ha_call_service` auf eine erfundene ID (im Test `light.garage`) ist jetzt ein Fehler
+  „existiert nicht, es ist nichts passiert“ mit ähnlichen Entitäten. Vorher kam ein Ergebnis mit `confirmed: false`,
+  als wäre das Gerät nur langsam. In einer Liste mit gültigen Zielen steht die fehlende unter `unknown_entities`, die
+  anderen werden normal geschaltet, und die fehlende wird nicht 3 s lang abgefragt.
+- **Geräte eines Raums:** `ha_list_devices` nimmt den Raum auch beim Namen („Küche“, „kitchen“). Hat der Raum keine
+  Geräte, verweist die Antwort auf `ha_list_area_entities`, denn Lampen und Helfer hängen oft ohne Gerät im Raum.
+  Vorher hieß die Antwort nur „keine Geräte in der Küche“.
+- **Räume auf Englisch:** `ha_list_area_entities` findet „living room“ als „Wohnzimmer“.
+- **Automationen im alten Format:** `ha_save_automation` und `ha_validate_automation` nehmen
+  `trigger`/`condition`/`action` an (das Format vor HA 2024.10) und speichern im heutigen Format. Vorher scheiterte
+  das mit „triggers, conditions or actions required“, und das Modell versuchte es viermal gleich. Lehnt Home
+  Assistant eine Automation ab, steht jetzt sein Grund in der Fehlermeldung. Eine leere Automation bekommt ein
+  Beispiel.
+
 ## 0.35.1 – 2026-11-04
 
 Aus dem Live-Test auf der Testinstanz (2026.11.0, Hinweis des Marketplace bestätigt) und Chat-Tests mit
