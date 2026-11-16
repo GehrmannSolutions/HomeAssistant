@@ -389,9 +389,10 @@ class HAAdmin:
         for key in ("disabled_by", "hidden_by"):
             if key in payload and payload[key] not in ("user", None):
                 raise ValueError(f"{key} may only be 'user' or null")
-        if "name" in payload and payload["name"] is not None and (
+        if "name" in payload and payload["name"] not in (None, "") and (
                 not isinstance(payload["name"], str) or not payload["name"].strip() or len(payload["name"]) > 100):
-            raise ValueError("name must be 1-100 characters or null (null = name from the integration)")
+            raise ValueError('name must be 1-100 characters, "" (only the device name) or null (name from the '
+                             'integration)')
         if "icon" in payload and payload["icon"] is not None and (
                 not isinstance(payload["icon"], str) or not re.fullmatch(r"mdi:[a-z0-9-]{1,64}", payload["icon"])):
             raise ValueError("icon must look like 'mdi:lamp' or be null")

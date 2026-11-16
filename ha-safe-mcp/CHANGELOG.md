@@ -3,6 +3,13 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.36.3 – 2026-11-16
+
+- **Nur der Gerätename:** `ha_update_entity_registry` nimmt jetzt `name: ""` an. Home Assistant setzt den Anzeigenamen
+  aus Gerät und Entität zusammen und lässt einen leeren Entitätsnamen weg, wie die Einstellung „nur Gerätename“ in
+  der Oberfläche. Anlass: Gerät und Shelly-Kanal hießen beide gleich, das neue Licht hieß deshalb doppelt
+  („Licht X Licht X“).
+
 ## 0.36.2 – 2026-11-16
 
 Aus einem echten Fall: Ein neuer Shelly 1PM Gen3 mit Passwort sollte über den Web-Chat (`qwen3-coder:30b`) in

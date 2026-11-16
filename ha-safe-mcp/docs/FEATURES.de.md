@@ -283,7 +283,7 @@ einer eigenen Karte.
 | `ha_remove_device` | Entfernt ein Gerät mit seinen Entitäten, wie *Löschen* auf der Geräteseite von HA. Nur wenn die Integration das unterstützt; **nicht rückgängig zu machen** über den MCP. Im Chat kommt immer eine Freigabekarte mit der Vorschau. | Löschen |
 | `ha_list_orphaned_entities` | Entitäten, die keine Integration mehr bereitstellt (HA: „nicht bereitgestellt“), Reste entfernter Geräte. | Lesen |
 | `ha_remove_entity` | Entfernt eine solche verwaiste Entität. Noch bereitgestellte werden abgelehnt (HA würde sie wieder anlegen; deaktiviere sie stattdessen). Nicht rückgängig zu machen. | Löschen |
-| `ha_update_entity_registry` | Ändert Name, Symbol, Bereich, Labels, Kategorien, Aliase für Sprachassistenten und ausgeblendet/deaktiviert einer Entität. Im Änderungsjournal. | Konfigurieren |
+| `ha_update_entity_registry` | Ändert Name, Symbol, Bereich, Labels, Kategorien, Aliase für Sprachassistenten und ausgeblendet/deaktiviert einer Entität. Ein leerer Name zeigt nur den Gerätenamen (wenn Gerät und Entität gleich heißen). Im Änderungsjournal. | Konfigurieren |
 | `ha_rename_entity` | Ändert eine Entitäts-ID (`light.x` → `light.y`); HA behält den Verlauf. Listet die Automationen, Skripte und Dashboards auf, die noch die alte ID verwenden. Im Änderungsjournal. | Konfigurieren |
 
 **Beispiel**: *"Verschiebe das Arbeitslicht in die Küche und gib ihm den Alias 'Küchenlicht'."*

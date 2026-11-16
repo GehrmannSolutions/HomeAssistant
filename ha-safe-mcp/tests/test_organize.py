@@ -404,3 +404,14 @@ def test_tools_are_registered_with_the_right_levels():
     assert read <= READ_TOOLS and write | delete <= WRITE_TOOLS and delete <= DELETE_TOOLS
     assert {tool_level(n) for n in read} == {"read"} and {tool_level(n) for n in write} == {"admin"}
     assert {tool_level(n) for n in delete} == {"delete"}
+
+
+async def test_an_empty_name_shows_only_the_device_name():
+    """16.11.: device and Shelly channel were both named 'Licht Windfang', so the light read 'Licht Windfang Licht
+    Windfang'. HA joins device and entity name and skips an empty entity name - the dialog's 'only device name'."""
+    _, admin, _, ws = make()
+    current = await admin.entity_registry_update("light.flur", {"name": ""})
+    assert current["name"] == ""
+    for bad in (" ", "\t", "x" * 101):
+        with pytest.raises(ValueError, match="name"):
+            await admin.entity_registry_update("light.flur", {"name": bad})

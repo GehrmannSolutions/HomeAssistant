@@ -279,7 +279,7 @@ template flow with `ha_start_integration_setup` and fills in the form step by st
 | `ha_remove_device` | Removes a device and its entities, like *Delete* on HA's device page. Only if the integration supports it; **cannot be undone** by the MCP. In the chat it always shows an approval card with the preview. | Delete |
 | `ha_list_orphaned_entities` | Entities no integration provides any more (HA: "not provided"), leftovers of removed devices. | Read |
 | `ha_remove_entity` | Removes one such orphaned entity. Entities that are still provided are refused (HA would add them again; disable them instead). Cannot be undone. | Delete |
-| `ha_update_entity_registry` | Changes an entity's name, icon, room, labels, categories, voice-assistant aliases, hidden/disabled. Journaled. | Configure |
+| `ha_update_entity_registry` | Changes an entity's name, icon, room, labels, categories, voice-assistant aliases, hidden/disabled. An empty name shows only the device name (when device and entity carry the same name). Journaled. | Configure |
 | `ha_rename_entity` | Changes an entity ID (`light.x` → `light.y`); HA keeps the history. Lists the automations, scripts and dashboards that still use the old ID. Journaled. | Configure |
 
 **Example**: *"Move the Arbeitslicht to the Küche and give it the alias 'Kitchen light'."*

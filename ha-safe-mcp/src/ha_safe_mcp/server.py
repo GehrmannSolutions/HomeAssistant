@@ -624,7 +624,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_update_entity_registry(entity_id: str, changes: dict) -> dict:
         """Edit an entity's registry entry; does not create entities. changes may contain: name (null = name from
-        the integration), icon, area_id (null = follow the device), aliases (complete list of names for voice
+        the integration, "" = only the device name, e.g. when device and entity carry the same name), icon, area_id (null = follow the device), aliases (complete list of names for voice
         assistants; a null entry stands for the entity's own name, keep it), labels (complete list of label_ids), categories ({scope: category_id or null}, e.g.
         {"automation": "<id>"} to file an automation), disabled_by / hidden_by ('user' or null), display_precision
         (sensors only: decimals shown everywhere in the UI, e.g. 1 for 28.7 °C; null = integration default). Admin
