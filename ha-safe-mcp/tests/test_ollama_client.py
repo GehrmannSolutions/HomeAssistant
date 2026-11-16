@@ -615,3 +615,35 @@ async def test_restore_card_shows_the_backup_details_read_before_approval():
             await run_chat(session, http, "qwen3", "restore backup aaaa1111", allow_write=True, approve=approve)
     assert seen == [("ha_restore_backup", {"backup": {"name": "Alt"}, "restore_impact": ["HA restarts"]})]
     assert session.calls == [("ha_get_backup", {"backup_id": "aaaa1111"})]  # rejected: restore never called
+
+
+def _always_a_tool_call(requests, final_content):
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        if "tools" in body:
+            return httpx.Response(200, json={"message": {"role": "assistant", "content": "", "tool_calls": [
+                {"type": "function", "function": {"name": "ha_get_state", "arguments": {"entity_id": "light.desk"}}}]}})
+        return httpx.Response(200, json={"message": {"role": "assistant", "content": final_content}})
+    return respond
+
+
+@pytest.mark.asyncio
+async def test_at_the_round_limit_the_model_answers_once_without_tools():
+    """16.11.: a Shelly set up and put into its room in 6 rounds, then the chat ended with 'no verified answer'."""
+    requests = []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_always_a_tool_call(requests, "Das Licht ist aus.")),
+                                 base_url="http://ollama:11434") as http:
+        answer = await run_chat(FakeSession(), http, "qwen3-coder:30b", "Ist das Licht an?", max_rounds=2)
+    assert answer == "Das Licht ist aus."
+    assert len(requests) == 3 and "tools" not in requests[-1] and "tools" in requests[-2]
+
+
+@pytest.mark.asyncio
+async def test_the_limit_error_stays_when_the_last_answer_is_still_a_tool_call():
+    requests = []
+    still_calling = '{"name":"ha_get_state","arguments":{"entity_id":"light.desk"}}'
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_always_a_tool_call(requests, still_calling)),
+                                 base_url="http://ollama:11434") as http:
+        with pytest.raises(RuntimeError, match="Tool iteration limit"):
+            await run_chat(FakeSession(), http, "qwen3-coder:30b", "Ist das Licht an?", max_rounds=2)

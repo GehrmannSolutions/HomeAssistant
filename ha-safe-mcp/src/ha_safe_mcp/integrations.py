@@ -23,6 +23,7 @@ Guardrails:
   (e.g. ``/relay/0?turn=on``).
 """
 
+import json
 import re
 import time
 
@@ -61,6 +62,38 @@ PROBE_DETAILS = (("ConnectTimeout", False, "timeout: no answer within 10 s (devi
                  ("HTTPStatusError", True, "reachable, but it answered with an HTTP error code"))
 MAX_STEP_FIELDS = 30
 STEP_TIMEOUT = 90  # device handshakes (login, discovery probes) can outlast the default request timeout
+LOGIN_HINT = ("A stored login fits ({aliases}): send `fill` as data now, unchanged (add any other required field). "
+              "It is resolved locally and never shown - never ask the user for the password or key.")
+CHOICE_HINT = ("Several stored logins fit {fields}: take the alias whose name matches the device, or ask the user "
+               "which one; send it as {{\"<field>\": {{\"$credential\": \"<alias>\", \"field\": \"<field>\"}}}}. "
+               "Never ask the user for the value itself.")
+NO_LOGIN_HINT = ("No stored login has the field(s) {fields}. Ask the user to store one under 'Credentials' "
+                 "(Zugangsdaten) in the web UI, then send it as a credential reference. Never ask for the value in "
+                 "the chat.")
+MISSING_KEY = re.compile(r"required key not provided @ data\['([A-Za-z0-9_\-]{1,64})'\]")
+
+
+def _is_secret_input(field: dict) -> bool:
+    """A field that takes a secret: a password text box, or (old forms without selector) a secret-like name."""
+    selector = field.get("selector") if isinstance(field.get("selector"), dict) else {}
+    text = selector.get("text") if isinstance(selector.get("text"), dict) else None
+    if text is not None:
+        return text.get("type") == "password"
+    return not selector and bool(SECRET_FIELD.search(str(field.get("name", ""))))
+
+
+def _secret_inputs(schema) -> list[tuple[str | None, str]]:
+    """(section or None, field name) of every secret input of a reduced form, sections one level deep."""
+    found = []
+    for field in schema if isinstance(schema, list) else []:
+        if not isinstance(field, dict) or not isinstance(field.get("name"), str):
+            continue
+        if field.get("type") == "expandable" and isinstance(field.get("schema"), list):
+            found += [(field["name"], leaf["name"]) for leaf in field["schema"]
+                      if isinstance(leaf, dict) and isinstance(leaf.get("name"), str) and _is_secret_input(leaf)]
+        elif _is_secret_input(field):
+            found.append((None, field["name"]))
+    return found
 
 
 def _form_field(field: dict) -> dict:
@@ -101,6 +134,7 @@ class HAIntegrations:
         self.credentials = credentials or CredentialStore()
         # flow_id -> current (suggested) values of the last form; HA resets omitted fields to factory defaults
         self._current: dict[str, dict] = {}
+        self._handlers: dict[str, str] = {}  # flow_id -> integration, to prefer its stored login
 
     def _check_write(self):
         if not self.client.allow_write or not self.allow_admin_write:
@@ -165,8 +199,11 @@ class HAIntegrations:
                 continue
             context = flow.get("context") if isinstance(flow.get("context"), dict) else {}
             placeholders = context.get("title_placeholders") if isinstance(context.get("title_placeholders"), dict) else {}
+            step = str(flow.get("step_id") or "")
             result.append({"flow_id": flow.get("flow_id"), "handler": flow.get("handler"), "step_id": flow.get("step_id"),
-                           "source": context.get("source"), "name": placeholders.get("name")})
+                           "source": context.get("source"), "name": placeholders.get("name"),
+                           "next": ("add it: ha_integration_setup_step(flow_id, data={})" if "confirm" in step else
+                                    "see what it needs: ha_integration_setup_step(flow_id) without data")})
         return result
 
     def credential_aliases(self) -> list[dict]:
@@ -217,11 +254,83 @@ class HAIntegrations:
         result = await self.client._request("POST", "/api/config/config_entries/flow",
                                             data={"handler": handler, "show_advanced_options": bool(show_advanced_options)},
                                             timeout=STEP_TIMEOUT)
-        return self._remember(self._reduce(result, {}))
+        return self._login_help(self._remember(self._reduce(result, {})))
+
+    def _logins_for(self, field: str, handler: str) -> tuple[list[str], list[str]]:
+        """(stored aliases that have this field, those of them named after the integration)."""
+        labels = {item["alias"]: str(item.get("label", "")) for item in self.credentials.list_public()}
+        having = sorted(alias for alias, fields in self.credentials.aliases().items() if field in fields)
+        handler = handler.lower()
+        named = [alias for alias in having if handler and (handler in alias.lower() or handler in labels[alias].lower())]
+        return having, named
+
+    def _login_help(self, reduced: dict) -> dict:
+        """A form that asks for a password, key or PIN names the ready credential reference (`fill`), the choice
+        when several stored logins fit, or where to store one - small models otherwise ask the user for the value."""
+        if reduced.get("type") != "form":
+            return reduced
+        secrets = _secret_inputs(reduced.get("data_schema"))
+        if not secrets:
+            return reduced
+        fill, choices, missing = {}, {}, []
+        for section, name in secrets:
+            having, named = self._logins_for(name, str(reduced.get("handler") or ""))
+            pick = named if len(named) == 1 else having if len(having) == 1 else []
+            path = f"{section}.{name}" if section else name
+            if pick:
+                ref = {REF_KEY: pick[0], "field": name}
+                if section:
+                    fill.setdefault(section, {})[name] = ref
+                else:
+                    fill[name] = ref
+            elif having:
+                choices[path] = having
+            else:
+                missing.append(path)
+        used = sorted({ref[REF_KEY] for value in fill.values()
+                       for ref in (value.values() if REF_KEY not in value else [value])})
+        hints = ([LOGIN_HINT.format(aliases=", ".join(used))] if fill else []) \
+            + ([CHOICE_HINT.format(fields=", ".join(choices))] if choices else []) \
+            + ([NO_LOGIN_HINT.format(fields=", ".join(missing))] if missing else [])
+        secret_names = {name for _, name in secrets} | {section for section, _ in secrets if section}
+        open_fields = [field.get("name") for field in reduced.get("data_schema") or [] if isinstance(field, dict)
+                       and field.get("required") and field.get("name") not in secret_names
+                       and "default" not in field and "current" not in field]
+        help_ = {**({"next": f'ha_integration_setup_step(flow_id="{reduced.get("flow_id")}", data={json.dumps(fill)})'}
+                    if fill and not choices and not missing and not open_fields else {}),
+                 **({"fill": fill} if fill else {}), **({"credential_choices": choices} if choices else {}),
+                 "hint": " ".join(hints)}
+        # right after the step name: small models act on the top of a result (16.11.: `fill` at the end was ignored)
+        out = {}
+        for key, value in reduced.items():
+            if key == "data_schema":
+                out.update(help_)
+            out[key] = value
+        return out if "data_schema" in reduced else {**out, **help_}
+
+    def _missing_field_help(self, message: str, flow_id: str) -> str:
+        """HA's 'required key not provided' for a secret field gets the reference to send (never a value)."""
+        missing = MISSING_KEY.search(message)
+        if not missing:
+            return message
+        field = missing.group(1)
+        if not SECRET_FIELD.search(field):
+            return message + " - call ha_integration_setup_step(flow_id) without data to see the form."
+        having, named = self._logins_for(field, self._handlers.get(flow_id, ""))
+        pick = named if len(named) == 1 else having if len(having) == 1 else []
+        if pick:
+            return (message + f" - send data {json.dumps({field: {REF_KEY: pick[0], 'field': field}})}; never ask the "
+                    "user for the value.")
+        if having:
+            return message + f" - stored logins with '{field}': {', '.join(having)}; take the fitting alias or ask " \
+                "the user which one (never for the value)."
+        return message + f" - no stored login has '{field}': ask the user to store one under 'Credentials'."
 
     def _remember(self, reduced: dict) -> dict:
         """Remember a form's current values for its next step; forget them once the flow is over."""
         flow_id = reduced.get("flow_id")
+        if isinstance(flow_id, str) and isinstance(reduced.get("handler"), str):
+            self._handlers[flow_id] = reduced["handler"]
         if reduced.get("type") == "form" and isinstance(flow_id, str):
             self._current[flow_id] = {field["name"]: field["current"] for field in reduced.get("data_schema", [])
                                       if isinstance(field.get("name"), str) and "current" in field}
@@ -258,7 +367,38 @@ class HAIntegrations:
         return {**reduced, **({"kept_current": kept} if kept else {})}
 
     async def flow_step(self, flow_id: str, data: dict | None = None) -> dict:
-        return await self._step("/api/config/config_entries/flow", flow_id, data)
+        """Without data: show the flow's current form (what the HA frontend does when you open a discovered device).
+        With data (also {}): submit it."""
+        if data is None:
+            return await self.show_flow(flow_id)
+        try:
+            reduced = await self._step("/api/config/config_entries/flow", flow_id, data)
+        except RuntimeError as exc:
+            raise RuntimeError(self._missing_field_help(str(exc), self._flow_id(flow_id))) from None
+        entry_id = (reduced.get("entry") or {}).get("entry_id") if reduced.get("type") == "create_entry" else None
+        if entry_id and (devices := await self._devices_of(entry_id)):
+            # 16.11.: "add it to the hall" ended at the new entry; the room step needs the device_id
+            reduced = {**reduced, "devices": devices,
+                       "hint": "Set up. To put a device into the room the user named: ha_update_device(device_id, "
+                               "{\"area_id\": \"<area_id>\"}) - area ids from ha_list_areas."}
+        return self._login_help(reduced)
+
+    async def _devices_of(self, entry_id: str) -> list[dict]:
+        """Devices a just-created entry registered (best effort: an empty list when the registry is not readable)."""
+        try:
+            devices = await self.ws.command("config/device_registry/list")
+        except Exception:  # noqa: BLE001 - the entry exists; the device list is only a convenience
+            return []
+        return [{"device_id": device.get("id"), "name": device.get("name_by_user") or device.get("name"),
+                 "model": device.get("model"), "area_id": device.get("area_id")}
+                for device in devices if isinstance(device, dict) and entry_id in (device.get("config_entries") or [])
+                ][:20] if isinstance(devices, list) else []
+
+    async def show_flow(self, flow_id: str) -> dict:
+        flow_id = self._flow_id(flow_id)
+        self._check_write()  # opening re-runs the current step without input, like the frontend does
+        result = await self.client._request("GET", f"/api/config/config_entries/flow/{flow_id}", timeout=STEP_TIMEOUT)
+        return self._login_help(self._remember(self._reduce(result, {})))
 
     async def abort_flow(self, flow_id: str) -> dict:
         flow_id = self._flow_id(flow_id)

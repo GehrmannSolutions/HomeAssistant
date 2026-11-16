@@ -1030,7 +1030,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_list_discovered() -> list[dict]:
         """List devices Home Assistant itself discovered on its network (zeroconf/dhcp/ssdp/...) that wait
-        for confirmation. This tool does not scan the network; an empty list means HA found nothing."""
+        for confirmation; each item names the next call. This tool does not scan the network; an empty list means
+        HA found nothing."""
         return await integrations.discovered_flows()
 
     @tool()
@@ -1049,11 +1050,12 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     @tool()
     async def ha_integration_setup_step(flow_id: FlowId, data: dict | None = None) -> dict:
         """Submit one form step of a setup flow, field names from data_schema; keep shown defaults unless the
-        user said otherwise. Secret fields (password, token, api_key, pin) must be credential references:
-        {"$credential": "<alias>", "field": "<field>"} from ha_list_credentials; plain secret values are rejected.
-        For discovered devices send {} to confirm. For a menu (type 'menu') send {"next_step_id": "<one of
-        menu_options>"}. If the setup cannot be finished, call ha_abort_integration_setup. A created entry is
-        journaled (undo removes it). Admin write required."""
+        user said otherwise. Without data it only shows the current form (first call for a discovered device that
+        is no plain confirm step); {} confirms a confirm step. Secret fields (password, token, api_key, pin) take
+        only credential references {"$credential": "<alias>", "field": "<field>"}: a login form brings the ready
+        one in `fill` - send it unchanged, never ask the user for a password. For a menu (type 'menu') send
+        {"next_step_id": "<one of menu_options>"}. If the setup cannot be finished, call
+        ha_abort_integration_setup. A created entry is journaled (undo removes it). Admin write required."""
         return journal_created("ha_integration_setup_step", await integrations.flow_step(flow_id, data))
 
     @tool()

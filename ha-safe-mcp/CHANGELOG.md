@@ -3,6 +3,32 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.36.2 – 2026-11-16
+
+Aus einem echten Fall: Ein neuer Shelly 1PM Gen3 mit Passwort sollte über den Web-Chat (`qwen3-coder:30b`) in
+Home Assistant aufgenommen werden. Das Modell sah das Passwortformular, listete sogar die gespeicherten Zugangsdaten
+und bat trotzdem den Nutzer um das Passwort. Beim entdeckten Gerät sah es nur den Schrittnamen, nicht das Formular.
+
+- **Anmeldeformulare nennen den fertigen Verweis:** Fragt ein Einrichtungsschritt nach Passwort, Schlüssel oder
+  PIN, enthält die Antwort `fill`, z. B. `{"password": {"$credential": "shelly_login", "field": "password"}}`, und
+  den Hinweis, das unverändert zu senden. Passen mehrere gespeicherte Zugangsdaten, gewinnt die nach der Integration
+  benannte; sonst kommt die Auswahl (`credential_choices`) mit der Bitte, nachzufragen. Passt keine, sagt die
+  Antwort, wo man welche anlegt. Werte erscheinen nie.
+- **Formular eines entdeckten Geräts ansehen:** `ha_integration_setup_step` ohne Daten zeigt das aktuelle Formular,
+  wie das Öffnen in der HA-Oberfläche. `{}` bestätigt wie bisher.
+- **`ha_list_discovered` nennt den nächsten Aufruf** je Gerät: bestätigen (`data={}`) oder erst das Formular öffnen.
+- **Fehlt ein Pflichtfeld,** ergänzt die Fehlermeldung von HA den Weg: bei einem Passwort den fertigen Verweis, sonst
+  den Aufruf ohne Daten, um das Formular zu sehen.
+- **Der neue Eintrag nennt seine Geräte:** Nach dem letzten Schritt stehen die neu angelegten Geräte mit `device_id`
+  in der Antwort, dazu der Weg in einen Raum (`ha_update_device` mit `area_id`). Im Test endete „füg ihn dem Flur
+  hinzu“ sonst beim neuen Eintrag, ohne Raum.
+- **Hilfe ganz oben:** `next` (der fertige Aufruf) und `fill` stehen vor dem Formular. Am Ende der Antwort hatte das
+  30B den fertigen Verweis übersehen und wieder nach dem Passwort gefragt.
+- **Chat: Antwort statt Fehler am Rundenende:** Sind die Werkzeugrunden einer Anfrage aufgebraucht, bekommt das Modell
+  eine letzte Runde ohne Werkzeuge und sagt, was laut den Werkzeugergebnissen erledigt ist und was offen bleibt. Bisher
+  endete so eine Anfrage mit „keine verifizierte Antwort“, obwohl alles erledigt war (im Test: Shelly eingerichtet
+  und dem Raum zugeordnet). Ruft das Modell auch dann noch Werkzeuge auf, bleibt es bei der Fehlermeldung.
+
 ## 0.36.1 – 2026-11-13
 
 - **Antwortsprache im Chat:** Der Systemtext sagt jetzt zusätzlich, immer in der Sprache der letzten Frage zu

@@ -325,10 +325,10 @@ Set up, configure and maintain integrations the way the HA UI does it, step by s
 |---|---|---|
 | `ha_list_integrations` | Configured integrations with state (loaded, failed, ...). | Read |
 | `ha_list_integration_types` | Integrations that can be added through the UI, filtered by name (e.g. "shelly"). | Read |
-| `ha_list_discovered` | Devices Home Assistant itself discovered and that wait for confirmation. This does not scan your network. | Read |
+| `ha_list_discovered` | Devices Home Assistant itself discovered and that wait for confirmation, each with the next call (confirm, or open the form first). This does not scan your network. | Read |
 | `ha_list_credentials` | Names of your stored logins and their fields (never the values). | Read |
 | `ha_start_integration_setup` | Starts adding an integration or a guided helper; returns the first form or menu. | Configure |
-| `ha_integration_setup_step` | Submits one form step. Password, token, API key and PIN fields only accept a reference to *Zugangsdaten*, never a plain value; inside form sections (e.g. "auth") each field is checked on its own. A created integration is journaled (undo removes it). | Configure |
+| `ha_integration_setup_step` | Submits one form step; without data it only shows the current form (e.g. the password form of a discovered Shelly). Password, token, API key and PIN fields only accept a reference to *Zugangsdaten*, never a plain value; inside form sections (e.g. "auth") each field is checked on its own. A login form names the fitting stored login as a ready reference (`fill`), the choice when several fit, or that one must be stored first. A finished setup lists the new devices with their device_id for the room step. A created integration is journaled (undo removes it). | Configure |
 | `ha_abort_integration_setup` | Aborts a running setup. | Configure |
 | `ha_test_url_from_ha` | Tests whether the Home Assistant host itself reaches an address (e.g. a device's web page) and says why not. Nothing is created: HA fetches the address in a setup dialog that is aborted right away. No `?query`, no login in the URL. | Configure |
 | `ha_start_integration_options` | Opens the options of an integration with its current values. | Configure |

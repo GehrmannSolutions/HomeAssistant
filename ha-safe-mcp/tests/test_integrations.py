@@ -64,7 +64,8 @@ async def test_discovered_flows_are_read_over_websocket_and_reduced(tmp_path):
                   "context": {"source": "zeroconf", "unique_id": "shellyplug-ABC", "title_placeholders": {"name": "Plug S"}}}])
     flows = await make(tmp_path, ws=ws).discovered_flows()
     assert flows == [{"flow_id": FLOW, "handler": "shelly", "step_id": "confirm_discovery",
-                      "source": "zeroconf", "name": "Plug S"}]
+                      "source": "zeroconf", "name": "Plug S",
+                      "next": "add it: ha_integration_setup_step(flow_id, data={})"}]
 
 
 @pytest.mark.asyncio
@@ -525,3 +526,163 @@ async def test_url_probe_detail_variants_and_no_response_body(tmp_path, logged, 
         result = await make(tmp_path, ws=ws).test_url("http://192.0.2.10/")
     assert (result["result"], result["reachable"], result["detail"]) == (verdict, reachable, detail)
     assert "private" not in json.dumps(result)
+
+
+# --- 0.36.2: a discovered device with a login. Web chat with qwen3-coder:30b, 16.11. (Shelly 1PM Gen3 with a
+# password): the model saw the password form, even listed the stored alias, and still asked the user for the
+# password. The discovered flow itself showed only its step_id, not the form.
+
+LOGIN_FORM = {"type": "form", "flow_id": FLOW, "handler": "shelly", "step_id": "credentials", "errors": {},
+              "data_schema": [{"name": "password", "required": True,
+                               "selector": {"text": {"type": "password", "autocomplete": "current-password"}}}],
+              "description_placeholders": None, "last_step": None}
+REF = {"$credential": "shelly_login", "field": "password"}
+
+
+@pytest.mark.asyncio
+async def test_a_login_form_brings_the_ready_credential_reference(tmp_path):
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=LOGIN_FORM))
+        result = await make(tmp_path).flow_step(FLOW, {"host": "192.0.2.50"})
+    assert result["fill"] == {"password": REF}
+    assert "fill" in result["hint"] and "never ask" in result["hint"].lower()
+    assert SECRET not in json.dumps(result)
+
+
+@pytest.mark.asyncio
+async def test_the_login_named_after_the_integration_wins_over_other_logins(tmp_path):
+    integrations = make(tmp_path)
+    integrations.credentials.save("router", "Router", {"password": "r-1"})
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=LOGIN_FORM))
+        result = await integrations.flow_step(FLOW, {"host": "192.0.2.50"})
+    assert result["fill"] == {"password": REF}
+
+
+@pytest.mark.asyncio
+async def test_two_fitting_logins_are_offered_as_a_choice_without_guessing(tmp_path):
+    integrations = make(tmp_path)
+    integrations.credentials.save("shelly_keller", "Shelly Keller", {"password": "k-1"})
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=LOGIN_FORM))
+        result = await integrations.flow_step(FLOW, {"host": "192.0.2.50"})
+    assert "fill" not in result
+    assert result["credential_choices"] == {"password": ["shelly_keller", "shelly_login"]}
+    assert "ask the user" in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_a_login_form_without_any_stored_login_says_where_to_store_one(tmp_path):
+    form = {**LOGIN_FORM, "handler": "fritz",
+            "data_schema": [{"name": "api_key", "required": True, "selector": {"text": {"type": "password"}}}]}
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=form))
+        result = await make(tmp_path).flow_step(FLOW, {"host": "192.0.2.1"})
+    assert "fill" not in result and "credential_choices" not in result
+    assert "Credentials" in result["hint"] and "api_key" in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_a_plain_form_gets_no_login_help(tmp_path):
+    form = {**LOGIN_FORM, "step_id": "user", "data_schema": [{"name": "host", "required": True,
+                                                                "selector": {"text": {}}}]}
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=form))
+        result = await make(tmp_path).flow_step(FLOW, {})
+    assert "fill" not in result and "hint" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_step_without_data_shows_the_current_form_of_a_discovered_device(tmp_path):
+    with respx.mock(base_url=URL, assert_all_called=False) as router:
+        shown = router.get(f"/api/config/config_entries/flow/{FLOW}").mock(
+            return_value=httpx.Response(200, json=LOGIN_FORM))
+        sent = router.post(f"/api/config/config_entries/flow/{FLOW}")
+        result = await make(tmp_path).flow_step(FLOW)
+    assert shown.called and not sent.called
+    assert result["step_id"] == "credentials" and result["fill"] == {"password": REF}
+
+
+@pytest.mark.asyncio
+async def test_an_empty_object_still_confirms_a_discovered_device(tmp_path):
+    created = {"type": "create_entry", "flow_id": FLOW, "handler": "shelly", "title": "Plug S",
+               "result": {"entry_id": ENTRY, "domain": "shelly", "title": "Plug S", "state": "loaded"}}
+    with respx.mock(base_url=URL) as router:
+        sent = router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=created))
+        result = await make(tmp_path).flow_step(FLOW, {})
+    assert json.loads(sent.calls[0].request.content) == {} and result["type"] == "create_entry"
+
+
+@pytest.mark.asyncio
+async def test_a_missing_password_error_names_the_reference_to_send(tmp_path):
+    integrations = make(tmp_path)
+    with respx.mock(base_url=URL) as router:
+        router.get(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=LOGIN_FORM))
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(400, json={
+            "message": "User input malformed: required key not provided @ data['password']"}))
+        await integrations.flow_step(FLOW)
+        with pytest.raises(RuntimeError) as failed:
+            await integrations.flow_step(FLOW, {})
+    text = str(failed.value)
+    assert "required key not provided" in text and json.dumps(REF) in text and SECRET not in text
+
+
+@pytest.mark.asyncio
+async def test_discovered_devices_name_the_next_call(tmp_path):
+    ws = FakeWS([{"flow_id": FLOW, "handler": "shelly", "step_id": "credentials",
+                  "context": {"source": "zeroconf", "title_placeholders": {"name": "shelly1pmg3-abc"}}},
+                 {"flow_id": FLOW.replace("0", "1"), "handler": "apple_tv", "step_id": "confirm",
+                  "context": {"source": "zeroconf", "title_placeholders": {"name": "Küche"}}}])
+    login, confirm = await make(tmp_path, ws=ws).discovered_flows()
+    assert "without data" in login["next"]
+    assert "data={}" in confirm["next"]
+
+
+@pytest.mark.asyncio
+async def test_the_login_help_comes_first_with_the_ready_call(tmp_path):
+    """Live run 16.11.: with `fill` at the end of the result the 30B still asked for the password."""
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=LOGIN_FORM))
+        result = await make(tmp_path).flow_step(FLOW, {"host": "192.0.2.50"})
+    keys = list(result)
+    assert keys.index("next") < keys.index("data_schema") and keys.index("fill") < keys.index("data_schema")
+    assert result["next"] == f'ha_integration_setup_step(flow_id="{FLOW}", data={json.dumps({"password": REF})})'
+    assert "shelly_login" in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_no_ready_call_while_another_required_field_is_open(tmp_path):
+    form = {**LOGIN_FORM, "data_schema": LOGIN_FORM["data_schema"] + [{"name": "username", "required": True,
+                                                                         "selector": {"text": {}}}]}
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=form))
+        result = await make(tmp_path).flow_step(FLOW, {"host": "192.0.2.50"})
+    assert result["fill"] == {"password": REF} and "next" not in result
+
+
+class DeviceWS(FakeWS):
+    def __init__(self, devices):
+        super().__init__()
+        self.devices = devices
+
+    async def command(self, kind, payload=None):
+        if kind == "config/device_registry/list":
+            self.calls.append((kind, payload or {}))
+            return self.devices
+        return await super().command(kind, payload)
+
+
+@pytest.mark.asyncio
+async def test_a_new_entry_names_its_devices_and_how_to_put_them_into_a_room(tmp_path):
+    """Live run 16.11.: the Shelly was added, but 'add it to the hall' never reached the room."""
+    ws = DeviceWS([{"id": "dev1", "name": "Hall light", "name_by_user": None, "model": "Shelly 1PM Gen3",
+                    "area_id": None, "config_entries": [ENTRY]},
+                   {"id": "dev2", "name": "Other", "model": "x", "area_id": "kueche", "config_entries": ["other"]}])
+    created = {"type": "create_entry", "flow_id": FLOW, "handler": "shelly", "title": "Hall light",
+               "result": {"entry_id": ENTRY, "domain": "shelly", "title": "Hall light", "state": "loaded"}}
+    with respx.mock(base_url=URL) as router:
+        router.post(f"/api/config/config_entries/flow/{FLOW}").mock(return_value=httpx.Response(200, json=created))
+        result = await make(tmp_path, ws=ws).flow_step(FLOW, {"password": REF})
+    assert result["devices"] == [{"device_id": "dev1", "name": "Hall light", "model": "Shelly 1PM Gen3",
+                                  "area_id": None}]
+    assert "ha_update_device" in result["hint"] and "ha_list_areas" in result["hint"]

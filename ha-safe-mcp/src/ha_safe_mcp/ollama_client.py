@@ -528,6 +528,11 @@ def unconfirmed_claim_note(prompt: str, answer: str) -> str:
                                 "durch ein Werkzeug bestätigt.")
 
 
+FINAL_ROUND = ("The tool rounds for this request are used up. Answer now without calling tools: say what the tool "
+               "results above show as done (only what a tool confirmed) and what is still open. Use the language of "
+               "the user's request.")
+
+
 def language_hint() -> str:
     """The chat answers in the UI language unless the user writes in another one. The last sentence keeps small
     models from switching to the language of German entity names in tool results (mcp-eval 2026-11-13)."""
@@ -659,7 +664,17 @@ async def run_chat(session: ClientSession, http: httpx.AsyncClient, model: str, 
                 await _emit(on_event, {"type": "tool_result", "name": name, "ok": not outcome.isError,
                                        "preview": result[:PREVIEW_CHARS]})
             messages.append({"role": "tool", "tool_name": name or "unknown", "content": result})
-    raise RuntimeError("Tool iteration limit reached; no verified final answer")
+    # The round limit hit while the model was still working: one last request without tools, so it reports what the
+    # tool results show instead of ending in an error (16.11.: a Shelly set up and put into its room, then no answer).
+    await _emit(on_event, {"type": "thinking", "round": max_rounds + 1})
+    response = await http.post("/api/chat", json={"model": model, "stream": False, "messages": messages + [
+        {"role": "system", "content": FINAL_ROUND}]})
+    response.raise_for_status()
+    answer = re.sub(r"\s*</?tool_call>\s*$", "", str(response.json()["message"].get("content") or "")).strip()
+    if not answer or _json_tool_requests(answer) or _xml_tool_requests(
+            answer, {tool.name: tool.inputSchema or {} for tool in listed.tools}):
+        raise RuntimeError("Tool iteration limit reached; no verified final answer")
+    return unconfirmed_claim_note(prompt, answer) if not done_writes else answer
 
 
 def mcp_parameters_for(env: dict[str, str]) -> StdioServerParameters:
