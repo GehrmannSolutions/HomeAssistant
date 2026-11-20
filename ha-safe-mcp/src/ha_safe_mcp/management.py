@@ -28,6 +28,8 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         # organising: labels, categories, zones, one entity registry entry
                         "config/label_registry/list", "config/category_registry/list", "zone/list",
                         "config/entity_registry/get", "todo/item/list", "update/release_notes",
+                        # units a sensor's device class can be shown in (display unit of a sensor)
+                        "sensor/device_class_convertible_units",
                         "blueprint/list", "frontend/get_themes", "lovelace/resources",
                         # ecosystem views (read-only; supervisor/api limited to SUPERVISOR_READ below)
                         "supervisor/api", "hacs/repositories/list", "zha/devices", "thread/list_datasets",
@@ -67,7 +69,9 @@ DELETE_TYPES = frozenset({"hacs/repository/remove", "marketplace/repository/unin
 
 ENTITY_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
 ENTITY_UPDATE = frozenset({"name", "area_id", "icon", "aliases", "labels", "categories", "disabled_by", "hidden_by",
-                           "display_precision"})
+                           "display_precision", "unit_of_measurement"})
+# sensor display options HA keeps in options["sensor"]; flattened in entity_registry_get so they read back and undo
+SENSOR_OPTIONS = ("display_precision", "unit_of_measurement")
 
 
 SUPERVISOR_READ = frozenset({"/addons", "/core/info", "/supervisor/info", "/os/info", "/host/info"})
@@ -375,8 +379,10 @@ class HAAdmin:
                 return None
             raise
         if isinstance(item, dict) and entity_id.startswith("sensor."):
-            # decimals shown in the UI (sensor option); flattened so changes can be read back and undone
-            item["display_precision"] = ((item.get("options") or {}).get("sensor") or {}).get("display_precision")
+            # decimals and unit shown in the UI (sensor options); flattened so changes can be read back and undone
+            sensor_options = (item.get("options") or {}).get("sensor") or {}
+            for key in SENSOR_OPTIONS:
+                item[key] = sensor_options.get(key)
         return item
 
     async def _validate_entity_changes(self, payload: dict, entity_id: str = ""):
@@ -386,6 +392,8 @@ class HAAdmin:
                 raise ValueError("display_precision only exists for sensor entities")
             if value is not None and (isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 10):
                 raise ValueError("display_precision must be a number of decimals 0-10 or null (null = integration default)")
+        if "unit_of_measurement" in payload:
+            payload["unit_of_measurement"] = await self._display_unit(entity_id, payload["unit_of_measurement"])
         for key in ("disabled_by", "hidden_by"):
             if key in payload and payload[key] not in ("user", None):
                 raise ValueError(f"{key} may only be 'user' or null")
@@ -423,6 +431,33 @@ class HAAdmin:
                         for c in await self.ws.command("config/category_registry/list", {"scope": scope})):
                     raise ValueError(f"unknown category {cid} in scope {scope}: pick one from ha_list_categories")
 
+    async def _display_unit(self, entity_id: str, unit):
+        """Check a sensor display unit against the units HA can convert the sensor's device class to; returns the
+        unit spelled as HA lists it ("Bar" -> "bar"). None (back to the integration's unit) needs no check."""
+        if not entity_id.startswith("sensor."):
+            raise ValueError("unit_of_measurement only exists for sensor entities")
+        if unit is None:
+            return None
+        if not isinstance(unit, str) or not unit.strip() or len(unit) > 32:
+            raise ValueError("unit_of_measurement must be a unit such as 'bar' or '°F', or null (integration default)")
+        entry = await self.entity_registry_get(entity_id)
+        if entry is None:
+            raise ValueError(f"{entity_id} is not in the entity registry (no unique_id), its unit cannot be set")
+        device_class = entry.get("device_class") or entry.get("original_device_class")
+        units = []
+        if device_class:
+            units = (await self.ws.command("sensor/device_class_convertible_units",
+                                           {"device_class": device_class})).get("units") or []
+        if not units:
+            raise ValueError(f"{entity_id} cannot be converted to another unit (device class "
+                             f"{device_class or 'none'}); only sensors with a convertible device class can")
+        match = next((u for u in units if u == unit.strip()), None) or next(
+            (u for u in units if u.casefold() == unit.strip().casefold()), None)
+        if match is None:
+            raise ValueError(f"unit_of_measurement {unit!r} is not possible for a {device_class} sensor; choose one "
+                             f"of: {', '.join(units)}")
+        return match
+
     async def entity_registry_update(self, entity_id: str, changes: dict):
         self._check_write()
         if not isinstance(entity_id, str) or not ENTITY_ID.fullmatch(entity_id) or not isinstance(changes, dict):
@@ -431,20 +466,24 @@ class HAAdmin:
             raise ValueError(f"unsupported entity registry fields; allowed: {', '.join(sorted(ENTITY_UPDATE))}")
         payload = dict(changes)
         await self._validate_entity_changes(payload, entity_id)
-        fields = {k: v for k, v in payload.items() if k != "display_precision"}
+        fields = {k: v for k, v in payload.items() if k not in SENSOR_OPTIONS}
         result = {}
         if fields:
             result = await self.ws.command("config/entity_registry/update", {"entity_id": entity_id, **fields})
-        if "display_precision" in payload:
-            # HA replaces a domain's options as a whole: keep the other sensor options (e.g. unit)
+        if any(key in payload for key in SENSOR_OPTIONS):
+            # HA replaces a domain's options as a whole: keep the other sensor options
             before = await self.entity_registry_get(entity_id)
             if before is None:
-                raise ValueError(f"{entity_id} is not in the entity registry (no unique_id), decimals cannot be set")
+                raise ValueError(f"{entity_id} is not in the entity registry (no unique_id), its sensor options "
+                                 "cannot be set")
             options = dict((before.get("options") or {}).get("sensor") or {})
-            if payload["display_precision"] is None:
-                options.pop("display_precision", None)
-            else:
-                options["display_precision"] = payload["display_precision"]
+            for key in SENSOR_OPTIONS:
+                if key not in payload:
+                    continue
+                if payload[key] is None:
+                    options.pop(key, None)
+                else:
+                    options[key] = payload[key]
             result = await self.ws.command("config/entity_registry/update", {
                 "entity_id": entity_id, "options_domain": "sensor", "options": options or None})
         current = await self.entity_registry_get(entity_id)

@@ -3,6 +3,16 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.36.4 – 2026-11-20
+
+- **Anzeige-Einheit eines Sensors:** `ha_update_entity_registry` nimmt jetzt `unit_of_measurement` an, z. B.
+  `{"unit_of_measurement": "bar"}` für einen Reifendruck, den die Integration in psi anzeigt. Home Assistant rechnet
+  den Wert um; Oberfläche, Verlauf und Vorlagen zeigen danach die neue Einheit. Erlaubt sind nur Einheiten, in die HA
+  die Geräteklasse des Sensors umrechnen kann (Liste von HA selbst); eine unpassende Einheit wird mit den möglichen
+  abgelehnt, Groß-/Kleinschreibung wird angeglichen („Bar“ -> „bar“). `null` stellt die Einheit der Integration
+  wieder her. Andere Sensor-Optionen (Nachkommastellen) bleiben erhalten, die Änderung steht im Journal und lässt
+  sich rückgängig machen. Anlass: Die Einheit ließ sich bisher nur in der HA-Oberfläche ändern.
+
 ## 0.36.3 – 2026-11-16
 
 - **Nur der Gerätename:** `ha_update_entity_registry` nimmt jetzt `name: ""` an. Home Assistant setzt den Anzeigenamen

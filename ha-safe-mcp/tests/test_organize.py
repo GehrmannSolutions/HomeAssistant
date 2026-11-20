@@ -137,6 +137,10 @@ class FakeWS:
             return copy.deepcopy(self.areas)
         if kind == "config/floor_registry/list":
             return []
+        if kind == "sensor/device_class_convertible_units":
+            units = {"pressure": ["bar", "cbar", "hPa", "inHg", "kPa", "mbar", "mmHg", "Pa", "psi"],
+                     "temperature": ["°C", "°F", "K"]}
+            return {"units": units.get(payload["device_class"], [])}
         if kind == "config/area_registry/update":
             area_id = payload.pop("area_id")
             area = next(a for a in self.areas if a["area_id"] == area_id)
@@ -291,6 +295,77 @@ async def test_display_precision_change_can_be_undone(tmp_path):
     assert (await admin.entity_registry_get("sensor.zelt_rh"))["display_precision"] == 0
     await changes.undo(change_id)
     assert (await admin.entity_registry_get("sensor.zelt_rh"))["display_precision"] is None
+
+
+def pressure_sensor(entity_id="sensor.wheel_front_left"):
+    """A sensor whose integration measures in bar but suggests psi (HA then shows psi)."""
+    return {"entity_id": entity_id, "name": None, "icon": None, "area_id": None, "labels": [], "categories": {},
+            "disabled_by": None, "hidden_by": None, "aliases": [], "platform": "vendor", "device_class": None,
+            "original_device_class": "pressure",
+            "options": {"sensor.private": {"suggested_unit_of_measurement": "psi"},
+                        "sensor": {"suggested_display_precision": 1}, "conversation": {"should_expose": False}}}
+
+
+async def test_display_unit_is_set_converted_by_ha_and_keeps_other_options():
+    _, admin, _, ws = make()
+    ws.entities.append(pressure_sensor())
+    current = await admin.entity_registry_update("sensor.wheel_front_left", {"unit_of_measurement": "Bar"})
+    assert current["unit_of_measurement"] == "bar"  # spelled like HA's unit list
+    assert current["options"]["sensor"] == {"suggested_display_precision": 1, "unit_of_measurement": "bar"}
+    assert current["options"]["sensor.private"] == {"suggested_unit_of_measurement": "psi"}
+    assert current["options"]["conversation"] == {"should_expose": False}
+    assert ("sensor/device_class_convertible_units", {"device_class": "pressure"}) in ws.calls
+    both = await admin.entity_registry_update("sensor.wheel_front_left",
+                                              {"unit_of_measurement": "kPa", "display_precision": 0})
+    assert both["options"]["sensor"] == {"suggested_display_precision": 1, "unit_of_measurement": "kPa",
+                                         "display_precision": 0}
+    reset = await admin.entity_registry_update("sensor.wheel_front_left", {"unit_of_measurement": None})
+    assert reset["unit_of_measurement"] is None and reset["display_precision"] == 0
+    assert "unit_of_measurement" not in reset["options"]["sensor"]
+
+
+async def test_display_unit_refuses_units_ha_cannot_convert():
+    _, admin, _, ws = make()
+    ws.entities.append(pressure_sensor())
+    with pytest.raises(ValueError, match="bar, cbar, hPa"):  # the error lists the choices
+        await admin.entity_registry_update("sensor.wheel_front_left", {"unit_of_measurement": "°C"})
+    for bad in ("", 3, ["bar"], "x" * 40):
+        with pytest.raises(ValueError, match="unit_of_measurement"):
+            await admin.entity_registry_update("sensor.wheel_front_left", {"unit_of_measurement": bad})
+    plain = pressure_sensor("sensor.counter")
+    plain["original_device_class"] = None
+    ws.entities.append(plain)
+    with pytest.raises(ValueError, match="cannot be converted"):
+        await admin.entity_registry_update("sensor.counter", {"unit_of_measurement": "bar"})
+    with pytest.raises(ValueError, match="only exists for sensor"):
+        await admin.entity_registry_update("light.flur", {"unit_of_measurement": "bar"})
+    assert (await admin.entity_registry_get("sensor.wheel_front_left"))["unit_of_measurement"] is None
+
+
+async def test_display_unit_follows_a_user_device_class_and_the_read_allowlist():
+    from ha_safe_mcp.management import READ_TYPES
+    assert "sensor/device_class_convertible_units" in READ_TYPES
+    _, admin, _, ws = make()
+    sensor = pressure_sensor("sensor.boiler")
+    sensor.update(original_device_class=None, device_class="temperature")
+    ws.entities.append(sensor)
+    assert (await admin.entity_registry_update("sensor.boiler", {"unit_of_measurement": "°F"})
+            )["unit_of_measurement"] == "°F"
+
+
+async def test_display_unit_change_can_be_undone(tmp_path):
+    organizer, admin, registry, ws = make()
+    ws.entities.append(pressure_sensor())
+    changes = changes_for(tmp_path, organizer, admin, registry)
+    _, change_id = await changes.apply(
+        "ha_update_entity_registry", "entity", "sensor.wheel_front_left",
+        lambda: admin.entity_registry_update("sensor.wheel_front_left", {"unit_of_measurement": "bar"}),
+        fields=["unit_of_measurement"])
+    assert (await admin.entity_registry_get("sensor.wheel_front_left"))["unit_of_measurement"] == "bar"
+    await changes.undo(change_id)
+    after = await admin.entity_registry_get("sensor.wheel_front_left")
+    assert after["unit_of_measurement"] is None
+    assert after["options"]["sensor"] == {"suggested_display_precision": 1}
 
 
 async def test_rename_entity_keeps_the_domain_and_refuses_taken_ids():
