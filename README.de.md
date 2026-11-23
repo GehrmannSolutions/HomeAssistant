@@ -10,6 +10,14 @@ Home-Assistant-Zuhauses hilft, ohne dass man ihm die Schlüssel übergibt:
 | [**ha-safe-mcp**](ha-safe-mcp/) | Ein selbst gehosteter [MCP](https://modelcontextprotocol.io/)-Server für Home Assistant mit Sicherheit an erster Stelle: 161 Werkzeuge, dazu eine lokale Weboberfläche mit Chat für Ollama-Modelle. Jede Änderung braucht deine Freigabe, wird zurückgelesen und landet in einem Änderungsjournal, aus dem du sie rückgängig machen kannst. | [Funktionsübersicht](ha-safe-mcp/docs/FEATURES.de.md) · [Installation](ha-safe-mcp/docs/INSTALL.de.md) · [Bedienungsanleitung](ha-safe-mcp/docs/USER_GUIDE.de.md) · [Technische Doku](ha-safe-mcp/docs/TECHNICAL.de.md) · [Werkzeug-Referenz (englisch)](ha-safe-mcp/docs/TOOLS.md) |
 | [**ha-diorama**](ha-diorama/) | Eine Kopie der MIT-lizenzierten 3D-Karte [CarlesRojas/ha-diorama](https://github.com/CarlesRojas/ha-diorama) mit unseren Ergänzungen: echte Wände (volle oder halbe Höhe, vordere Wände ausgeblendet), Räume aus einem Grundrissbild übernehmen und Prüfwerkzeuge. Dem Original als Beitrag angeboten. | [Unsere Ergänzungen](ha-diorama/hestia/README.md) · [Original](ha-diorama/UPSTREAM.md) · [Doku der Karte](ha-diorama/README.md) |
 
+## Home-Assistant-Pakete
+
+Fertige YAML-Pakete für Home Assistant, unabhängig von den Projekten oben.
+
+| Paket | Was es macht | Einstieg |
+|---|---|---|
+| [**Pflanzen-Verdunstung fürs Growzelt**](packages/grow-tent-evapotranspiration/) | Schätzt Stunde für Stunde, wie viel Wasser die Pflanzen in einem Growzelt verbrauchen (FAO-56-Penman-Monteith in der Stundenform, die Pflanzenlampe als Sonne, die Lüfter als Wind), führt eine Wasserbilanz des Topfs und gibt einen Gieß-Hinweis, der Modell und Bodenfeuchtesensor verknüpft. Schaltet nichts. | [Anleitung](packages/grow-tent-evapotranspiration/README.de.md) · [Paket](packages/grow-tent-evapotranspiration/grow_tent_et.yaml) |
+
 ## So sieht es aus
 
 Alle Bilder stammen aus einem Demo-Zuhause auf einem Wegwerf-Home-Assistant (drei Etagen, 17 Räume, 20 Lampen,
@@ -105,6 +113,7 @@ Schreibrechte sind aus, bis du sie einschaltest. Details, Docker und das Verbind
 |---|---|
 | `ha-safe-mcp/` | MCP-Server, Weboberfläche und Chat: Quellcode, Tests, Docker-Testaufbau, Beispiele und Doku. Befehle aus diesem Ordner heraus ausführen. |
 | `ha-diorama/` | Die Diorama-Karte (Kopie des Originals) mit unserem Wände-Patch; `ha-diorama/hestia/` enthält unsere Tests und Werkzeuge, die nicht Teil des Beitrags ans Original sind. |
+| `packages/` | YAML-Pakete für Home Assistant, je ein Ordner mit eigener Anleitung, Tests und Changelog. |
 | `docs/showcase/` | Die Bilder dieser Seite, die nicht zur Doku eines Projekts gehören. |
 
 ## Lizenz und Dank

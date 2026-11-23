@@ -10,6 +10,14 @@ without handing it the keys:
 | [**ha-safe-mcp**](ha-safe-mcp/) | A self-hosted, safety-first [MCP](https://modelcontextprotocol.io/) server for Home Assistant with 161 tools, plus a local web UI with a chat for Ollama models. Every write needs your approval, is read back and lands in a change journal you can undo. | [Feature guide](ha-safe-mcp/docs/FEATURES.md) · [Install](ha-safe-mcp/docs/INSTALL.md) · [User guide](ha-safe-mcp/docs/USER_GUIDE.md) · [Technical docs](ha-safe-mcp/docs/TECHNICAL.md) · [Tool reference](ha-safe-mcp/docs/TOOLS.md) |
 | [**ha-diorama**](ha-diorama/) | A copy of the MIT-licensed 3D card [CarlesRojas/ha-diorama](https://github.com/CarlesRojas/ha-diorama) with our additions: real walls (full or half height, near walls cut away), room import from a plan picture, and check tools. Offered upstream. | [Our additions](ha-diorama/hestia/README.md) · [Upstream](ha-diorama/UPSTREAM.md) · [Card docs](ha-diorama/README.md) |
 
+## Home Assistant packages
+
+Ready-to-use YAML packages for Home Assistant, independent of the projects above.
+
+| Package | What it does | Start here |
+|---|---|---|
+| [**Grow tent evapotranspiration**](packages/grow-tent-evapotranspiration/) | Estimates hour by hour how much water the plants in a grow tent use (FAO-56 hourly Penman-Monteith with the grow light as the sun and the fans as the wind), keeps a water balance of the pot and gives a watering hint that combines the model with a soil moisture sensor. Switches nothing. | [README](packages/grow-tent-evapotranspiration/README.md) · [Package](packages/grow-tent-evapotranspiration/grow_tent_et.yaml) |
+
 ## What it looks like
 
 All pictures come from a demo home on a throwaway Home Assistant (three floors, 17 rooms, 20 lights, 8 switched
@@ -103,6 +111,7 @@ you switch them on. Details, Docker and MCP client setup: [installation guide](h
 |---|---|
 | `ha-safe-mcp/` | The MCP server, web UI and chat: source, tests, Docker test setup, examples and docs. Run its commands from this directory. |
 | `ha-diorama/` | The Diorama card (upstream copy) with our walls patch; `ha-diorama/hestia/` holds our tests and tools that are not part of the upstream pull request. |
+| `packages/` | Home Assistant YAML packages, one folder each with its own README, tests and changelog. |
 | `docs/showcase/` | The pictures on this page that are not part of a project's own docs. |
 
 ## License and credits

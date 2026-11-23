@@ -1,0 +1,213 @@
+# Grow tent evapotranspiration - Home Assistant package
+# https://github.com/GehrmannSolutions/HomeAssistant/tree/main/packages/grow-tent-evapotranspiration
+#
+# Estimates how much water the plants in a grow tent (or a small greenhouse) use, hour by hour, with the
+# FAO-56 / ASCE standardized hourly Penman-Monteith equation. The grow light plays the sun (PPFD converted to
+# W/m2), the fans play the wind (an assumed air speed). A soil water balance (depletion in litres) and a
+# watering hint that combines the model with a soil moisture sensor sit on top. Nothing here switches anything.
+#
+# BEFORE YOU LOAD IT: replace the placeholder entity ids below with your own sensors (search and replace):
+#   sensor.grow_tent_temperature     air temperature in the tent, degC          (required)
+#   sensor.grow_tent_humidity        relative humidity in the tent, %           (required)
+#   sensor.grow_tent_ppfd            PPFD at the canopy, umol/m2/s              (required; 0 when the light is off)
+#   sensor.grow_tent_soil_moisture   soil moisture, %                           (optional, for the watering hint)
+#   binary_sensor.grow_tent_drip_running  on while a drip line feeds the pot    (optional, with the drip rate helper)
+# Then set the helpers (example values for a 120 x 120 cm tent in the README) and press "Grow ET watered" once
+# right after a full watering. Formulas, sources and limits: README.md.
+
+input_number:
+  grow_et_canopy_area:
+    name: Grow ET canopy area
+    min: 0.05
+    max: 4
+    step: 0.01
+    unit_of_measurement: "m²"
+    icon: mdi:leaf
+  grow_et_kc:
+    name: Grow ET crop coefficient Kc
+    min: 0.1
+    max: 1.5
+    step: 0.01
+    icon: mdi:sprout
+  grow_et_w_per_umol:
+    name: Grow ET radiation per PPFD
+    min: 0.15
+    max: 0.5
+    step: 0.005
+    unit_of_measurement: "W/m² per µmol/m²/s"
+    icon: mdi:white-balance-sunny
+  grow_et_air_speed:
+    name: Grow ET air speed at the canopy
+    min: 0.1
+    max: 2
+    step: 0.05
+    unit_of_measurement: "m/s"
+    icon: mdi:weather-windy
+  grow_et_pot_available_water:
+    name: Grow ET available water in the pot
+    min: 0.5
+    max: 100
+    step: 0.1
+    unit_of_measurement: "L"
+    icon: mdi:pot-mix
+  grow_et_depletion_fraction:
+    name: Grow ET allowed depletion p
+    min: 10
+    max: 80
+    step: 5
+    unit_of_measurement: "%"
+    icon: mdi:water-percent-alert
+  grow_et_watering_amount:
+    name: Grow ET watering amount
+    min: 0
+    max: 50
+    step: 0.1
+    unit_of_measurement: "L"
+    icon: mdi:watering-can
+  grow_et_drip_rate:
+    name: Grow ET drip rate while running
+    min: 0
+    max: 2000
+    step: 5
+    unit_of_measurement: "ml/h"
+    icon: mdi:water-plus
+  grow_et_soil_threshold:
+    name: Grow ET soil moisture watering mark (0 = off)
+    min: 0
+    max: 100
+    step: 0.5
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+
+input_button:
+  grow_et_watered:
+    name: Grow ET watered
+    icon: mdi:watering-can-outline
+
+template:
+  - sensor:
+      - name: Grow ET reference evapotranspiration
+        unique_id: grow_et_reference_et
+        unit_of_measurement: "mm/h"
+        state_class: measurement
+        icon: mdi:weather-sunny
+        availability: "{{ has_value('sensor.grow_tent_temperature') and has_value('sensor.grow_tent_humidity') }}"
+        # FAO-56 / ASCE standardized hourly short reference: Cn 37, Cd 0.24 by day and 0.96 by night,
+        # G = 0.1 Rn by day; Rn = (1 - 0.23) x shortwave from the light (no sky, so no outdoor long-wave term).
+        state: >-
+          {% set t = states('sensor.grow_tent_temperature') | float(0) %}
+          {% set rh = states('sensor.grow_tent_humidity') | float(0) %}
+          {% set p = [states('sensor.grow_tent_ppfd') | float(0), 0] | max %}
+          {% set es = 0.6108 * e ** (17.27 * t / (t + 237.3)) %}
+          {% set d = 4098 * es / (t + 237.3) ** 2 %}
+          {% set vpd = es * (1 - rh / 100) %}
+          {% set rn = 0.77 * p * states('input_number.grow_et_w_per_umol') | float(0.2) * 0.0036 %}
+          {% set g = 0.1 * rn %}
+          {% set cd = 0.24 if rn > 0 else 0.96 %}
+          {% set gam = 0.000665 * 101.3 %}
+          {% set u = states('input_number.grow_et_air_speed') | float(0.4) %}
+          {% set et0 = (0.408 * d * (rn - g) + gam * 37 / (t + 273) * u * vpd) / (d + gam * (1 + cd * u)) %}
+          {{ ([et0, 0] | max) | round(4) }}
+        attributes:
+          vpd_kpa: >-
+            {% set t = states('sensor.grow_tent_temperature') | float(0) %}
+            {{ (0.6108 * e ** (17.27 * t / (t + 237.3)) * (1 - states('sensor.grow_tent_humidity') | float(0) / 100)) | round(2) }}
+          net_radiation_w_m2: >-
+            {{ (0.77 * ([states('sensor.grow_tent_ppfd') | float(0), 0] | max)
+                * states('input_number.grow_et_w_per_umol') | float(0.2)) | round(0) }}
+
+      - name: Grow ET water use
+        unique_id: grow_et_water_use
+        unit_of_measurement: "ml/h"
+        state_class: measurement
+        icon: mdi:water-sync
+        availability: "{{ has_value('sensor.grow_et_reference_evapotranspiration') }}"
+        # ETc = Kc x ET0 (mm/h = L per m2 and hour) x canopy area (m2) x 1000 ml/L
+        state: >-
+          {{ (states('sensor.grow_et_reference_evapotranspiration') | float(0)
+              * states('input_number.grow_et_kc') | float(1)
+              * states('input_number.grow_et_canopy_area') | float(0.5) * 1000) | round(0) }}
+
+      - name: Grow ET pot water
+        unique_id: grow_et_pot_water
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:pot-mix-outline
+        availability: "{{ has_value('sensor.grow_et_depletion') }}"
+        # share of the pot's available water that is still there (100 % right after a full watering)
+        state: >-
+          {% set taw = states('input_number.grow_et_pot_available_water') | float(4) %}
+          {{ (100 * (taw - states('sensor.grow_et_depletion') | float(0)) / taw) | round(0) }}
+
+  - binary_sensor:
+      - name: Grow ET water hint
+        unique_id: grow_et_water_hint
+        icon: mdi:watering-can
+        availability: "{{ has_value('sensor.grow_et_depletion') }}"
+        # model: depletion reached p x available water; sensor: soil moisture at or below its mark (if a mark is set)
+        state: >-
+          {% set taw = states('input_number.grow_et_pot_available_water') | float(4) %}
+          {% set pf = states('input_number.grow_et_depletion_fraction') | float(40) / 100 %}
+          {% set model = states('sensor.grow_et_depletion') | float(0) >= pf * taw %}
+          {% set mark = states('input_number.grow_et_soil_threshold') | float(0) %}
+          {% set soil = states('sensor.grow_tent_soil_moisture') | float(none) %}
+          {% if mark > 0 and soil is not none %}{{ model and soil <= mark }}{% else %}{{ model }}{% endif %}
+        attributes:
+          model_says_water: >-
+            {{ states('sensor.grow_et_depletion') | float(0) >= states('input_number.grow_et_depletion_fraction') | float(40) / 100
+               * states('input_number.grow_et_pot_available_water') | float(4) }}
+          soil_sensor: >-
+            {% set mark = states('input_number.grow_et_soil_threshold') | float(0) %}
+            {% set soil = states('sensor.grow_tent_soil_moisture') | float(none) %}
+            {% if mark <= 0 %}not used (no mark set) - check by hand
+            {% elif soil is none %}no value - model only
+            {% elif soil <= mark %}at or below the mark
+            {% else %}above the mark{% endif %}
+
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/1"
+        id: tick
+      - trigger: state
+        entity_id: input_button.grow_et_watered
+        id: watered
+    sensor:
+      - name: Grow ET used since watering
+        unique_id: grow_et_used_since_watering
+        unit_of_measurement: "L"
+        state_class: total_increasing
+        icon: mdi:water-minus
+        state: >-
+          {% if trigger.id == 'watered' %}0
+          {% else %}{{ ((this.state | float(0)) + (states('sensor.grow_et_water_use') | float(0)) / 60000) | round(3) }}{% endif %}
+      - name: Grow ET drip since watering
+        unique_id: grow_et_drip_since_watering
+        unit_of_measurement: "L"
+        state_class: total_increasing
+        icon: mdi:water-plus
+        state: >-
+          {% if trigger.id == 'watered' %}0
+          {% else %}{% set run = is_state('binary_sensor.grow_tent_drip_running', 'on') %}
+          {{ ((this.state | float(0)) + (states('input_number.grow_et_drip_rate') | float(0) / 60000 if run else 0)) | round(3) }}{% endif %}
+      - name: Grow ET depletion
+        unique_id: grow_et_depletion
+        unit_of_measurement: "L"
+        state_class: measurement
+        icon: mdi:water-off-outline
+        # FAO-56 root zone depletion for the pot: + use, - drip, - watering, kept between 0 and the available water
+        state: >-
+          {% set taw = states('input_number.grow_et_pot_available_water') | float(4) %}
+          {% set dr = this.state | float(0) %}
+          {% if trigger.id == 'watered' %}
+            {% set dr = dr - states('input_number.grow_et_watering_amount') | float(0) %}
+          {% else %}
+            {% set run = is_state('binary_sensor.grow_tent_drip_running', 'on') %}
+            {% set dr = dr + (states('sensor.grow_et_water_use') | float(0)
+                              - (states('input_number.grow_et_drip_rate') | float(0) if run else 0)) / 60000 %}
+          {% endif %}
+          {{ ([[dr, 0] | max, taw] | min) | round(3) }}
+        attributes:
+          available_water_l: "{{ states('input_number.grow_et_pot_available_water') | float(4) }}"
+          refill_at_l: >-
+            {{ (states('input_number.grow_et_depletion_fraction') | float(40) / 100
+                * states('input_number.grow_et_pot_available_water') | float(4)) | round(2) }}
