@@ -230,3 +230,12 @@ async def test_a_room_can_be_named_in_english():
         router.get("/api/states").mock(return_value=httpx.Response(200, json=[]))
         result = await registry.list_area_entities("living room")
     assert result["area_id"] == "wohnzimmer"
+
+
+async def test_an_unknown_room_tells_the_model_not_to_act_in_a_similar_room():
+    """9B eval 24.11.: 'light in the garage' (no garage) -> the model switched the lights of the 'Werkstatt'."""
+    registry = HARegistry(HAClient(URL, "t"), FakeRegistryWS())
+    for call in (lambda: registry.find_devices("Garage"), lambda: registry.list_area_entities("Garage")):
+        with pytest.raises(ValueError) as error:
+            await call()
+        assert "do not act in another room" in str(error.value) and "ask the user" in str(error.value)

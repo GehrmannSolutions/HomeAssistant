@@ -52,6 +52,11 @@ def _aliases(value):
     return value
 
 
+# 9B eval 24.11.2026: asked for the light in a garage that does not exist, the model switched the 'Werkstatt'
+UNKNOWN_ROOM = (". If none of these is clearly the room the user meant, do not act in another room: tell the user "
+                "this room does not exist in Home Assistant and ask the user which one is meant")
+
+
 class HARegistry:
     def __init__(self, client: HAClient, ws, *, allow_admin_write: bool = False, allow_delete: bool = False):
         self.client = client
@@ -111,7 +116,7 @@ class HARegistry:
                 names = ", ".join(sorted(str(a.get("name")) for a in areas))
                 floor_names = ", ".join(sorted(str(f.get("name")) for f in floors))
                 raise ValueError(f"unknown area '{area}'; known areas: {names}"
-                                 + (f"; floors: {floor_names}" if floors else ""))
+                                 + (f"; floors: {floor_names}" if floors else "") + UNKNOWN_ROOM)
         selected = ({match["area_id"]: match} if match is not None else
                     {a["area_id"]: a for a in areas if a.get("floor_id") == floor.get("floor_id")})
         devices = {d.get("id"): d for d in await self._list("device")}
@@ -189,7 +194,7 @@ class HARegistry:
         match = self._match_area(areas, area)
         if match is None:
             names = ", ".join(sorted(str(a.get("name")) for a in areas))
-            raise ValueError(f"unknown area '{area}'; known areas: {names}")
+            raise ValueError(f"unknown area '{area}'; known areas: {names}" + UNKNOWN_ROOM)
         devices = await self.list_devices(match["area_id"], query, limit)
         if devices or query:
             return devices

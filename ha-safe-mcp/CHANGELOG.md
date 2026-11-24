@@ -3,6 +3,13 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.37.1 – 2026-11-24
+
+- **Unbekannter Raum: nicht in einem ähnlichen Raum handeln.** Im 9B-Messlauf schaltete das Modell auf „Mach das Licht
+  in der Garage an“ (es gibt keine Garage) die Lichter der Werkstatt. Die Meldung für einen unbekannten Raum
+  (`ha_list_area_entities`, `ha_list_devices`) sagt jetzt zusätzlich: Ist keiner der genannten Räume eindeutig
+  gemeint, nicht in einem anderen Raum handeln, sondern dem Nutzer sagen, dass es den Raum nicht gibt, und nachfragen.
+
 ## 0.37.0 – 2026-11-24
 
 Werkzeuge aus dem Alltag, die bisher Handarbeit oder ein eigenes Skript brauchten, und zwei Hilfen für kleine
