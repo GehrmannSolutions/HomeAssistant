@@ -315,6 +315,10 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     from .ecosystem import HAEcosystem
     from .config_files import ConfigFiles, mask
     from .overview import HAOverview
+    from .users import HAUsers
+    from .notify import HANotify
+    from .matter import HAMatter
+    from .rename import DeviceRenamer
 
     rest = RestGateway(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
     admin = HAAdmin(client, allow_admin_write=allow_admin_write, allow_delete=allow_delete)
@@ -339,9 +343,14 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     overview = HAOverview(client, admin.ws, admin=admin, scenes=scenes, integrations=integrations)
     removal = HARemoval(client, admin.ws, overview=overview, allow_admin_write=allow_admin_write,
                         allow_delete=allow_delete)
+    notify = HANotify(client, admin.ws)
+    renamer = DeviceRenamer(client, admin, registry, scenes, overview, allow_admin_write=allow_admin_write)
+    matter = HAMatter(client, admin.ws, allow_admin_write=allow_admin_write, credentials=integrations.credentials)
+    users = HAUsers(client, admin.ws, allow_admin_write=allow_admin_write, allow_delete=allow_delete,
+                    credentials=integrations.credentials)
     changes = Changes(journal or journal_from_env(), admin=admin, scenes=scenes, registry=registry,
                       integrations=integrations, organizer=organizer, customize=customize,
-                      config_files=config_files, energy=energy, assist=assist, hacs=hacs)
+                      config_files=config_files, energy=energy, assist=assist, hacs=hacs, users=users)
 
     async def template_loaded() -> bool:
         services = await client._request("GET", "/api/services")
@@ -369,6 +378,25 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     server = FastMCP("ha-safe-mcp", instructions="Home Assistant REST bridge; writes disabled by default.")
 
     tool = _audited_tool(server, client)
+
+    manager = server._tool_manager
+    plain_call = manager.call_tool
+
+    async def call_tool_checked(name, arguments, *args, **kwargs):
+        """Small models guess argument names (dashboard_id instead of url_path); FastMCP would drop them silently
+        and run the tool with defaults, which reads or changes the wrong thing."""
+        registered = manager.get_tool(name)
+        if registered is not None and isinstance(arguments, dict):
+            valid = list((registered.parameters or {}).get("properties") or {})
+            unknown = [key for key in arguments if key not in valid]
+            if unknown:
+                from mcp.server.fastmcp.exceptions import ToolError
+                raise ToolError(f"Error executing tool {name}: unknown argument '{unknown[0]}'"
+                                + (f" (and {', '.join(repr(u) for u in unknown[1:])})" if unknown[1:] else "")
+                                + f"; valid: {', '.join(valid) or 'none'}")
+        return await plain_call(name, arguments, *args, **kwargs)
+
+    manager.call_tool = call_tool_checked
 
     @tool()
     async def ha_search_entities(query: str = "", domain: str = "", limit: int = 50) -> list[dict] | dict:
@@ -398,6 +426,33 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
                         + ("Similar names are listed under 'similar'; use one only if it is clearly what the user "
                            "meant, otherwise tell the user it does not exist. " if similar else "")
                         + "To browse a room use ha_list_areas and ha_list_area_entities."}
+
+    @tool()
+    async def ha_list_automations(query: str = "") -> dict:
+        """List the automations ('which automations are there?'): name, entity_id, config_id, enabled (on/off)
+        and last run in Home Assistant's time zone. Optional query filters by words in the name or entity_id. Read
+        the content of one with ha_get_automation(config_id). Read only."""
+        from .diagnostics import _local
+        states = await client._request("GET", "/api/states")
+        zone = await diagnostics.zone()
+        everything = sorted(({"entity_id": s["entity_id"],
+                              "name": (s.get("attributes") or {}).get("friendly_name") or s["entity_id"],
+                              "config_id": (s.get("attributes") or {}).get("id"), "enabled": s.get("state") == "on",
+                              "last_triggered": _local((s.get("attributes") or {}).get("last_triggered"), zone)}
+                             for s in states or [] if isinstance(s, dict)
+                             and str(s.get("entity_id", "")).startswith("automation.")),
+                            key=lambda a: str(a["name"]).casefold())
+        words = [w for w in str(query or "").casefold().split() if w]
+        found = [a for a in everything if all(w in f"{a['name']} {a['entity_id']}".casefold() for w in words)]
+        result = {"automations": found, "count": len(found)}
+        if found:
+            result["hint"] = "read one with ha_get_automation(config_id); runs and errors: ha_list_traces"
+        elif everything:
+            result["hint"] = (f"none of the {len(everything)} automations matches '{query}'; call again without "
+                              "query to see all names")
+        else:
+            result["hint"] = "there are no automations yet; create one with ha_save_automation"
+        return result
 
     @tool()
     async def ha_get_state(entity_id: str) -> dict:
@@ -763,6 +818,25 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
     async def ha_list_thread_networks() -> list[dict]:
         """Thread networks known to Home Assistant (name, channel, preferred, source). No network keys or IDs."""
         return await ecosystem.thread_networks()
+
+    @tool()
+    async def ha_get_matter_info() -> dict:
+        """Matter in Home Assistant: is it set up, can the Matter server pair new devices (Bluetooth, Thread
+        credentials) with plain advice, and the Matter devices with room, network (thread/wifi), availability and
+        other apps they are also paired with. No addresses or network keys. Read this before ha_matter_commission.
+        Read only."""
+        return await matter.info()
+
+    @tool()
+    async def ha_matter_commission(code: dict | str, network_only: bool = True) -> dict:
+        """Pair (commission) a Matter device. code = ONLY a credential reference {"$credential": "<alias>",
+        "field": "<field>"} from ha_list_credentials holding the 11/21-digit pairing code or the MT:... QR text
+        (never the code itself; ask the user to save it under 'Credentials'). network_only=true (default): the device
+        is already on the network (shared from another Matter app or a Wi-Fi/Thread device already joined);
+        false = new device over Bluetooth, refused up front when the Matter server has no Bluetooth. Takes up to
+        5 minutes. Returns the new devices; failures return Home Assistant's reason and next steps. Admin write
+        required."""
+        return await matter.commission(code, network_only)
 
     @tool()
     async def ha_get_weather_forecast(entity_id: str = "", type: str = "daily", limit: int = 10,
@@ -1244,6 +1318,79 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         fields = list(changes) if isinstance(changes, dict) else None
         return await journaled("ha_update_device", "device", device_id,
                                lambda: registry.update_device(device_id, changes), fields=fields)
+
+    @tool()
+    async def ha_list_notification_targets() -> dict:
+        """Who can get a message: persons with their phones (Home Assistant app, notify.mobile_app_...), other
+        notify services (e.g. notify.persistent_notification = a notification inside Home Assistant) and notify
+        entities. Read only; send with ha_send_notification."""
+        return await notify.targets()
+
+    @tool()
+    async def ha_send_notification(target: str, message: str, title: str = "", data: dict | None = None) -> dict:
+        """Send a (test) message, e.g. 'send me a test message' or 'schick Anna eine Nachricht aufs Handy'.
+        target = a person's name (all phones of that person with the Home Assistant app), a notify service such
+        as notify.mobile_app_alex_phone or notify.persistent_notification, or a notify entity. Optional title;
+        data = app options such as {"url": "/lovelace/0"} (cannot change the target). Needs control writes and the
+        domain 'notify' allowed. HA only confirms it accepted the message, not that the phone showed it."""
+        return await notify.send(target, message, title, data)
+
+    @tool()
+    async def ha_list_users(include_system: bool = False) -> dict:
+        """Home Assistant users (people who can log in, plus users without login): name, username, admin, owner,
+        active, local_only (only from the home network), can_log_in; this_mcp marks the user of this MCP's token.
+        Never shows passwords. Needs an admin token. Read only."""
+        return await users.list_users(include_system)
+
+    @tool()
+    async def ha_create_user(name: str, username: str = "", password: dict | str | None = None, admin: bool = False,
+                             local_only: bool = False) -> dict:
+        """Create a Home Assistant user, e.g. for a wall tablet or a car browser. With a login: username (lowercase)
+        plus password ONLY as credential reference {"$credential": "<alias>", "field": "password"} from
+        ha_list_credentials (never the password itself; if no alias exists, ask the user to save one under
+        'Credentials'). Without username and password the user has no login. admin=false (default) = normal user;
+        local_only=true = may log in only from the home network. Journaled (undo removes the user).
+        Admin write required."""
+        return await journaled("ha_create_user", "user", None,
+                               lambda: users.create_user(name, username, password, admin, local_only),
+                               target_from=lambda r: r["user"]["user_id"])
+
+    @tool()
+    async def ha_update_user(user: str, changes: dict) -> dict:
+        """Change a user (user = name, username or user_id from ha_list_users). changes may contain: name,
+        active (false = deactivate: cannot log in any more, true = allow again), admin (true/false), local_only.
+        Passwords are never changed here. The owner and this MCP's own user cannot be locked out. Journaled.
+        Admin write required."""
+        fields = list(changes) if isinstance(changes, dict) else None
+        return await journaled("ha_update_user", "user", (await users.find(user))["id"],
+                               lambda: users.update_user(user, changes), fields=fields)
+
+    @tool()
+    async def ha_delete_user(user: str) -> dict:
+        """Delete a user and its login (user = name, username or user_id from ha_list_users). Not the owner,
+        not this MCP's own user, not system users. Undo recreates the user WITHOUT login (passwords cannot be
+        restored); to only block a login use ha_update_user with active=false instead. Admin write and delete
+        required."""
+        return await journaled("ha_delete_user", "user", (await users.find(user))["id"],
+                               lambda: users.delete_user(user))
+
+    @tool()
+    async def ha_rename_device(device: str, new_name: str, rename_entity_ids: bool = True,
+                               update_references: bool = True, dry_run: bool = False) -> dict:
+        """Rename a device in ONE step (e.g. 'rename the plug Kaffeemaschine to Espresso'): device = device_id or the
+        device's current name. Sets the device name, renames its entity IDs that start with the old name
+        (switch.kaffeemaschine -> switch.espresso; others are kept and listed), entity names that start with the
+        old name, and updates every automation, script, scene and dashboard that used the old IDs.
+        rename_entity_ids=false / update_references=false limit it to the name. dry_run=true only shows the plan.
+        A taken new ID stops before any change. Every step is journaled (undo newest first). Admin write
+        required."""
+        plan = await renamer.plan(device, new_name, rename_entity_ids, update_references)
+        if dry_run:
+            return {**plan, "next": "nothing changed yet; call again with dry_run=false to rename"}
+
+        async def step(kind, target, writer, **options):
+            return await journaled("ha_rename_device", kind, target, writer, **options)
+        return await renamer.run(plan, step)
 
     @tool()
     async def ha_list_backups() -> dict:

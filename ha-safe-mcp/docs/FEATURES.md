@@ -42,6 +42,8 @@ are in the [user guide](USER_GUIDE.md).
 - [20. Voice assistants (Assist)](#20-voice-assistants-assist)
 - [21. Change journal and undo](#21-change-journal-and-undo)
 - [22. Direct REST access (advanced)](#22-direct-rest-access-advanced)
+- [23. Notifications: a message to a phone](#23-notifications-a-message-to-a-phone)
+- [24. Users](#24-users)
 
 ## How to read this guide: levels, approval cards, undo
 
@@ -197,6 +199,7 @@ them with the states stored in the scene, so the answer names what really happen
 
 | Tool | What it does | Level |
 |---|---|---|
+| `ha_list_automations` | All automations with name, `config_id`, on/off and last run (in Home Assistant's time zone); `query` filters by words. The answer to "which automations are there?". | Read |
 | `ha_validate_automation` | Lets Home Assistant check triggers, conditions and actions without saving. | Read |
 | `ha_get_automation` | Reads an automation's configuration. | Read |
 | `ha_save_automation` | Validates, creates or updates an automation and reads it back. The config from `ha_get_automation` can be saved back unchanged (its own `id` is dropped, a different one refused). Journaled. | Configure |
@@ -281,8 +284,15 @@ template flow with `ha_start_integration_setup` and fills in the form step by st
 | `ha_remove_entity` | Removes one such orphaned entity. Entities that are still provided are refused (HA would add them again; disable them instead). Cannot be undone. | Delete |
 | `ha_update_entity_registry` | Changes an entity's name, icon, room, labels, categories, voice-assistant aliases, hidden/disabled, and for sensors the decimals and the display unit (e.g. tyre pressure in bar instead of psi; Home Assistant converts, a unit that does not fit is refused with the list of possible ones). An empty name shows only the device name (when device and entity carry the same name). Journaled. | Configure |
 | `ha_rename_entity` | Changes an entity ID (`light.x` → `light.y`); HA keeps the history. Lists the automations, scripts and dashboards that still use the old ID. Journaled. | Configure |
+| `ha_rename_device` | Renames a device in one step: the device name, its entity IDs that start with the old name (`switch.kaffeemaschine` → `switch.espresso`; others stay and are listed), entity names that start with the old name, and every automation, script, scene and dashboard that used the old IDs. `dry_run` shows the plan first; a taken new ID stops before any change. Every step is journaled (undo newest first). | Configure |
 
 **Example**: *"Move the Arbeitslicht to the Küche and give it the alias 'Kitchen light'."*
+
+**Example (renaming a device)**: *"Rename the Kaffeemaschine plug to Espresso."* → `ha_rename_device` with
+`{"device": "Kaffeemaschine", "new_name": "Espresso"}` → device name, `switch.kaffeemaschine` →
+`switch.espresso`, `sensor.kaffeemaschine_power` → `sensor.espresso_power`, and the automation and dashboard
+that switched the old ID now use the new one. YAML files and template sensors are not edited; the answer says
+so and lists every `change_id`.
 
 **Example (removing)**: *"Remove the old Outlet 3."* → the model shows the preview (`ha_get_device_removal`):
 one switch entity, not used anywhere, the integration supports removal. After your approval it is gone. If an
@@ -522,8 +532,14 @@ addresses, host names or network keys are returned.
 | `ha_list_hacs_repositories` | What is installed through HACS or the Marketplace, with installed and available version; for the Marketplace also whether its notice is accepted. | Read |
 | `ha_list_zigbee_devices` | Zigbee devices with availability, signal quality and last contact; `problems_only` shows only unavailable or weak ones. | Read |
 | `ha_list_thread_networks` | Thread networks (name, channel, preferred). | Read |
+| `ha_get_matter_info` | Matter: is it set up, can the Matter server pair new devices (Bluetooth, Thread credentials) with plain advice, and the Matter devices with room, network (Thread/Wi-Fi), availability and the other apps they are also paired with. No addresses, fabric IDs or network names. | Read |
+| `ha_matter_commission` | Pairs (commissions) a Matter device. The pairing code only as credential reference, never as text; `network_only` (default) for a device already on the network or shared from another Matter app. Bluetooth pairing is refused up front when the Matter server has no Bluetooth. Returns the new devices or Home Assistant's reason with next steps; the code is removed from every answer. | Configure |
 
 **Example**: *"Which Zigbee devices have poor reception or are offline?"*
+
+**Example (Matter)**: *"Pair the new Matter plug, the code is saved as 'plug_code'."* → the model reads
+`ha_get_matter_info` first. On a Matter server without Bluetooth it explains that a new device must be paired
+with the Companion app (or shared from another Matter app) instead of trying a pairing that cannot work.
 
 **Community store (HACS or Marketplace): install cards, custom integrations and themes.** HACS is the community
 store for Home Assistant. Up to version 2026.10 it is installed separately; from 2026.11 it is built in as the
@@ -633,8 +649,8 @@ days. The *Changes* page lists them with an *Undo* button; the model can do the 
 | `ha_get_change` | One change with the stored previous state (passwords in files stay masked). | Read |
 | `ha_undo_change` | Writes the previous state back (removes what was created, recreates what was deleted). The undo is journaled too and can itself be undone; with newer changes to the same item it refuses unless you insist. | Configure (Delete when it removes something) |
 
-Not journaled: switching devices and firing events, calendar and to-do items, removing an integration, devices or
-orphaned entities, options dialogs, updates, restarts and backups. A newly set-up integration is journaled (undo removes it).
+Not journaled: switching devices and firing events, sending notifications, calendar and to-do items, removing an
+integration, devices or orphaned entities, pairing a Matter device, options dialogs, updates, restarts and backups. A newly set-up integration is journaled (undo removes it).
 
 ![Change journal](images/en/09-changes.png)
 
@@ -651,3 +667,36 @@ allowed, each with its permission class.
 | `ha_rest_delete` | Calls a documented delete route. | Delete |
 
 Prefer the dedicated tools above: they validate input, read results back and keep the change journal.
+
+## 23. Notifications: a message to a phone
+
+| Tool | What it does | Level |
+|---|---|---|
+| `ha_list_notification_targets` | Who can get a message: persons with their phones (Home Assistant app), other notify services (e.g. `notify.persistent_notification`, a notification inside Home Assistant) and notify entities. | Read |
+| `ha_send_notification` | Sends a message: to a person by name (all of their phones with the Home Assistant app), to a notify service or a notify entity; optional title and app options (`data`, e.g. a link to open). The target is fixed by the tool, `data` cannot redirect it. Needs the domain `notify` in the allowed domains. | Control |
+
+How a person's phone is found: person → its device trackers → the tracker that comes from the Home Assistant app →
+that phone's notify service. A person without the app gets a clear answer naming who has a phone. Home Assistant
+only confirms that it **accepted** the message, not that the phone showed it; the answer says so.
+
+**Example**: *"Send me a test message to my phone."* → `ha_send_notification` with
+`{"target": "Alex", "title": "Test", "message": "Test from Home Assistant"}` → `{"sent_to":
+["notify.mobile_app_alex_phone"], "person": "Alex", "note": "... ask the user to look at the phone."}`
+
+## 24. Users
+
+Users are the accounts that can log in to Home Assistant (Settings > People > Users), e.g. one for a wall tablet or
+a car browser. Passwords never pass through the model: a login password is accepted only as a reference to a saved
+credential (*Credentials* page), and no tool reads or changes an existing password.
+
+| Tool | What it does | Level |
+|---|---|---|
+| `ha_list_users` | Users with name, username, admin, owner, active, local only and whether they can log in; `this_mcp` marks the user of the MCP's own token. System users (Supervisor, add-ons) only on request. Needs an admin token. | Read |
+| `ha_create_user` | Creates a user. With a login: `username` plus `password` as `{"$credential": "<alias>", "field": "password"}`; without both the user has no login. `admin` (default no) and `local_only` (log in only from the home network). Journaled: undo removes the user. | Configure |
+| `ha_update_user` | Renames a user, deactivates or re-activates them (`active`), gives or takes admin rights, sets `local_only`. The owner and the MCP's own user cannot be locked out. Journaled. | Configure |
+| `ha_delete_user` | Deletes a user and their login (not the owner, not the MCP's own user, not system users). Undo recreates the user **without** login, because a password cannot be restored; to only block a login, deactivate instead. | Delete |
+
+**Example**: *"Create a user 'Wall tablet' that may only log in from home; the password is saved as
+'tablet_login'."* → `ha_create_user` with `{"name": "Wall tablet", "username": "wall_tablet", "password":
+{"$credential": "tablet_login", "field": "password"}, "local_only": true}` → the answer shows the new user with
+`can_log_in: true`; the password itself appears nowhere.

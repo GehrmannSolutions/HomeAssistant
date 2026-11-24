@@ -37,7 +37,9 @@ READ_TOOLS = frozenset({"ha_search_entities", "ha_get_state", "ha_list_services"
                         "ha_get_energy_config", "ha_find_energy_sensors", "ha_get_energy_usage",
                         "ha_get_solar_forecast", "ha_get_device_removal", "ha_list_orphaned_entities",
                         "ha_list_assist_pipelines", "ha_list_exposed_entities", "ha_test_assist_sentences",
-                        "ha_search_hacs", "ha_get_hacs_repository"})
+                        "ha_search_hacs", "ha_get_hacs_repository", "ha_list_users",
+                        "ha_list_notification_targets", "ha_get_matter_info",
+                        "ha_list_automations"})
 WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "ha_save_automation",
                          "ha_delete_automation", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard",
                          "ha_delete_dashboard", "ha_create_helper", "ha_update_helper", "ha_delete_helper",
@@ -62,9 +64,12 @@ WRITE_TOOLS = frozenset({"ha_call_service", "ha_rest_write", "ha_rest_delete", "
                          "ha_remove_entity", "ha_save_assist_pipeline", "ha_set_preferred_assist_pipeline",
                          "ha_delete_assist_pipeline", "ha_set_exposure", "ha_set_expose_new_entities",
                          "ha_install_hacs_repository", "ha_remove_hacs_repository", "ha_add_hacs_custom_repository",
-                         "ha_set_section_collapsible", "ha_test_url_from_ha"})
+                         "ha_set_section_collapsible", "ha_test_url_from_ha", "ha_create_user", "ha_update_user",
+                         "ha_delete_user", "ha_send_notification", "ha_matter_commission",
+                         "ha_rename_device"})
 CONTROL_TOOLS = frozenset({"ha_call_service", "ha_activate_scene", "ha_run_script", "ha_create_calendar_event",
-                           "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item"})
+                           "ha_update_calendar_event", "ha_add_todo_item", "ha_update_todo_item",
+                           "ha_send_notification"})
 DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_dashboard", "ha_delete_helper",
                           "ha_delete_integration", "ha_delete_backup", "ha_restore_backup", "ha_delete_area", "ha_delete_floor",
                           "ha_delete_scene", "ha_delete_script", "ha_delete_label", "ha_delete_category",
@@ -72,6 +77,7 @@ DELETE_TOOLS = frozenset({"ha_rest_delete", "ha_delete_automation", "ha_delete_d
                           "ha_install_update", "ha_restart", "ha_delete_blueprint", "ha_delete_dashboard_resource",
                           "ha_delete_config_file", "ha_remove_energy_device", "ha_remove_device",
                           "ha_remove_entity", "ha_delete_assist_pipeline", "ha_remove_hacs_repository",
+                          "ha_delete_user",
                           # an undo may remove what a change created, so it never runs without a card unless
                           # deletes may run without one
                           "ha_undo_change"})
@@ -149,6 +155,8 @@ EventSink = Callable[[dict], object]
 
 TOOL_TOPICS = (
     (r"automat|automatis|trigger|ausl[oö]s|fires?\b", {"ha_validate_automation", "ha_get_automation", "ha_save_automation", "ha_delete_automation"}),
+    (r"automationen|automations\b|welche automation|which automation|alle automation|all automation",
+     {"ha_list_automations", "ha_get_automation"}),
     (r"dashboard|lovelace|ansicht|karte|\bcards?\b|\bviews?\b", {"ha_list_dashboards", "ha_get_dashboard", "ha_create_dashboard", "ha_save_dashboard", "ha_update_dashboard", "ha_delete_dashboard"}),
     (r"klapp|collaps|expand|abschnitt|section|eingeklappt|ausgeklappt",
      {"ha_list_dashboards", "ha_get_dashboard", "ha_set_section_collapsible", "ha_list_dashboard_resources"}),
@@ -205,7 +213,14 @@ TOOL_TOPICS = (
      {"ha_list_addons", "ha_get_system_info"}),
     (r"hacs|marketplace|marktplatz|custom (?:integration|card|component)", {"ha_list_hacs_repositories"}),
     (r"zigbee|\bzha\b|funk|empfang|signal|lqi|rssi|mesh|reception|offline", {"ha_list_zigbee_devices"}),
-    (r"thread|matter|border.?router", {"ha_list_thread_networks"}),
+    (r"thread|matter|border.?router|koppl|\bpair|commission|einlern|anlern",
+     {"ha_list_thread_networks", "ha_get_matter_info", "ha_matter_commission", "ha_list_credentials"}),
+    (r"nachricht|benachrichtig|\bpush|notif|mitteilung|aufs handy|\bhandy|smartphone|\bphone|\bmessage",
+     {"ha_send_notification", "ha_list_notification_targets"}),
+    (r"benutzer|\bnutzer|\busers?\b|anmeld|login|log in|sign in|konto|account|passwort|password",
+     {"ha_list_users", "ha_create_user", "ha_update_user", "ha_delete_user", "ha_list_credentials"}),
+    (r"umbenenn|benenn|renam|neuer name|new name|anders nennen|call it",
+     {"ha_rename_device", "ha_list_devices", "ha_rename_entity", "ha_find_usages"}),
     (r"\bevent|ereignis|feuer|signal senden|send (?:a )?signal", {"ha_fire_event", "ha_get_automation", "ha_search_entities"}),
     (r"wetter|vorhersage|regen|schnee|sonnig|bew[öo]lkt|gewitter|forecast|\bwind|weather|\brain|snow|sunny|cloudy|"
      r"storm|temperature outside",

@@ -42,6 +42,8 @@ in der [Bedienungsanleitung](USER_GUIDE.de.md).
 - [20. Sprachassistenten (Assist)](#20-sprachassistenten-assist)
 - [21. Änderungsjournal und Rückgängig](#21-änderungsjournal-und-rückgängig)
 - [22. Direkter REST-Zugriff (für Fortgeschrittene)](#22-direkter-rest-zugriff-für-fortgeschrittene)
+- [23. Benachrichtigungen: eine Nachricht aufs Handy](#23-benachrichtigungen-eine-nachricht-aufs-handy)
+- [24. Benutzer](#24-benutzer)
 
 ## So liest du diese Anleitung: Stufen, Freigabekarten, Rückgängig
 
@@ -201,6 +203,7 @@ vergleicht sie mit den in der Szene gespeicherten Zuständen. So nennt die Antwo
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
 | `ha_validate_automation` | Lässt Home Assistant Auslöser, Bedingungen und Aktionen prüfen, ohne zu speichern. | Lesen |
+| `ha_list_automations` | Alle Automationen mit Name, `config_id`, an/aus und letztem Lauf (in der Zeitzone von Home Assistant); `query` filtert nach Wörtern. Die Antwort auf "Welche Automationen gibt es?". | Lesen |
 | `ha_get_automation` | Liest die Konfiguration einer Automation. | Lesen |
 | `ha_save_automation` | Prüft, erstellt oder aktualisiert eine Automation und liest sie zurück. Die Konfiguration aus `ha_get_automation` lässt sich unverändert zurückspeichern (die eigene `id` fällt weg, eine andere wird abgelehnt). Im Änderungsjournal. | Konfigurieren |
 | `ha_delete_automation` | Löscht eine Automation. Im Änderungsjournal: Rückgängig legt sie neu an. | Löschen |
@@ -285,8 +288,15 @@ einer eigenen Karte.
 | `ha_remove_entity` | Entfernt eine solche verwaiste Entität. Noch bereitgestellte werden abgelehnt (HA würde sie wieder anlegen; deaktiviere sie stattdessen). Nicht rückgängig zu machen. | Löschen |
 | `ha_update_entity_registry` | Ändert Name, Symbol, Bereich, Labels, Kategorien, Aliase für Sprachassistenten und ausgeblendet/deaktiviert einer Entität, bei Sensoren auch Nachkommastellen und Anzeige-Einheit (z. B. Reifendruck in bar statt psi; Home Assistant rechnet um, eine unpassende Einheit wird mit der Liste der möglichen abgelehnt). Ein leerer Name zeigt nur den Gerätenamen (wenn Gerät und Entität gleich heißen). Im Änderungsjournal. | Konfigurieren |
 | `ha_rename_entity` | Ändert eine Entitäts-ID (`light.x` → `light.y`); HA behält den Verlauf. Listet die Automationen, Skripte und Dashboards auf, die noch die alte ID verwenden. Im Änderungsjournal. | Konfigurieren |
+| `ha_rename_device` | Benennt ein Gerät in einem Schritt um: den Gerätenamen, seine Entitäts-IDs, die mit dem alten Namen beginnen (`switch.kaffeemaschine` → `switch.espresso`; andere bleiben und werden aufgelistet), Entitätsnamen, die mit dem alten Namen beginnen, und jede Automation, jedes Skript, jede Szene und jedes Dashboard, das die alten IDs verwendet hat. `dry_run` zeigt erst den Plan; eine schon vergebene neue ID stoppt vor jeder Änderung. Jeder Schritt steht im Änderungsjournal (Rückgängig von neu nach alt). | Konfigurieren |
 
 **Beispiel**: *"Verschiebe das Arbeitslicht in die Küche und gib ihm den Alias 'Küchenlicht'."*
+
+**Beispiel (Gerät umbenennen)**: *"Benenne die Steckdose Kaffeemaschine in Espresso um."* →
+`ha_rename_device` mit `{"device": "Kaffeemaschine", "new_name": "Espresso"}` → Gerätename,
+`switch.kaffeemaschine` → `switch.espresso`, `sensor.kaffeemaschine_power` → `sensor.espresso_power`, und die
+Automation und das Dashboard, die die alte ID geschaltet haben, nutzen jetzt die neue. YAML-Dateien und
+Template-Sensoren werden nicht bearbeitet; die Antwort sagt das und listet jede `change_id` auf.
 
 **Beispiel (Entfernen)**: *„Entferne die alte Outlet 3.“* → Das Modell zeigt die Vorschau (`ha_get_device_removal`):
 eine Schalter-Entität, nirgends verwendet, die Integration unterstützt das Entfernen. Nach deiner Freigabe ist sie
@@ -532,8 +542,15 @@ Es werden keine Geräteadressen, IP-Adressen, Hostnamen oder Netzwerkschlüssel 
 | `ha_list_hacs_repositories` | Was über HACS oder den Marketplace installiert ist, mit installierter und verfügbarer Version; beim Marketplace auch, ob sein Hinweis bestätigt ist. | Lesen |
 | `ha_list_zigbee_devices` | Zigbee-Geräte mit Verfügbarkeit, Signalqualität und letztem Kontakt; `problems_only` zeigt nur nicht verfügbare oder schwache Geräte. | Lesen |
 | `ha_list_thread_networks` | Thread-Netzwerke (Name, Kanal, bevorzugt). | Lesen |
+| `ha_get_matter_info` | Matter: ist es eingerichtet, kann der Matter-Server neue Geräte koppeln (Bluetooth, Thread-Zugangsdaten) mit einfachem Rat, und die Matter-Geräte mit Raum, Netz (Thread/WLAN), Erreichbarkeit und den anderen Apps, mit denen sie auch gekoppelt sind. Keine Adressen, Fabric-IDs oder Netzwerknamen. | Lesen |
+| `ha_matter_commission` | Koppelt (kommissioniert) ein Matter-Gerät. Den Kopplungscode nur als Verweis auf ein Zugangsdatum, nie als Text; `network_only` (Standard) für ein Gerät, das schon im Netz ist oder aus einer anderen Matter-App geteilt wurde. Koppeln über Bluetooth wird vorab abgelehnt, wenn der Matter-Server kein Bluetooth hat. Liefert die neuen Geräte oder den Grund von Home Assistant mit nächsten Schritten; der Code wird aus jeder Antwort entfernt. | Konfigurieren |
 
 **Beispiel**: *"Welche Zigbee-Geräte haben schlechten Empfang oder sind offline?"*
+
+**Beispiel (Matter)**: *"Kopple die neue Matter-Steckdose, der Code ist als 'steckdose_code' gespeichert."* →
+das Modell liest zuerst `ha_get_matter_info`. Hat der Matter-Server kein Bluetooth, erklärt es, dass ein neues
+Gerät mit der Companion-App gekoppelt (oder aus einer anderen Matter-App geteilt) werden muss, statt eine
+Kopplung zu versuchen, die nicht klappen kann.
 
 **Community-Store (HACS oder Marketplace): Karten, eigene Integrationen und Themes installieren.** HACS ist der
 Community-Store für Home Assistant. Bis Version 2026.10 wird er extra installiert, ab 2026.11 ist er als
@@ -648,8 +665,8 @@ gespeichert. Die Seite *Änderungen* listet sie mit einer Schaltfläche *Rückg�
 | `ha_get_change` | Eine Änderung mit dem gespeicherten vorherigen Zustand (Passwörter in Dateien bleiben maskiert). | Lesen |
 | `ha_undo_change` | Schreibt den vorherigen Zustand zurück (entfernt, was neu angelegt wurde, und legt neu an, was gelöscht wurde). Auch das Rückgängigmachen kommt ins Änderungsjournal und lässt sich selbst wieder rückgängig machen; gibt es neuere Änderungen am selben Element, lehnt es ab, außer du bestehst darauf. | Konfigurieren (Löschen, wenn dabei etwas entfernt wird) |
 
-Nicht im Änderungsjournal: Geräte schalten und Ereignisse auslösen, Kalender- und To-do-Einträge, das Entfernen
-einer Integration, von Geräten oder verwaisten Entitäten, Options-Dialoge, Updates, Neustarts und Backups. Eine neu eingerichtete Integration kommt ins
+Nicht im Änderungsjournal: Geräte schalten und Ereignisse auslösen, Nachrichten senden, Kalender- und To-do-Einträge,
+das Entfernen einer Integration, von Geräten oder verwaisten Entitäten, das Koppeln eines Matter-Geräts, Options-Dialoge, Updates, Neustarts und Backups. Eine neu eingerichtete Integration kommt ins
 Änderungsjournal (Rückgängig entfernt sie).
 
 ![Änderungsjournal](images/de/09-changes.png)
@@ -668,3 +685,38 @@ Home Assistant, jede mit ihrer Berechtigungsklasse.
 
 Nimm lieber die eigenen Werkzeuge weiter oben: Sie prüfen die Eingaben, lesen die Ergebnisse zurück und führen das
 Änderungsjournal.
+
+## 23. Benachrichtigungen: eine Nachricht aufs Handy
+
+| Werkzeug | Was es tut | Stufe |
+|---|---|---|
+| `ha_list_notification_targets` | Wer eine Nachricht bekommen kann: Personen mit ihren Handys (Home-Assistant-App), andere Benachrichtigungsdienste (z. B. `notify.persistent_notification`, eine Mitteilung in Home Assistant selbst) und Benachrichtigungs-Entitäten. | Lesen |
+| `ha_send_notification` | Schickt eine Nachricht: an eine Person über ihren Namen (alle ihre Handys mit der Home-Assistant-App), an einen Benachrichtigungsdienst oder eine Benachrichtigungs-Entität; optional Titel und App-Optionen (`data`, z. B. ein Link zum Öffnen). Das Ziel legt das Werkzeug fest, `data` kann es nicht umleiten. Braucht die Domäne `notify` in den erlaubten Domänen. | Steuern |
+
+So wird das Handy einer Person gefunden: Person → ihre Geräte-Tracker → der Tracker aus der Home-Assistant-App →
+der Benachrichtigungsdienst dieses Handys. Eine Person ohne App bekommt eine klare Antwort, wer ein Handy hat. Home
+Assistant bestätigt nur, dass es die Nachricht **angenommen** hat, nicht dass das Handy sie angezeigt hat; das steht
+auch in der Antwort.
+
+**Beispiel**: *"Schick mir eine Testnachricht aufs Handy."* → `ha_send_notification` mit
+`{"target": "Alex", "title": "Test", "message": "Test aus Home Assistant"}` → `{"sent_to":
+["notify.mobile_app_alex_phone"], "person": "Alex", "note": "... ask the user to look at the phone."}`
+
+## 24. Benutzer
+
+Benutzer sind die Konten, die sich bei Home Assistant anmelden können (Einstellungen > Personen > Benutzer), z. B.
+eines für ein Wandtablet oder den Browser im Auto. Passwörter laufen nie über das Modell: Ein Anmeldepasswort wird nur
+als Verweis auf ein gespeichertes Zugangsdatum (Seite *Zugangsdaten*) angenommen, und kein Werkzeug liest oder ändert
+ein vorhandenes Passwort.
+
+| Werkzeug | Was es tut | Stufe |
+|---|---|---|
+| `ha_list_users` | Benutzer mit Name, Benutzername, Admin, Besitzer, aktiv, nur lokal und ob sie sich anmelden können; `this_mcp` markiert den Benutzer des eigenen Tokens. Systembenutzer (Supervisor, Add-ons) nur auf Wunsch. Braucht ein Admin-Token. | Lesen |
+| `ha_create_user` | Legt einen Benutzer an. Mit Anmeldung: `username` und `password` als `{"$credential": "<alias>", "field": "password"}`; ohne beides hat der Benutzer keine Anmeldung. `admin` (Standard nein) und `local_only` (Anmeldung nur aus dem Heimnetz). Im Änderungsjournal: Rückgängig entfernt den Benutzer. | Konfigurieren |
+| `ha_update_user` | Benennt einen Benutzer um, deaktiviert oder aktiviert ihn (`active`), gibt oder nimmt Admin-Rechte, setzt `local_only`. Der Besitzer und der Benutzer des MCP können nicht ausgesperrt werden. Im Änderungsjournal. | Konfigurieren |
+| `ha_delete_user` | Löscht einen Benutzer samt Anmeldung (nicht den Besitzer, nicht den Benutzer des MCP, keine Systembenutzer). Rückgängig legt ihn **ohne** Anmeldung neu an, weil sich ein Passwort nicht wiederherstellen lässt; wer nur die Anmeldung sperren will, deaktiviert stattdessen. | Löschen |
+
+**Beispiel**: *"Leg einen Benutzer 'Wandtablet' an, der sich nur von zu Hause anmelden darf; das Passwort ist als
+'tablet_login' gespeichert."* → `ha_create_user` mit `{"name": "Wandtablet", "username": "wandtablet", "password":
+{"$credential": "tablet_login", "field": "password"}, "local_only": true}` → die Antwort zeigt den neuen Benutzer mit
+`can_log_in: true`; das Passwort selbst steht nirgends.

@@ -34,6 +34,7 @@ Der Einrichtungsassistent der Oberfläche testet deine Home-Assistant-Adresse un
 - Getrennte Schalter für Steuerung, administrative Änderungen und Löschen; in CLI und Oberfläche standardmäßig eine Bestätigung pro Aufruf. Andere MCP-Clients müssen ihre eigene menschliche Freigabe umsetzen.
 - Entfernter MCP-Endpunkt `/mcp` (Streamable HTTP) für Claude Code, Codex, ChatGPT, Claude und andere Clients: Bearer-Token oder OAuth-2.1-Anmeldung (Zustimmungsseite hinter deinem UI-Login), eine Berechtigungsstufe pro Client, begrenzt durch die Schalter der Instanz.
 - Tiefensuche („Wo wird diese Entität verwendet?“) und eine Systemübersicht.
+- Alltagswerkzeuge, die auch kleine Modelle mit einem Aufruf bedienen: ein Gerät samt Entitäts-IDs und allen Verweisen umbenennen, eine Testnachricht aufs Handy einer Person schicken, Automationen auflisten, Benutzer verwalten (Passwörter nur als Verweis auf Zugangsdaten), die Kopplungsfähigkeit von Matter lesen und ein Matter-Gerät mit einem gespeicherten Code koppeln.
 - Aktionen werden zurückgelesen: Die Antwort sagt, ob jedes Gerät den gewünschten Zustand wirklich erreicht hat; Dienst-Antworten
   und eigene Ereignisse (Custom Events).
 - Wettervorhersage (täglich, stündlich) aus den Wetter-Entitäten von Home Assistant.

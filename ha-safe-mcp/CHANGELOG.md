@@ -3,6 +3,43 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.37.0 – 2026-11-24
+
+Werkzeuge aus dem Alltag, die bisher Handarbeit oder ein eigenes Skript brauchten, und zwei Hilfen für kleine
+lokale Modelle. Jede leere oder abgelehnte Antwort nennt den nächsten Schritt.
+
+- **Gerät in einem Schritt umbenennen:** `ha_rename_device` setzt den Gerätenamen, benennt die Entitäts-IDs um, die
+  mit dem alten Namen beginnen (`switch.kaffeemaschine` -> `switch.espresso`; andere bleiben und werden genannt),
+  passt Entitätsnamen an, die mit dem alten Namen beginnen, und ändert jede Automation, jedes Skript, jede Szene und
+  jedes Dashboard, das die alten IDs verwendet hat (nur ganze IDs, `sensor.x_total` bleibt bei `sensor.x`).
+  `dry_run=true` zeigt zuerst den Plan; ist eine neue ID schon vergeben, passiert gar nichts. Jeder Schritt steht
+  einzeln im Änderungsjournal (Rückgängig von neu nach alt). YAML-Dateien und Template-Sensoren werden nicht
+  bearbeitet; die Antwort sagt das. Stufe Konfigurieren.
+- **Testnachricht aufs Handy:** `ha_send_notification` schickt eine Nachricht an eine Person (alle ihre Handys mit
+  der Home-Assistant-App), an einen Benachrichtigungsdienst oder eine Benachrichtigungs-Entität;
+  `ha_list_notification_targets` zeigt, wer erreichbar ist. Das Handy einer Person wird über ihre Geräte-Tracker
+  gefunden. Stufe Steuern, braucht die Domäne `notify`; `data` kann das Ziel nicht umleiten. Die Antwort sagt
+  ehrlich, dass Home Assistant nur die Annahme bestätigt.
+- **Benutzer:** `ha_list_users`, `ha_create_user`, `ha_update_user` (umbenennen, deaktivieren, Admin, nur lokal)
+  und `ha_delete_user`. Ein Anmeldepasswort nur als Verweis auf ein Zugangsdatum; kein Werkzeug liest oder ändert ein
+  vorhandenes Passwort. Besitzer, Systembenutzer und der Benutzer des eigenen Tokens können nicht ausgesperrt
+  werden. Anlegen und Ändern stehen im Änderungsjournal; Rückgängig nach dem Löschen legt den Benutzer ohne
+  Anmeldung neu an (ein Passwort lässt sich nicht wiederherstellen).
+- **Matter:** `ha_get_matter_info` sagt, ob Matter eingerichtet ist, ob der Matter-Server neue Geräte koppeln kann
+  (Bluetooth, Thread-Zugangsdaten) mit einfachem Rat, und listet die Matter-Geräte mit Raum, Netz, Erreichbarkeit
+  und den anderen Apps, mit denen sie gekoppelt sind (ohne Adressen und Fabric-IDs). `ha_matter_commission` koppelt
+  ein Gerät; den Kopplungscode nimmt es nur als Verweis auf ein Zugangsdatum, eine Kopplung über Bluetooth lehnt es
+  vorab ab, wenn der Matter-Server kein Bluetooth hat, und bei einem Fehler kommt der Grund von Home Assistant mit
+  nächsten Schritten (der Code wird überall entfernt). Bisher ging das nur per Skript.
+- **Automationen auflisten:** `ha_list_automations` beantwortet "Welche Automationen gibt es?" mit Name,
+  `config_id`, an/aus und letztem Lauf in der Zeitzone von Home Assistant; `query` filtert. Ein 9B-Modell sagte
+  bisher, es habe dafür kein Werkzeug.
+- **Unbekannte Argumente werden abgelehnt:** Ein Aufruf mit einem Argumentnamen, den das Werkzeug nicht hat, liefert
+  jetzt `unknown argument 'dashboard_id'; valid: url_path`, statt das Argument still zu verwerfen und mit
+  Standardwerten etwas anderes zu lesen oder zu ändern.
+- Ein Passwort oder Kopplungscode als Text bekommt den Hinweis auf Zugangsdaten statt eines Typfehlers, der den
+  Wert zurückgespiegelt hätte. WebSocket-Fehlercodes dürfen Ziffern enthalten (Matter).
+
 ## 0.36.5 – 2026-11-24
 
 Vier Stolpersteine aus echten Chats, vor allem mit kleinen Modellen:

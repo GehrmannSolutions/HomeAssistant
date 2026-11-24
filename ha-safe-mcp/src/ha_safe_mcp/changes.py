@@ -21,7 +21,7 @@ CHANGE_ID = re.compile(r"^\d{8}T\d{12}Z-[0-9a-f]{8}$")
 STAMP = "%Y%m%dT%H%M%S%fZ"
 KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "helper", "entity", "area", "floor",
          "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource", "file", "energy",
-         "pipeline", "exposure", "hacs")
+         "pipeline", "exposure", "hacs", "user")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
 AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels", "temperature_entity_id", "humidity_entity_id")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
@@ -145,8 +145,9 @@ class Changes:
     """Journaled writes and undo over the gated admin/scenes/registry/integrations objects."""
 
     def __init__(self, journal: ChangeJournal, *, admin, scenes, registry, integrations, organizer=None,
-                 customize=None, config_files=None, energy=None, assist=None, hacs=None):
+                 customize=None, config_files=None, energy=None, assist=None, hacs=None, users=None):
         self.journal = journal
+        self.users = users
         self.energy, self.assist, self.hacs = energy, assist, hacs
         self.admin, self.scenes, self.registry, self.integrations = admin, scenes, registry, integrations
         self.organizer, self.customize, self.config_files = organizer, customize, config_files
@@ -243,6 +244,12 @@ class Changes:
             return None if item is None else {k: v for k, v in item.items() if k != "id"}
         if kind == "hacs":
             return await self.hacs.state(target)
+        if kind == "user":
+            state = await self.users.capture(target)
+            if state is None or not fields:
+                return state
+            keys = {"active": "is_active", "admin": "group_ids"}
+            return {keys.get(f, f): state[keys.get(f, f)] for f in fields if keys.get(f, f) in state}
         if kind == "exposure":
             if target.startswith("new:"):
                 return {"expose_new": await self.assist.expose_new(target[4:])}
@@ -393,6 +400,8 @@ class Changes:
             return await self.hacs.install(target, before.get("installed_version")), target
         if kind == "pipeline":
             return await self._restore_pipeline(target, before)
+        if kind == "user":
+            return await self.users.restore(target, before)
         if kind == "exposure":
             if target.startswith("new:"):
                 return await self.assist.set_expose_new(target[4:], bool(before.get("expose_new"))), target

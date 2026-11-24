@@ -41,7 +41,9 @@ READ_TYPES = frozenset({"validate_config", "lovelace/config", "lovelace/dashboar
                         "homeassistant/expose_entity/list", "homeassistant/expose_new_entities/get",
                         "conversation/agent/homeassistant/debug",
                         # HACS details (fetches the repository info from GitHub, changes nothing)
-                        "hacs/repository/info", "marketplace/repository/info"}) | frozenset(
+                        "hacs/repository/info", "marketplace/repository/info",
+                        # users (require_admin in HA) and Matter node details (no addresses leave the MCP)
+                        "config/auth/list", "matter/node_diagnostics"}) | frozenset(
                             f"{domain}/list" for domain in HELPERS)
 WRITE_TYPES = frozenset({"lovelace/config/save", "energy/save_prefs", "hacs/repository/download",
                          "hacs/repositories/add", "marketplace/repository/install", "marketplace/repositories/add",
@@ -55,7 +57,8 @@ WRITE_TYPES = frozenset({"lovelace/config/save", "energy/save_prefs", "hacs/repo
                          "config/label_registry/create", "config/label_registry/update",
                          "config/category_registry/create", "config/category_registry/update",
                          "zone/create", "zone/update", "blueprint/import", "blueprint/save",
-                         "lovelace/resources/create"}) | frozenset(
+                         "lovelace/resources/create", "config/auth/create", "config/auth/update",
+                         "config/auth_provider/homeassistant/create", "matter/commission"}) | frozenset(
                              f"{domain}/{action}" for domain in HELPERS for action in ("create", "update"))
 DELETE_TYPES = frozenset({"hacs/repository/remove", "marketplace/repository/uninstall", "assist_pipeline/pipeline/delete", "config/device_registry/remove", "config/device_registry/remove_config_entry",
                           "config/entity_registry/remove", "lovelace/config/delete", "lovelace/dashboards/delete", "backup/delete",
@@ -63,7 +66,7 @@ DELETE_TYPES = frozenset({"hacs/repository/remove", "marketplace/repository/unin
                           "config/area_registry/delete", "config/floor_registry/delete",
                           "config/entity_registry/remove", "config/label_registry/delete",
                           "config/category_registry/delete", "zone/delete", "calendar/event/delete",
-                          "blueprint/delete", "lovelace/resources/delete"}) | frozenset(
+                          "blueprint/delete", "lovelace/resources/delete", "config/auth/delete"}) | frozenset(
                               f"{domain}/delete" for domain in HELPERS)
 
 
@@ -111,9 +114,13 @@ class HAWebSocket:
         self.allow_admin_write = allow_admin_write
         self.allow_delete = allow_delete
 
-    async def command(self, command_type: str, payload: dict | None = None, *, collect_events=None):
+    async def command(self, command_type: str, payload: dict | None = None, *, collect_events=None,
+                      timeout: float = 20, error_message: bool = False):
         """Send one command. With ``collect_events`` (a callable returning True to stop), keep reading the
-        subscription's events after the result for up to 10 s and return {"result": ..., "events": [...]}."""
+        subscription's events after the result for up to 10 s and return {"result": ..., "events": [...]}.
+        ``timeout``: seconds for the whole exchange (Matter commissioning takes minutes). ``error_message``: add
+        HA's error text (one line, 300 characters, token masked) - only for commands whose message is the reason
+        (Matter); the default keeps server text out of results."""
         if command_type in CONTROL_TYPES and not self.client.allow_write:
             raise ValueError("Writes are disabled")
         if command_type == "supervisor/api" and (not isinstance(payload, dict) or (
@@ -137,7 +144,7 @@ class HAWebSocket:
         ws_url = f"{scheme}://{url.netloc}/api/websocket"
         started, error = time.monotonic(), None
         try:
-            async with asyncio.timeout(20):
+            async with asyncio.timeout(timeout):
                 async with connect(ws_url, max_size=16_000_000, open_timeout=10) as ws:
                     hello = json.loads(await ws.recv())
                     if hello.get("type") != "auth_required":
@@ -152,8 +159,12 @@ class HAWebSocket:
                         raise RuntimeError("Unexpected WebSocket response")
                     if not response.get("success"):
                         code = response.get("error", {}).get("code", "unknown")
-                        safe_code = code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,60}", code) else "unknown"
+                        safe_code = code if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,60}", code) else "unknown"
                         error = "WebSocketError"
+                        text = response.get("error", {}).get("message") if error_message else None
+                        if isinstance(text, str) and text.strip():
+                            text = " ".join(text.split()).replace(self.client.token, "***")[:300]
+                            raise RuntimeError(f"Home Assistant WebSocket error: {safe_code}: {text}")
                         raise RuntimeError(f"Home Assistant WebSocket error: {safe_code}")
                     if collect_events is None:
                         return response.get("result")

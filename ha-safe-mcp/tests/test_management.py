@@ -189,6 +189,26 @@ async def test_websocket_failure_never_leaks_token_or_server_message():
 
 
 @pytest.mark.asyncio
+async def test_websocket_error_text_only_on_request_with_numeric_codes_and_token_masked():
+    """Matter answers with numeric codes and the only useful reason in the message (e.g. a commissioning error)."""
+    async def handler(ws):
+        await ws.send(json.dumps({"type": "auth_required"}))
+        await ws.recv()
+        await ws.send(json.dumps({"type": "auth_ok"}))
+        await ws.recv()
+        await ws.send(json.dumps({"id": 1, "type": "result", "success": False, "error": {
+            "code": "1", "message": "Commission failed:\n  device not found (token secret)"}}))
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        ws = HAWebSocket(HAClient(f"http://127.0.0.1:{port}", "secret"))
+        with pytest.raises(RuntimeError) as error:
+            await ws.command("validate_config", {}, error_message=True, timeout=60)
+    assert str(error.value) == ("Home Assistant WebSocket error: 1: Commission failed: device not found "
+                                "(token ***)")
+
+
+@pytest.mark.asyncio
 async def test_websocket_rejects_arbitrary_types_and_reserved_fields():
     ws = HAWebSocket(HAClient("http://127.0.0.1:8123", "secret"))
     with pytest.raises(ValueError, match="not allowed"):

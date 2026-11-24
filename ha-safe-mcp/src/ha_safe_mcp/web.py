@@ -391,6 +391,7 @@ def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, jou
     from .scenes import HAScenes
     from .server import HAClient
     from .system import HASystem
+    from .users import HAUsers
     client = HAClient(settings.ha_url, settings.ha_token, allow_write=settings.allow_write, audit=audit)
     flags = {"allow_admin_write": settings.allow_admin_write, "allow_delete": settings.allow_delete}
     admin = HAAdmin(client, **flags)
@@ -403,7 +404,8 @@ def live_changes(settings: Settings, credentials_dir: Path, audit: AuditLog, jou
                    config_files=ConfigFiles(client, admin.ws, checker=HASystem(client, admin.ws, **flags).check_config,
                                             **flags),
                    energy=HAEnergy(client, admin.ws, **flags), assist=HAAssist(client, admin.ws, **flags),
-                   hacs=HAHacs(client, admin.ws, **flags))
+                   hacs=HAHacs(client, admin.ws, **flags),
+                   users=HAUsers(client, admin.ws, credentials=CredentialStore(credentials_dir), **flags))
 
 
 async def live_domain_source(settings: Settings):
