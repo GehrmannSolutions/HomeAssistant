@@ -202,7 +202,7 @@ vergleicht sie mit den in der Szene gespeicherten Zuständen. So nennt die Antwo
 |---|---|---|
 | `ha_validate_automation` | Lässt Home Assistant Auslöser, Bedingungen und Aktionen prüfen, ohne zu speichern. | Lesen |
 | `ha_get_automation` | Liest die Konfiguration einer Automation. | Lesen |
-| `ha_save_automation` | Prüft, erstellt oder aktualisiert eine Automation und liest sie zurück. Im Änderungsjournal. | Konfigurieren |
+| `ha_save_automation` | Prüft, erstellt oder aktualisiert eine Automation und liest sie zurück. Die Konfiguration aus `ha_get_automation` lässt sich unverändert zurückspeichern (die eigene `id` fällt weg, eine andere wird abgelehnt). Im Änderungsjournal. | Konfigurieren |
 | `ha_delete_automation` | Löscht eine Automation. Im Änderungsjournal: Rückgängig legt sie neu an. | Löschen |
 
 **Beispiel**: *"Erstelle eine Automation, die bei Sonnenuntergang die Stehlampe einschaltet, wenn sie aus ist."*
@@ -240,7 +240,7 @@ Das Starten steht in [Abschnitt 2](#2-geräte-schalten-szenen-und-skripte-starte
 | `ha_list_dashboards` | Dashboards mit URL-Pfad. | Lesen |
 | `ha_get_dashboard` | Ansichten und Karten eines Dashboards. | Lesen |
 | `ha_create_dashboard` | Erstellt ein neues Dashboard und prüft, ob es erscheint. Im Änderungsjournal. | Konfigurieren |
-| `ha_save_dashboard` | Speichert Ansichten und Karten und liest sie zurück. Im Änderungsjournal. | Konfigurieren |
+| `ha_save_dashboard` | Speichert Ansichten und Karten und liest sie zurück; `lovelace` oder ein leerer Pfad ist das Standard-Dashboard, wie bei `ha_get_dashboard`. Im Änderungsjournal. | Konfigurieren |
 | `ha_set_section_collapsible` | Macht Abschnitte einer Abschnitte-Ansicht unter ihrer Überschrift einklappbar und legt fest, ob sie beim Öffnen auf- oder zugeklappt sind (oder macht sie wieder normal). Beispiel: `{"Raumklima": "closed"}`. Braucht die HACS-Karte Expander Card. Im Änderungsjournal. | Konfigurieren |
 | `ha_update_dashboard` | Ändert Titel, Symbol oder die Anzeige in der Seitenleiste. Im Änderungsjournal. | Konfigurieren |
 | `ha_delete_dashboard` | Löscht ein Dashboard. Im Änderungsjournal. | Löschen |
@@ -273,7 +273,7 @@ einer eigenen Karte.
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
 | `ha_create_area` | Legt einen Bereich an. Im Änderungsjournal. | Konfigurieren |
-| `ha_update_area` | Benennt einen Bereich um oder ändert Etage, Symbol oder Aliase. Im Änderungsjournal. | Konfigurieren |
+| `ha_update_area` | Benennt einen Bereich um oder ändert Etage, Symbol, Aliase, Labels oder den Temperatur- und Feuchtigkeitssensor des Raums (ein Sensor dieser Art in diesem Raum; `null` entfernt ihn). Im Änderungsjournal. | Konfigurieren |
 | `ha_delete_area` | Löscht einen Bereich; seine Geräte bleiben erhalten und verlieren nur den Bereich. Im Änderungsjournal. | Löschen |
 | `ha_create_floor` | Legt eine Etage mit Ebene an. Im Änderungsjournal. | Konfigurieren |
 | `ha_update_floor` | Ändert eine Etage. Im Änderungsjournal. | Konfigurieren |
@@ -461,7 +461,7 @@ Kalendertermine und Listeneinträge sind deine Daten, keine Konfiguration, desha
 | Werkzeug | Was es tut | Stufe |
 |---|---|---|
 | `ha_list_updates` | Ausstehende Updates (Home Assistant, Add-ons, Firmware, Integrationen) mit Versionen. | Lesen |
-| `ha_get_release_notes` | Versionshinweise eines Updates. | Lesen |
+| `ha_get_release_notes` | Versionshinweise eines Updates; ohne eigene Hinweise (z. B. beim Home-Assistant-Core-Update) Versionen, Zusammenfassung und Link zu den vollständigen Hinweisen. | Lesen |
 | `ha_check_config` | Prüft die Konfigurationsdateien (gültig oder Fehler und Warnungen); ändert nichts. | Lesen |
 | `ha_reload` | Lädt die Konfiguration ohne Neustart neu: alles, die Kernkonfiguration oder einen Teil wie Automationen oder Templates. | Konfigurieren |
 | `ha_skip_update` | Überspringt eine angebotene Version (oder bietet sie wieder an). | Konfigurieren |

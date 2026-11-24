@@ -31,7 +31,7 @@ optional parameter. Full JSON schemas: call `tools/list` on the server.
 |---|---|---|---|---|
 | `ha_validate_automation` | read | none | `config`: object | Ask Home Assistant to validate automation triggers, conditions and actions; no write. |
 | `ha_get_automation` | read | none | `config_id`: string | Read an automation's raw config by its configuration ID. |
-| `ha_save_automation` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `config_id`: string, `config`: object | Validate, create/update and read back automation config. Requires admin write opt-in. |
+| `ha_save_automation` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `config_id`: string, `config`: object | Validate, create/update and read back automation config. The config from ha_get_automation may be saved back as it is: an 'id' equal to config_id is dropped, a different one is refused. Requires admin write opt-in. |
 | `ha_delete_automation` | delete | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` + `HA_ALLOW_DELETE` | `config_id`: string | Delete an automation by config ID. Requires admin write and delete opt-ins. |
 
 ## Dashboards
@@ -39,9 +39,9 @@ optional parameter. Full JSON schemas: call `tools/list` on the server.
 | Tool | Level | Switches | Parameters | Description |
 |---|---|---|---|---|
 | `ha_list_dashboards` | read | none | none | List Lovelace dashboards and their URL paths. |
-| `ha_get_dashboard` | read | none | `url_path`?: string | Read the Lovelace config for a storage dashboard; blank path selects default. |
+| `ha_get_dashboard` | read | none | `url_path`?: string | Read the Lovelace config for a storage dashboard; blank path or 'lovelace' selects the default. |
 | `ha_create_dashboard` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `title`: string, `url_path`: string | Create a storage dashboard and verify it appears in list; admin write required. |
-| `ha_save_dashboard` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `config`: object, `url_path`?: string | Save and read back dashboard views; returns prior config for manual rollback. Admin write required. |
+| `ha_save_dashboard` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `config`: object, `url_path`?: string | Save and read back dashboard views (blank url_path or 'lovelace' = default dashboard); returns prior config for manual rollback. Admin write required. |
 | `ha_update_dashboard` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `dashboard_id`: string, `changes`: object | Update dashboard title/icon/display metadata by collection ID. Admin write required. |
 | `ha_delete_dashboard` | delete | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` + `HA_ALLOW_DELETE` | `dashboard_id`: string | Delete a dashboard by collection ID. Admin write and delete required. |
 | `ha_list_dashboard_resources` | read | none | none | Dashboard resources (custom cards: JavaScript/CSS files loaded by the frontend) with id, url and type. |
@@ -76,7 +76,7 @@ optional parameter. Full JSON schemas: call `tools/list` on the server.
 | `ha_list_area_entities` | read | none | `area`: string, `domain`?: string | Entities of one room: area may be the area_id, its name or an alias (e.g. 'Wohnzimmer'). Follows the device's area like HA does. Returns available/unavailable entity_ids, the entities with state, and groups whose members are in the room. Optional domain filter, e.g. 'light'. A floor name such as 'Keller' or 'Erdgeschoss' returns the entities of all rooms on that floor (each with its room). |
 | `ha_list_devices` | read | none | `area_id`?: string, `query`?: string, `limit`?: integer | List devices of the device registry with device_id, name, manufacturer, model and area_id. Filter by a room (area_id or its name, e.g. 'Küche'), or area_id='none' for devices without an area; query matches name/manufacturer/model. To see what is in a room prefer ha_list_area_entities: lamps and helpers often sit in a room without a device. |
 | `ha_create_area` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `name`: string, `floor_id`?: string/null, `icon`?: string/null | Create an area (room), e.g. name 'Flur', icon 'mdi:door'; returns its area_id. Admin write required. |
-| `ha_update_area` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `area_id`: string, `changes`: object | Change an area's name, floor_id, icon or aliases and read back. Admin write required. |
+| `ha_update_area` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `area_id`: string, `changes`: object | Change an area's name, floor_id, icon, aliases, labels or its room climate sensors and read back. temperature_entity_id / humidity_entity_id: a sensor with device_class temperature / humidity that sits in this area (itself or through its device), null clears it. Admin write required. |
 | `ha_delete_area` | delete | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` + `HA_ALLOW_DELETE` | `area_id`: string | Delete an area; its devices and entities stay and lose the area. Admin write and delete required. |
 | `ha_create_floor` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `name`: string, `level`?: integer/null, `icon`?: string/null | Create a floor, e.g. name 'Erdgeschoss', level 0. Admin write required. |
 | `ha_update_floor` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `floor_id`: string, `changes`: object | Change a floor's name, level, icon or aliases and read back. Admin write required. |
@@ -162,7 +162,7 @@ optional parameter. Full JSON schemas: call `tools/list` on the server.
 | `ha_set_theme` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `name`: string, `mode`?: string | Set the default frontend theme for light or dark mode ('default' resets light mode, 'none' clears the dark theme). Journaled. Admin write required. |
 | `ha_fire_event` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `event_type`: string, `event_data`?: object/null | Fire a custom event, e.g. 'doorbell_pressed' with event_data {"door": "front"}; automations with an event trigger react to it. Events Home Assistant emits itself (state_changed, homeassistant_start, ...) are refused. Admin write required. |
 | `ha_list_updates` | read | none | `pending_only`?: boolean | Updates (firmware, integrations, add-ons, HA itself) with installed and latest version; by default only pending ones. |
-| `ha_get_release_notes` | read | none | `entity_id`: string | Release notes of one update entity (capped), if the integration provides them. |
+| `ha_get_release_notes` | read | none | `entity_id`: string | Release notes of one update entity (capped), if the integration provides them; otherwise (e.g. the Home Assistant Core update) installed/latest version, title, summary and release_url of the entity. |
 | `ha_check_config` | read | none | none | Check Home Assistant's configuration files (result valid/invalid with errors and warnings); changes nothing. Use before a restart or after YAML edits. |
 | `ha_reload` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `target`: string | Reload configuration without a restart: target 'all', 'core' (core config) or a domain with a reload service such as 'automation', 'script', 'scene', 'template', 'group'. Admin write required. |
 | `ha_skip_update` | admin | `HA_ALLOW_WRITE` + `HA_ALLOW_ADMIN_WRITE` | `entity_id`: string, `clear`?: boolean | Skip the offered version of an update (clear=true offers it again). Admin write required. |

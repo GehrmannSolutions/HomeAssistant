@@ -496,7 +496,9 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_save_automation(config_id: str, config: dict) -> dict:
-        """Validate, create/update and read back automation config. Requires admin write opt-in."""
+        """Validate, create/update and read back automation config. The config from ha_get_automation may be saved
+        back as it is: an 'id' equal to config_id is dropped, a different one is refused. Requires admin write
+        opt-in."""
         return await journaled("ha_save_automation", "automation", config_id,
                                lambda: admin.automation_save(config_id, config))
 
@@ -513,7 +515,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_get_dashboard(url_path: str = "") -> dict:
-        """Read the Lovelace config for a storage dashboard; blank path selects default."""
+        """Read the Lovelace config for a storage dashboard; blank path or 'lovelace' selects the default."""
         return await admin.dashboard_get(url_path or None)
 
     @tool()
@@ -524,7 +526,9 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_save_dashboard(config: dict, url_path: str = "") -> dict:
-        """Save and read back dashboard views; returns prior config for manual rollback. Admin write required."""
+        """Save and read back dashboard views (blank url_path or 'lovelace' = default dashboard); returns prior
+        config for manual rollback. Admin write required."""
+        url_path = admin.default_dashboard_path(url_path) or ""
         return await journaled("ha_save_dashboard", "dashboard_config", url_path,
                                lambda: admin.dashboard_save(config, url_path=url_path or None))
 
@@ -536,6 +540,7 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
         ha_get_dashboard; url_path: dashboard (empty = default dashboard). Needs the HACS card Expander Card
         (MelleD/lovelace-expander-card). Journaled, undo with ha_undo_change. Admin write required."""
         from .collapsible import has_expander, set_collapsible
+        url_path = admin.default_dashboard_path(url_path) or ""
         new, report = set_collapsible(await admin.dashboard_get(url_path or None), view, sections)
         if not report["changed"]:
             return {**report, "saved": False}
@@ -838,7 +843,8 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_get_release_notes(entity_id: str) -> dict:
-        """Release notes of one update entity (capped), if the integration provides them."""
+        """Release notes of one update entity (capped), if the integration provides them; otherwise (e.g. the
+        Home Assistant Core update) installed/latest version, title, summary and release_url of the entity."""
         return await system.release_notes(entity_id)
 
     @tool()
@@ -1204,7 +1210,9 @@ def create_server(client: HAClient, *, allow_admin_write: bool = False,
 
     @tool()
     async def ha_update_area(area_id: AreaId, changes: dict) -> dict:
-        """Change an area's name, floor_id, icon or aliases and read back. Admin write required."""
+        """Change an area's name, floor_id, icon, aliases, labels or its room climate sensors and read back.
+        temperature_entity_id / humidity_entity_id: a sensor with device_class temperature / humidity that sits in
+        this area (itself or through its device), null clears it. Admin write required."""
         return await journaled("ha_update_area", "area", area_id, lambda: registry.update_area(area_id, changes))
 
     @tool()

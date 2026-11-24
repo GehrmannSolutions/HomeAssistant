@@ -85,6 +85,10 @@ CONTROL_TYPES = frozenset({"calendar/event/update"})
 # Home Assistant accepts websocket messages up to 4 MiB (aiohttp default in websocket_api/http.py); dashboards with
 # pop-ups and floor plans easily pass 64 KiB. 1 MiB stays far below HA's limit and still stops runaway payloads.
 MAX_WS_PAYLOAD = 1024 * 1024
+# the default dashboard's URL path (/lovelace). HA 2026 migrates a stored default dashboard into a dashboard with
+# this url_path; without url_path HA picks that one, else the old default (lovelace/websocket.py _handle_errors).
+# So 'lovelace' is read and saved without url_path: the same dashboard before and after the migration.
+DEFAULT_DASHBOARD = "lovelace"
 
 # HA 2024.10 renamed an automation's trigger/condition/action to triggers/conditions/actions and still accepts the
 # old keys. Small models write the old ones (learned from older examples); they are renamed, keeping the key order.
@@ -228,8 +232,14 @@ class HAAdmin:
         self._check_write()
         if isinstance(config, dict):
             config = current_automation_format(config)
-        if not isinstance(config, dict) or not isinstance(config.get("alias"), str) or not config.get("alias") or "id" in config:
-            raise ValueError("automation requires alias and must not override id")
+            if "id" in config:
+                # ha_get_automation returns the stored config with its id: the same id is the round trip, drop it
+                if config["id"] != config_id:
+                    raise ValueError(f"config id '{config['id']}' differs from config_id '{config_id}': remove 'id' "
+                                     f"from config (to copy an automation, save it under a new config_id)")
+                config = {key: value for key, value in config.items() if key != "id"}
+        if not isinstance(config, dict) or not isinstance(config.get("alias"), str) or not config.get("alias"):
+            raise ValueError("automation requires alias")
         path = self._automation_path(config_id)
         validation = await self.automation_validate(config)
         rejected = {key: item.get("error") for key, item in validation.items()
@@ -260,7 +270,13 @@ class HAAdmin:
     async def dashboard_list(self):
         return await self.ws.command("lovelace/dashboards/list")
 
+    @staticmethod
+    def default_dashboard_path(url_path: str | None) -> str | None:
+        """None for the default dashboard: blank, None or its URL path 'lovelace' (as the HA frontend names it)."""
+        return None if url_path in (None, "", DEFAULT_DASHBOARD) else url_path
+
     async def dashboard_get(self, url_path: str | None = None):
+        url_path = self.default_dashboard_path(url_path)
         return await self.ws.command("lovelace/config", {"url_path": url_path} if url_path else {})
 
     async def dashboard_create(self, title: str, url_path: str):
@@ -277,6 +293,7 @@ class HAAdmin:
         self._check_write()
         if not isinstance(config, dict) or not isinstance(config.get("views"), list):
             raise ValueError("dashboard config requires views list")
+        url_path = self.default_dashboard_path(url_path)
         if url_path is not None and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", url_path):
             raise ValueError("invalid dashboard url_path")
         try:

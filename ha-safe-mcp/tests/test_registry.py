@@ -67,7 +67,8 @@ def make(*, write=True, admin=True, delete=False, ws=None):
 async def test_areas_and_floors_are_listed_with_small_field_sets():
     registry, _ = make()
     assert await registry.list_areas() == [{"area_id": "wohnzimmer", "name": "Wohnzimmer", "floor_id": None,
-                                            "icon": "mdi:sofa", "aliases": [], "labels": []}]
+                                            "icon": "mdi:sofa", "aliases": [], "labels": [],
+                                            "temperature_entity_id": None, "humidity_entity_id": None}]
     assert await registry.list_floors() == []
 
 
@@ -158,3 +159,69 @@ def test_registry_tools_are_registered_and_device_removal_is_delete_level():
     from ha_safe_mcp.ollama_client import write_level
     assert "ha_delete_device" not in tools and write_level("ha_remove_device") == "delete"
     assert "ha_list_devices" in tools["ha_update_device"].inputSchema["properties"]["device_id"]["description"]
+
+
+# ---------------------------------------------------------------- room climate sensors of an area
+SENSORS = {
+    "sensor.living_room_temperature": {"device_class": "temperature", "area_id": None, "device_id": "dev_climate"},
+    "sensor.living_room_humidity": {"device_class": "humidity", "area_id": "wohnzimmer", "device_id": None},
+    "sensor.kitchen_temperature": {"device_class": "temperature", "area_id": "kitchen", "device_id": None},
+    "sensor.power": {"device_class": "power", "area_id": "wohnzimmer", "device_id": None},
+    "binary_sensor.window": {"device_class": "temperature", "area_id": "wohnzimmer", "device_id": None},
+}
+
+
+class ClimateWS(FakeWS):
+    def __init__(self):
+        super().__init__()
+        self.areas[0].update({"temperature_entity_id": None, "humidity_entity_id": None})
+        self.devices.append({**DEVICE, "id": "dev_climate", "area_id": "wohnzimmer"})
+
+    async def command(self, kind, payload=None):
+        if kind == "config/entity_registry/get":
+            self.calls.append((kind, dict(payload)))
+            item = SENSORS.get(payload["entity_id"])
+            if item is None:
+                raise RuntimeError("Home Assistant WebSocket error: not_found")
+            return {"entity_id": payload["entity_id"], "area_id": item["area_id"], "device_id": item["device_id"]}
+        return await super().command(kind, payload)
+
+
+def climate_states(router):
+    import httpx
+    for entity_id, item in SENSORS.items():
+        router.get(f"/api/states/{entity_id}").mock(return_value=httpx.Response(200, json={
+            "entity_id": entity_id, "state": "21", "attributes": {"device_class": item["device_class"]}}))
+    router.get("/api/states/sensor.missing").mock(return_value=httpx.Response(404, json={}))
+
+
+async def test_update_area_sets_and_clears_room_temperature_and_humidity_sensors():
+    import respx
+    registry, ws = make(ws=ClimateWS())
+    with respx.mock(base_url="http://ha:8123", assert_all_called=False) as router:
+        climate_states(router)
+        updated = await registry.update_area("wohnzimmer", {
+            "temperature_entity_id": "sensor.living_room_temperature",   # in the room through its device
+            "humidity_entity_id": "sensor.living_room_humidity"})        # in the room itself
+    assert updated["temperature_entity_id"] == "sensor.living_room_temperature"
+    assert updated["humidity_entity_id"] == "sensor.living_room_humidity"
+    assert (await registry.list_areas())[0]["temperature_entity_id"] == "sensor.living_room_temperature"
+    cleared = await registry.update_area("wohnzimmer", {"temperature_entity_id": None})
+    assert cleared["temperature_entity_id"] is None and cleared["humidity_entity_id"] == "sensor.living_room_humidity"
+
+
+async def test_update_area_refuses_wrong_room_climate_sensors_before_writing():
+    import respx
+    registry, ws = make(ws=ClimateWS())
+    cases = [({"temperature_entity_id": "sensor.missing"}, "does not exist"),
+             ({"temperature_entity_id": "binary_sensor.window"}, "not a sensor"),
+             ({"temperature_entity_id": "sensor.power"}, "device_class 'temperature'"),
+             ({"humidity_entity_id": "sensor.living_room_temperature"}, "device_class 'humidity'"),
+             ({"temperature_entity_id": "sensor.kitchen_temperature"}, "not in area 'wohnzimmer'"),
+             ({"temperature_entity_id": "Living room"}, "entity_id")]
+    with respx.mock(base_url="http://ha:8123", assert_all_called=False) as router:
+        climate_states(router)
+        for changes, message in cases:
+            with pytest.raises(ValueError, match=message):
+                await registry.update_area("wohnzimmer", changes)
+    assert not any(kind == "config/area_registry/update" for kind, _ in ws.calls)

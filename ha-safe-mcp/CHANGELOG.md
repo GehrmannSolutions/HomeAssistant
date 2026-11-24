@@ -3,6 +3,29 @@
 This project follows [Semantic Versioning](https://semver.org/) loosely; tool signatures can change before 1.0.
 Historical entries below remain in German.
 
+## 0.36.5 – 2026-11-24
+
+Vier Stolpersteine aus echten Chats, vor allem mit kleinen Modellen:
+
+- **Automation unverändert zurückspeichern:** `ha_get_automation` liefert die Konfiguration mit `id`, und
+  `ha_save_automation` lehnte jede `id` ab. Der natürliche Weg lesen -> ändern -> speichern scheiterte deshalb. Jetzt
+  fällt eine `id`, die gleich `config_id` ist, vor dem Schreiben still weg; eine andere `id` wird weiter abgelehnt,
+  die Meldung nennt beide.
+- **Versionshinweise des Home-Assistant-Core-Updates:** Update-Entitäten ohne eigene Versionshinweise (z. B.
+  `update.home_assistant_core_update` unter HA OS) beantworteten `ha_get_release_notes` mit
+  `WebSocket error: not_supported`. Jetzt kommen stattdessen installierte und neueste Version, Titel,
+  Zusammenfassung und `release_url` der Entität, mit dem Hinweis, dass die vollständigen Hinweise dort stehen.
+- **`lovelace` ist das Standard-Dashboard, auch beim Speichern:** `ha_get_dashboard("lovelace")` las das
+  Standard-Dashboard, `ha_save_dashboard(url_path="lovelace")` meldete `invalid dashboard url_path`. Jetzt gilt
+  `lovelace` (wie ein leerer Pfad) überall als Standard-Dashboard, auch im Änderungsjournal und beim Rückgängigmachen.
+  Seit HA 2026 wird ein gespeichertes Standard-Dashboard zu einem Dashboard mit dem Pfad `lovelace`; ohne Pfad wählt
+  HA dieses, sonst das alte Standard-Dashboard, also vor und nach der Umstellung dasselbe.
+- **Temperatur- und Feuchtigkeitssensor eines Raums:** `ha_update_area` nimmt `temperature_entity_id` und
+  `humidity_entity_id` an (Felder des Bereichs in HA, die der Raum-Bereich der Oberfläche anzeigt); `null` entfernt
+  den Sensor. Vor dem Schreiben wird geprüft: Der Sensor existiert, ist ein `sensor` mit der Geräteklasse
+  `temperature` bzw. `humidity` und liegt in diesem Raum (selbst oder über sein Gerät); sonst sagt die Meldung,
+  was fehlt. `ha_list_areas` zeigt beide Felder, die Änderung steht im Journal und lässt sich rückgängig machen.
+
 ## 0.36.4 – 2026-11-20
 
 - **Anzeige-Einheit eines Sensors:** `ha_update_entity_registry` nimmt jetzt `unit_of_measurement` an, z. B.

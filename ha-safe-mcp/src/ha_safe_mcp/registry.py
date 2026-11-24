@@ -15,16 +15,20 @@ Guardrails:
 
 import re
 
-from .server import HAClient
+from .server import ENTITY, HAClient
 
 ID = re.compile(r"^[a-z0-9_]{1,64}$")
 DEVICE_ID = re.compile(r"^[0-9a-f]{32}$|^[0-9A-HJKMNP-TV-Z]{26}$")
 ICON = re.compile(r"^mdi:[a-z0-9-]{1,64}$")
 NAME_MAX = 100
-AREA_FIELDS = ("area_id", "name", "floor_id", "icon", "aliases", "labels")
+AREA_FIELDS = ("area_id", "name", "floor_id", "icon", "aliases", "labels", "temperature_entity_id",
+               "humidity_entity_id")
 FLOOR_FIELDS = ("floor_id", "name", "level", "icon", "aliases")
 DEVICE_FIELDS = ("name", "name_by_user", "manufacturer", "model", "area_id", "disabled_by", "entry_type", "labels")
-AREA_UPDATE = frozenset({"name", "floor_id", "icon", "aliases", "labels"})
+AREA_UPDATE = frozenset({"name", "floor_id", "icon", "aliases", "labels", "temperature_entity_id",
+                         "humidity_entity_id"})
+# the room's climate sensors (area registry since HA 2025.x): field -> the sensor device_class it needs
+AREA_SENSORS = {"temperature_entity_id": "temperature", "humidity_entity_id": "humidity"}
 FLOOR_UPDATE = frozenset({"name", "level", "icon", "aliases"})
 DEVICE_UPDATE = frozenset({"area_id", "name_by_user", "disabled_by", "labels"})
 
@@ -262,12 +266,47 @@ class HARegistry:
                 raise ValueError("unknown label: create it with ha_create_label or pick one from ha_list_labels")
         if await self._area(area_id) is None:
             raise ValueError("unknown area_id")
+        for key, device_class in AREA_SENSORS.items():
+            if payload.get(key) is not None:
+                await self._check_area_sensor(area_id, key, payload[key], device_class)
         await self.ws.command("config/area_registry/update", {"area_id": area_id, **payload})
         current = await self._area(area_id)
         if current is None or any(sorted(current.get(key) or []) != sorted(value) if key == "labels"
                                   else current.get(key) != value for key, value in payload.items()):
             raise RuntimeError("Area update not confirmed by read-back")
         return current
+
+    async def _check_area_sensor(self, area_id: str, key: str, entity_id, device_class: str):
+        """The room's temperature/humidity sensor: an existing sensor of that device class in this room (its own
+        area or its device's area), as the HA area dialog offers it. null clears the field (checked by caller)."""
+        if not isinstance(entity_id, str) or not ENTITY.fullmatch(entity_id):
+            raise ValueError(f"{key} must be a sensor entity_id such as 'sensor.living_room_{device_class}' or null")
+        if not entity_id.startswith("sensor."):
+            raise ValueError(f"{key}: {entity_id} is not a sensor; pick a sensor with device_class '{device_class}'")
+        try:
+            state = await self.client._request("GET", f"/api/states/{entity_id}")
+        except RuntimeError as exc:
+            if "404" in str(exc):
+                raise ValueError(f"{key}: {entity_id} does not exist") from None
+            raise
+        actual = ((state or {}).get("attributes") or {}).get("device_class")
+        if actual != device_class:
+            raise ValueError(f"{key}: {entity_id} has device_class '{actual}', it needs device_class "
+                             f"'{device_class}'")
+        try:
+            entry = await self.ws.command("config/entity_registry/get", {"entity_id": entity_id})
+        except RuntimeError as exc:
+            if "not_found" not in str(exc):
+                raise
+            entry = None
+        room = (entry or {}).get("area_id")
+        if room is None and (entry or {}).get("device_id"):
+            device = next((d for d in await self._list("device") if d.get("id") == entry["device_id"]), None)
+            room = (device or {}).get("area_id")
+        if room != area_id:
+            where = f"it is in area '{room}'" if room else "it has no area"
+            raise ValueError(f"{key}: {entity_id} is not in area '{area_id}' ({where}); assign the sensor or its "
+                             f"device to this area first (ha_update_entity_registry or ha_update_device)")
 
     async def delete_area(self, area_id: str) -> dict:
         self._check_delete()

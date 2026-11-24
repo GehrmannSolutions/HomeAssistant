@@ -87,13 +87,32 @@ class HASystem:
         return updates[:200]
 
     async def release_notes(self, entity_id: str) -> dict:
-        notes = await self.ws.command("update/release_notes", {"entity_id": self._update_entity(entity_id)})
+        try:
+            notes = await self.ws.command("update/release_notes", {"entity_id": self._update_entity(entity_id)})
+        except RuntimeError as exc:
+            # entities without the release-notes feature (e.g. the Core update on HA OS) answer not_supported
+            if str(exc) != "Home Assistant WebSocket error: not_supported":
+                raise
+            return await self._notes_from_state(entity_id)
         text = notes if isinstance(notes, str) else ""
-        result = {"entity_id": entity_id, "notes": text[:NOTES_MAX] if text else None}
+        if not text:
+            return await self._notes_from_state(entity_id)
+        result = {"entity_id": entity_id, "notes": text[:NOTES_MAX]}
         if len(text) > NOTES_MAX:
             result["truncated"] = True
-        if not text:
-            result["hint"] = "no release notes from this integration; see release_url in ha_list_updates"
+        return result
+
+    async def _notes_from_state(self, entity_id: str) -> dict:
+        """What the update entity itself says: versions, title, summary and the link to the full notes."""
+        attributes = (await self._state(entity_id)).get("attributes") or {}
+        result = {"entity_id": entity_id, "notes": None}
+        for key in ("installed_version", "latest_version", "title", "release_summary", "release_url"):
+            value = attributes.get(key)
+            result[key] = value[:NOTES_MAX] if isinstance(value, str) else value
+        result["hint"] = ("this update entity provides no release notes of its own; installed/latest version and "
+                          "summary come from the entity, the full notes are at release_url"
+                          if result["release_url"] else
+                          "this update entity provides no release notes and no release_url")
         return result
 
     async def check_config(self) -> dict:

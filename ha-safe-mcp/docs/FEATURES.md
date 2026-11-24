@@ -199,7 +199,7 @@ them with the states stored in the scene, so the answer names what really happen
 |---|---|---|
 | `ha_validate_automation` | Lets Home Assistant check triggers, conditions and actions without saving. | Read |
 | `ha_get_automation` | Reads an automation's configuration. | Read |
-| `ha_save_automation` | Validates, creates or updates an automation and reads it back. Journaled. | Configure |
+| `ha_save_automation` | Validates, creates or updates an automation and reads it back. The config from `ha_get_automation` can be saved back unchanged (its own `id` is dropped, a different one refused). Journaled. | Configure |
 | `ha_delete_automation` | Deletes an automation. Journaled: undo recreates it. | Delete |
 
 **Example**: *"Create an automation that turns on the Stehlampe at sunset if it is off."*
@@ -237,7 +237,7 @@ Running them is in [section 2](#2-switch-devices-run-scenes-and-scripts) (`ha_ru
 | `ha_list_dashboards` | Dashboards with URL path. | Read |
 | `ha_get_dashboard` | A dashboard's views and cards. | Read |
 | `ha_create_dashboard` | Creates a new dashboard and checks it appears. Journaled. | Configure |
-| `ha_save_dashboard` | Saves views and cards and reads them back. Journaled. | Configure |
+| `ha_save_dashboard` | Saves views and cards and reads them back; `lovelace` or an empty path is the default dashboard, as in `ha_get_dashboard`. Journaled. | Configure |
 | `ha_set_section_collapsible` | Makes sections of a sections view collapsible under their heading and sets whether each starts open or closed (or makes it normal again). Example: `{"Raumklima": "closed"}`. Needs the HACS card Expander Card. Journaled. | Configure |
 | `ha_update_dashboard` | Changes title, icon or sidebar display. Journaled. | Configure |
 | `ha_delete_dashboard` | Deletes a dashboard. Journaled. | Delete |
@@ -269,7 +269,7 @@ template flow with `ha_start_integration_setup` and fills in the form step by st
 | Tool | What it does | Level |
 |---|---|---|
 | `ha_create_area` | Creates a room. Journaled. | Configure |
-| `ha_update_area` | Renames a room or changes floor, icon or aliases. Journaled. | Configure |
+| `ha_update_area` | Renames a room or changes floor, icon, aliases, labels or the room's temperature and humidity sensor (a sensor of that kind in this room; `null` clears it). Journaled. | Configure |
 | `ha_delete_area` | Deletes a room; its devices stay and lose the room. Journaled. | Delete |
 | `ha_create_floor` | Creates a floor with level. Journaled. | Configure |
 | `ha_update_floor` | Changes a floor. Journaled. | Configure |
@@ -453,7 +453,7 @@ Calendar entries and list items are your data, not configuration, so they are no
 | Tool | What it does | Level |
 |---|---|---|
 | `ha_list_updates` | Pending updates (Home Assistant, add-ons, firmware, integrations) with versions. | Read |
-| `ha_get_release_notes` | Release notes of one update. | Read |
+| `ha_get_release_notes` | Release notes of one update; without notes of its own (e.g. the Home Assistant Core update) the versions, summary and link to the full notes. | Read |
 | `ha_check_config` | Checks the configuration files (valid or errors and warnings); changes nothing. | Read |
 | `ha_reload` | Reloads configuration without restart: everything, the core configuration or one part such as automations or templates. | Configure |
 | `ha_skip_update` | Skips an offered version (or offers it again). | Configure |

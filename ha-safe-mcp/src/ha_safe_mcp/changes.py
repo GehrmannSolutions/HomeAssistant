@@ -23,7 +23,7 @@ KINDS = ("automation", "script", "scene", "dashboard_config", "dashboard", "help
          "device", "integration", "label", "category", "zone", "blueprint", "theme", "resource", "file", "energy",
          "pipeline", "exposure", "hacs")
 DASHBOARD_META = ("title", "icon", "require_admin", "show_in_sidebar")
-AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels")
+AREA_FIELDS = ("name", "floor_id", "icon", "aliases", "labels", "temperature_entity_id", "humidity_entity_id")
 FLOOR_FIELDS = ("name", "level", "icon", "aliases")
 ENTRY_FIELDS = ("title", "pref_disable_polling", "pref_disable_new_entities")
 LABEL_FIELDS = ("name", "color", "icon", "description")

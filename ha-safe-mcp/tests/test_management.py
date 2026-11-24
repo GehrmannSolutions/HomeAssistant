@@ -235,3 +235,71 @@ async def test_large_dashboards_fit_but_absurd_payloads_are_refused():
     assert received and received[0] > 200_000
     with pytest.raises(ValueError, match=r"too large \(\d+ KiB, limit 1024 KiB\)"):
         await ws.command("lovelace/config/save", {"config": {"x": "y" * 1_100_000}})
+
+
+# ---------------------------------------------------------------- get -> edit -> save round trips
+AUTOMATION = {"alias": "Kitchen light", "triggers": [{"trigger": "state", "entity_id": "binary_sensor.motion"}],
+              "actions": [{"action": "light.turn_on", "target": {"entity_id": "light.kitchen"}}]}
+
+
+@pytest.mark.asyncio
+async def test_automation_save_accepts_its_own_id_from_get_and_drops_it():
+    with respx.mock(base_url="http://ha:8123") as router:
+        post = router.post("/api/config/automation/config/kitchen_1").mock(
+            return_value=httpx.Response(200, json={"result": "ok"}))
+        router.get("/api/config/automation/config/kitchen_1").mock(
+            return_value=httpx.Response(200, json={"id": "kitchen_1", **AUTOMATION}))
+        admin = HAAdmin(HAClient("http://ha:8123", "secret", allow_write=True), FakeWS(), allow_admin_write=True)
+        result = await admin.automation_save("kitchen_1", {"id": "kitchen_1", **AUTOMATION})
+    assert result["id"] == "kitchen_1"
+    assert json.loads(post.calls[0].request.content) == AUTOMATION
+
+
+@pytest.mark.asyncio
+async def test_automation_save_refuses_a_different_id_naming_both():
+    with respx.mock(base_url="http://ha:8123", assert_all_called=False) as router:
+        post = router.post("/api/config/automation/config/kitchen_1").mock(
+            return_value=httpx.Response(200, json={"result": "ok"}))
+        admin = HAAdmin(HAClient("http://ha:8123", "secret", allow_write=True), FakeWS(), allow_admin_write=True)
+        with pytest.raises(ValueError, match="'hallway_2'.*'kitchen_1'"):
+            await admin.automation_save("kitchen_1", {"id": "hallway_2", **AUTOMATION})
+        with pytest.raises(ValueError, match="alias"):
+            await admin.automation_save("kitchen_1", {"id": "kitchen_1", "triggers": []})
+    assert not post.called
+
+
+@pytest.mark.asyncio
+async def test_lovelace_is_the_default_dashboard_for_get_and_save():
+    ws = FakeWS()
+    admin = HAAdmin(HAClient("http://ha:8123", "secret", allow_write=True), ws, allow_admin_write=True)
+    assert await admin.dashboard_get("lovelace") == ws.config
+    config = {"views": [{"title": "Home", "cards": []}]}
+    saved = await admin.dashboard_save(config, url_path="lovelace")
+    assert saved["config"] == config and saved["previous"]["views"][0]["title"] == "Old"
+    assert ("lovelace/config/save", {"config": config}) in ws.calls
+    assert all(payload == {} for kind, payload in ws.calls if kind == "lovelace/config")
+    with pytest.raises(ValueError, match="url_path"):
+        await admin.dashboard_save(config, url_path="Lovelace/../x")
+
+
+@pytest.mark.asyncio
+async def test_save_dashboard_tool_journals_lovelace_as_the_default_dashboard(tmp_path, monkeypatch):
+    from ha_safe_mcp.changes import ChangeJournal
+    from ha_safe_mcp.server import create_server
+    ws = FakeWS()
+
+    async def command(self, kind, payload=None, **_):
+        return await ws.command(kind, payload)
+
+    monkeypatch.setattr(HAWebSocket, "command", command)
+    journal = ChangeJournal(tmp_path / "changes")
+    server = create_server(HAClient("http://ha:8123", "t", allow_write=True), allow_admin_write=True,
+                           journal=journal)
+    config = {"views": [{"title": "Home", "cards": []}]}
+    raw = await server.call_tool("ha_save_dashboard", {"config": config, "url_path": "lovelace"})
+    result = raw[1] if isinstance(raw, tuple) and isinstance(raw[1], dict) else json.loads(raw[0].text)
+    entry = journal.get(result["change_id"])
+    assert entry["target"] == "" and entry["before"]["views"][0]["title"] == "Old"
+    assert ws.config == config
+    raw = await server.call_tool("ha_undo_change", {"change_id": result["change_id"]})
+    assert ws.config["views"][0]["title"] == "Old"

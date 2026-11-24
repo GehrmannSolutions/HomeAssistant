@@ -442,3 +442,16 @@ def test_chat_offers_undo_tools_and_treats_undo_like_a_delete():
                                                                       available, allow_write=True)
     assert "ha_undo_change" not in select_tool_names("Mach das rückgängig", available, allow_write=False)
     assert write_level("ha_undo_change") == "delete" and write_level("ha_list_changes") is None
+
+
+
+async def test_area_climate_sensor_change_is_undone_to_the_old_sensor(tmp_path):
+    ha, journal, changes = make(tmp_path)
+    ha.areas["flur"].update({"temperature_entity_id": "sensor.hall_temperature_old", "humidity_entity_id": None})
+    _, change_id = await changes.apply("ha_update_area", "area", "flur", lambda: ha.update_area(
+        "flur", {"temperature_entity_id": "sensor.hall_temperature", "humidity_entity_id": "sensor.hall_humidity"}))
+    before = journal.get(change_id)["before"]
+    assert before["temperature_entity_id"] == "sensor.hall_temperature_old" and before["humidity_entity_id"] is None
+    await changes.undo(change_id)
+    assert ha.areas["flur"]["temperature_entity_id"] == "sensor.hall_temperature_old"
+    assert ha.areas["flur"]["humidity_entity_id"] is None

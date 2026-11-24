@@ -137,3 +137,35 @@ def test_tools_have_the_right_levels():
     assert {tool_level(n) for n in admin} == {"admin"} and {tool_level(n) for n in delete} == {"delete"}
     assert "ha_list_updates" in select_tool_names("Gibt es Updates?", names, allow_write=False)
     assert "ha_restart" in select_tool_names("Starte Home Assistant neu", names, allow_write=True)
+
+
+class NotSupportedWS:
+    async def command(self, kind, payload=None, **_):
+        assert kind == "update/release_notes"
+        raise RuntimeError("Home Assistant WebSocket error: not_supported")
+
+
+async def test_release_notes_fall_back_to_the_update_attributes_when_not_supported():
+    core = {"entity_id": "update.home_assistant_core_update", "state": "on", "attributes": {
+        "friendly_name": "Home Assistant Core Update", "installed_version": "2026.11.2",
+        "latest_version": "2026.11.3", "title": "Home Assistant Core", "release_summary": "Bug fixes",
+        "release_url": "https://www.home-assistant.io/blog/", "skipped_version": None}}
+    system = HASystem(HAClient(URL, "t"), NotSupportedWS())
+    with respx.mock(base_url=URL) as router:
+        router.get("/api/states/update.home_assistant_core_update").mock(return_value=httpx.Response(200, json=core))
+        notes = await system.release_notes("update.home_assistant_core_update")
+    assert notes["entity_id"] == "update.home_assistant_core_update" and notes["notes"] is None
+    assert {key: notes[key] for key in ("installed_version", "latest_version", "title", "release_summary",
+                                        "release_url")} == {
+        "installed_version": "2026.11.2", "latest_version": "2026.11.3", "title": "Home Assistant Core",
+        "release_summary": "Bug fixes", "release_url": "https://www.home-assistant.io/blog/"}
+    assert "release_url" in notes["hint"]
+
+
+async def test_release_notes_other_websocket_errors_still_raise():
+    class BrokenWS:
+        async def command(self, kind, payload=None, **_):
+            raise RuntimeError("Home Assistant WebSocket error: unknown_error")
+
+    with pytest.raises(RuntimeError, match="unknown_error"):
+        await HASystem(HAClient(URL, "t"), BrokenWS()).release_notes("update.shelly_plug")
