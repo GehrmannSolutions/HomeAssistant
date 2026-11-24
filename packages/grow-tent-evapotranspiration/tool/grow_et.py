@@ -71,6 +71,16 @@ def water_use_ml_h(temp, rh, ppfd, kc=1.0, area=0.5, **kw):
     return tent_et0(temp, rh, ppfd, **kw) * kc * area * 1000
 
 
+def minute_sum_l(rate_ml_h, minutes, decimals=6, start=0.0):
+    """Twin of the package's per-minute trigger sums: each minute adds rate/60000 L and the state is rounded.
+    With 3 decimals a minute step of 0.5-1 ml rounds to a whole millilitre (and below 0.5 ml to nothing), so the sum
+    drifts; the package keeps 6 decimals (5 would still lose ~4 % of a 5 ml/h night)."""
+    total = start
+    for _ in range(minutes):
+        total = round(total + rate_ml_h / 60000, decimals)
+    return total
+
+
 def read_csv(path):
     with open(path, newline="", encoding="utf-8") as f:
         return [{k: float(v) if k != "time" else v for k, v in row.items()} for row in csv.DictReader(f)]

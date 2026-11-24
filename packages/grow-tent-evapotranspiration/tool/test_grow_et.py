@@ -58,6 +58,15 @@ class Tent(unittest.TestCase):
     def test_never_negative(self):
         self.assertEqual(g.tent_et0(15, 100, 0), 0.0)
 
+    def test_minute_sums_keep_enough_decimals(self):
+        # 45 ml/h for 10 h and 5 ml/h for 6 h: the package's 6 decimals stay within 1 ml of the true 0.48 L
+        day = g.minute_sum_l(45, 600)
+        both = g.minute_sum_l(5, 360, start=day)
+        self.assertAlmostEqual(both, 0.48, delta=0.001)
+        # 3 decimals (the 0.1.0 package) count 1 ml per minute by day and nothing at night
+        self.assertAlmostEqual(g.minute_sum_l(45, 600, decimals=3), 0.6, delta=0.001)
+        self.assertEqual(g.minute_sum_l(5, 360, decimals=3), 0.0)
+
     def test_csv_and_calibration(self):
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as f:
             f.write("time,temp,rh,ppfd\n")

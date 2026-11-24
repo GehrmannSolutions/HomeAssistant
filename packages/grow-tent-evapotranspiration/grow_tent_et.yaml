@@ -179,7 +179,7 @@ template:
         icon: mdi:water-minus
         state: >-
           {% if trigger.id == 'watered' %}0
-          {% else %}{{ ((this.state | float(0)) + (states('sensor.grow_et_water_use') | float(0)) / 60000) | round(3) }}{% endif %}
+          {% else %}{{ ((this.state | float(0)) + (states('sensor.grow_et_water_use') | float(0)) / 60000) | round(6) }}{% endif %}
       - name: Grow ET drip since watering
         unique_id: grow_et_drip_since_watering
         unit_of_measurement: "L"
@@ -188,7 +188,7 @@ template:
         state: >-
           {% if trigger.id == 'watered' %}0
           {% else %}{% set run = is_state('binary_sensor.grow_tent_drip_running', 'on') %}
-          {{ ((this.state | float(0)) + (states('input_number.grow_et_drip_rate') | float(0) / 60000 if run else 0)) | round(3) }}{% endif %}
+          {{ ((this.state | float(0)) + (states('input_number.grow_et_drip_rate') | float(0) / 60000 if run else 0)) | round(6) }}{% endif %}
       - name: Grow ET depletion
         unique_id: grow_et_depletion
         unit_of_measurement: "L"
@@ -205,7 +205,7 @@ template:
             {% set dr = dr + (states('sensor.grow_et_water_use') | float(0)
                               - (states('input_number.grow_et_drip_rate') | float(0) if run else 0)) / 60000 %}
           {% endif %}
-          {{ ([[dr, 0] | max, taw] | min) | round(3) }}
+          {{ ([[dr, 0] | max, taw] | min) | round(6) }}
         attributes:
           available_water_l: "{{ states('input_number.grow_et_pot_available_water') | float(4) }}"
           refill_at_l: >-
